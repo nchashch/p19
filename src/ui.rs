@@ -74,7 +74,7 @@ fn ui() -> impl Scene {
                 ),
             ]
         ]
-        WorldAssetRoot("Level.glb#Scene0")
+        WorldAssetRoot("Level_opt.glb#Scene0")
         DespawnOnExit::<GameState>(GameState::InGame)
     }
 }

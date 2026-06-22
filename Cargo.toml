@@ -4,7 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-avian3d = { version = "0.7.0", features = ["simd"] }
-bevy = { version = "0.19.0", features = ["basis-universal", "ktx2"] }
-bevy_enhanced_input = "0.26.0"
-bevy_skein = "0.6.0"
+bevy = { version = "0.19.0", path = "../bevy", features = [
+	"basis-universal",
+	"ktx2",
+	"bevy_dev_tools",
+] }
+avian3d = { path = "../avian/crates/avian3d", features = ["simd"] }
+bevy_skein = { path = "../skein" }
+bevy_enhanced_input = { path = "../bevy_enhanced_input" }
+
+fluent = "0.17.0"
+noiz = "0.5.0"

@@ -1,9 +1,10 @@
 use avian3d::prelude::*;
-use bevy::{light::DirectionalLightShadowMap, prelude::*};
+use bevy::dev_tools::fps_overlay::FpsOverlayPlugin;
+use bevy::prelude::*;
 use bevy_skein::SkeinPlugin;
-use game_state::{GameState, GameStatePlugin};
 
 use cube_spawner::CubeSpawnerPlugin;
+use game_state::{GameState, GameStatePlugin};
 
 mod cube_spawner;
 mod game_state;
@@ -25,19 +26,15 @@ impl Plugin for Prototype19 {
             GameStatePlugin,
             ui::PrototypeUiPlugin,
             // PhysicsDebugPlugin::default(),
+            FpsOverlayPlugin::default(),
         ));
-        app.insert_resource(DirectionalLightShadowMap { size: 4096 });
+        app.insert_resource(GlobalAmbientLight {
+            color: Color::WHITE,
+            brightness: 1000.,
+            ..default()
+        });
         app.register_type::<ColliderConstructor>();
         app.add_systems(OnEnter(GameState::MainMenu), ui::main_menu_scene.spawn());
         app.add_systems(OnEnter(GameState::InGame), ui::in_game_scene.spawn());
     }
 }
-
-// TODO: Add support for ktx2 in .glb files.
-/*
-
-Currently there is an error:
-
-ERROR bevy_asset::server: Failed to load asset 'Cube_opt.glb' with asset loader 'bevy_gltf::loader::GltfLoader': invalid glTF file: invalid glTF: textures[0].source: Missing data; extensionsRequired[0] = "KHR_texture_basisu": Unsupported extension;
-
-*/

@@ -18,12 +18,11 @@ pub fn spawn_cube(
     asset_server: Res<AssetServer>,
     cube_spawner: Query<Entity, With<CubeSpawner>>,
 ) {
-    println!("spawn_cube");
     let Ok(cube_spawner) = cube_spawner.single() else {
         return;
     };
     commands.entity(cube_spawner).with_child((
-        WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("Cube.glb"))),
+        WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("Cube_opt.glb"))),
         DespawnOnEnter(GameState::MainMenu),
     ));
 }
