@@ -5,9 +5,13 @@ use bevy_skein::SkeinPlugin;
 
 use cube_spawner::CubeSpawnerPlugin;
 use game_state::{GameState, GameStatePlugin};
+use player_character::PlayerCharacterPlugin;
 
+mod character_controller;
 mod cube_spawner;
+mod fps_camera;
 mod game_state;
+mod player_character;
 mod ui;
 
 fn main() {
@@ -23,14 +27,15 @@ impl Plugin for Prototype19 {
             SkeinPlugin::default(),
             PhysicsPlugins::default(),
             CubeSpawnerPlugin,
+            PlayerCharacterPlugin,
             GameStatePlugin,
             ui::PrototypeUiPlugin,
-            // PhysicsDebugPlugin::default(),
+            PhysicsDebugPlugin::default(),
             FpsOverlayPlugin::default(),
         ));
         app.insert_resource(GlobalAmbientLight {
             color: Color::WHITE,
-            brightness: 1000.,
+            brightness: 10.,
             ..default()
         });
         app.register_type::<ColliderConstructor>();

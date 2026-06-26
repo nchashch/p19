@@ -1,5 +1,6 @@
 use crate::cube_spawner::{Cube, SpawnCube};
 use crate::game_state::GameState;
+use crate::player_character::RespawnPlayer;
 use bevy::{
     color::palettes::css::{BLACK, DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},
     prelude::*,
@@ -58,6 +59,11 @@ fn ui() -> impl Scene {
             panel(px(400), px(400))
             Children [
                 (
+                    button("RESPAWN")
+                    Tooltip("Respawn player character.")
+                    on(respawn_button)
+                ),
+                (
                     button("SPAWN")
                     Tooltip("Spawn a cube.")
                     on(spawn_button)
@@ -74,7 +80,7 @@ fn ui() -> impl Scene {
                 ),
             ]
         ]
-        WorldAssetRoot("Level_opt.glb#Scene0")
+        WorldAssetRoot("Level.glb#Scene0")
         DespawnOnExit::<GameState>(GameState::InGame)
     }
 }
@@ -146,6 +152,10 @@ fn play_button(_event: On<Pointer<Press>>, mut commands: Commands) {
 
 fn spawn_button(_event: On<Pointer<Press>>, mut commands: Commands) {
     commands.trigger(SpawnCube);
+}
+
+fn respawn_button(_event: On<Pointer<Press>>, mut commands: Commands) {
+    commands.trigger(RespawnPlayer);
 }
 
 fn menu_button(_event: On<Pointer<Press>>, mut commands: Commands) {
