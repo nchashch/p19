@@ -298,9 +298,7 @@ fn movement(
                     linear_velocity.z -= direction.y * movement.acceleration * delta_secs;
                 }
                 MovementAction::Jump => {
-                    dbg!("jump");
                     if is_grounded {
-                        dbg!("grounded");
                         linear_velocity.y = movement.jump_impulse;
                     }
                 }
