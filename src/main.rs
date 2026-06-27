@@ -7,9 +7,12 @@ use cube_spawner::CubeSpawnerPlugin;
 use game_state::{GameState, GameStatePlugin};
 use player_character::PlayerCharacterPlugin;
 
+use crate::fps_controller::FpsControllerPlugin;
+
 mod character_controller;
 mod cube_spawner;
 mod fps_camera;
+mod fps_controller;
 mod game_state;
 mod player_character;
 mod ui;
@@ -28,9 +31,10 @@ impl Plugin for Prototype19 {
             PhysicsPlugins::default(),
             CubeSpawnerPlugin,
             PlayerCharacterPlugin,
+            FpsControllerPlugin,
             GameStatePlugin,
             ui::PrototypeUiPlugin,
-            PhysicsDebugPlugin::default(),
+            // PhysicsDebugPlugin::default(),
             FpsOverlayPlugin::default(),
         ));
         app.insert_resource(GlobalAmbientLight {

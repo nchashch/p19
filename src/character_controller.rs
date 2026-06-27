@@ -1,6 +1,8 @@
 use avian3d::{math::*, prelude::*};
 use bevy::{ecs::query::Has, prelude::*};
 
+use crate::fps_controller::FpsCamera;
+
 /// A plugin that implements a basic platformer kinematic character controller using move-and-slide,
 /// with support for ground detection and configurable movement settings.
 pub struct CharacterControllerPlugin;
@@ -210,6 +212,7 @@ fn update_grounded(
 /// Responds to [`MovementAction`] events and moves character controllers accordingly.
 fn movement(
     time: Res<Time>,
+    fps_camera: Query<&FpsCamera>,
     mut movement_reader: MessageReader<MovementAction>,
     mut controllers: Query<(
         &CharacterMovementSettings,
@@ -217,12 +220,17 @@ fn movement(
         Has<Grounded>,
     )>,
 ) {
+    let Ok(fps_camera) = fps_camera.single() else {
+        return;
+    };
     let delta_secs = time.delta_secs_f64().adjust_precision();
 
     for event in movement_reader.read() {
         for (movement, mut linear_velocity, is_grounded) in &mut controllers {
             match event {
                 MovementAction::Move(direction) => {
+                    let rotation = Rot2::radians(fps_camera.yaw);
+                    let direction = rotation * (-*direction);
                     linear_velocity.x += direction.x * movement.acceleration * delta_secs;
                     linear_velocity.z -= direction.y * movement.acceleration * delta_secs;
                 }

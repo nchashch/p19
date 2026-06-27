@@ -1,19 +1,30 @@
 use crate::{
     character_controller::{
-        CharacterCollision, CharacterCollisions, CharacterController, CharacterControllerPlugin,
+        CharacterCollisions, CharacterController, CharacterControllerPlugin,
         CharacterMovementSettings, GroundDetection,
     },
+    fps_controller::{Crosshair, DisableFpsCameraControl, FpsCamera, FpsCameraRotation},
     game_state::GameState,
 };
 use avian3d::prelude::*;
-use bevy::prelude::*;
+use bevy::{
+    prelude::*,
+    window::{CursorGrabMode, CursorOptions},
+};
+use bevy_enhanced_input::prelude::*;
 
 pub struct PlayerCharacterPlugin;
 
 impl Plugin for PlayerCharacterPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(CharacterControllerPlugin);
+        // app.add_systems(OnEnter(GameState::InGame), initial_lock_cursor);
+        // app.add_systems(OnEnter(GameState::InGame), initial_respawn_player);
         app.add_observer(respawn_player);
+        app.add_observer(lock_cursor);
+        app.add_observer(unlock_cursor);
+        app.add_plugins(EnhancedInputPlugin)
+            .add_input_context::<PlayerCharacter>();
     }
 }
 
@@ -48,19 +59,82 @@ pub fn respawn_player(
         gravity: -10.0 * Vec3::Y * 2.0,
         terminal_velocity: 300.0,
     };
-    commands.spawn((
-        PlayerCharacter,
-        CharacterController,
-        character_movement_settings,
-        CharacterCollisions::default(),
-        GroundDetection {
-            // Use a slightly smaller capsule for shape casts used for ground detection
-            cast_shape: Some(Collider::capsule(0.399, 1.0)),
-            ..default()
-        },
-        Collider::capsule(0.4, 1.0),
-        RigidBody::Kinematic,
-        *spawner_transform,
-        DespawnOnEnter(GameState::MainMenu),
-    ));
+    commands
+        .spawn((
+            PlayerCharacter,
+            CharacterController,
+            character_movement_settings,
+            CharacterCollisions::default(),
+            GroundDetection {
+                // Use a slightly smaller capsule for shape casts used for ground detection
+                cast_shape: Some(Collider::capsule(0.399, 1.0)),
+                ..default()
+            },
+            Collider::capsule(0.4, 1.0),
+            RigidBody::Kinematic,
+            Transform::from_translation(spawner_transform.translation),
+            Actions::<PlayerCharacter>::spawn(SpawnWith(|context: &mut ActionSpawner<_>| {
+                context.spawn((
+                    Action::<FpsCameraRotation>::new(),
+                    bindings![Binding::mouse_motion()],
+                ));
+                context.spawn((
+                    Action::<MenuAction>::new(),
+                    Toggle::new(1.0),
+                    bindings![KeyCode::Tab],
+                ));
+            })),
+            DespawnOnEnter(GameState::MainMenu),
+        ))
+        .with_children(|parent| {
+            parent
+                .spawn((Transform::from_xyz(0., 0.5, 0.),))
+                .with_children(|parent| {
+                    parent.spawn((
+                        Camera3d::default(),
+                        FpsCamera::new(),
+                        Transform::IDENTITY,
+                        IsDefaultUiCamera,
+                    ));
+                });
+        });
+}
+
+#[derive(InputAction)]
+#[action_output(bool)]
+pub struct MenuAction;
+
+fn initial_lock_cursor(mut cursor_options: Single<&mut CursorOptions>) {
+    cursor_options.visible = false;
+    cursor_options.grab_mode = CursorGrabMode::Locked;
+}
+
+fn unlock_cursor(
+    _menu: On<Fire<MenuAction>>,
+    mut cursor_options: Single<&mut CursorOptions>,
+    mut disable_fps_camera: ResMut<DisableFpsCameraControl>,
+    mut crosshair: Query<&mut Visibility, With<Crosshair>>,
+) {
+    cursor_options.visible = true;
+    cursor_options.grab_mode = CursorGrabMode::None;
+    disable_fps_camera.0 = true;
+    let Ok(mut visibility) = crosshair.single_mut() else {
+        return;
+    };
+    *visibility = Visibility::Hidden;
+}
+
+fn lock_cursor(
+    _menu: On<Complete<MenuAction>>,
+    mut cursor_options: Single<&mut CursorOptions>,
+    mut disable_fps_camera: ResMut<DisableFpsCameraControl>,
+    mut crosshair: Query<&mut Visibility, With<Crosshair>>,
+) {
+    cursor_options.visible = false;
+    cursor_options.grab_mode = CursorGrabMode::Locked;
+    disable_fps_camera.0 = false;
+    let Ok(mut visibility) = crosshair.single_mut() else {
+        return;
+    };
+    *visibility = Visibility::Visible;
 }
