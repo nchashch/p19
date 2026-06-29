@@ -74,6 +74,7 @@ pub fn respawn_player(
             },
             Collider::capsule(0.4, 1.0),
             DesiredMotion::default(),
+            PointLight { ..default() },
             RigidBody::Kinematic,
             Transform::from_translation(spawner_transform.translation),
             Actions::<PlayerCharacter>::spawn(SpawnWith(|context: &mut ActionSpawner<_>| {
