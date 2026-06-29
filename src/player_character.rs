@@ -3,6 +3,7 @@ use crate::{
         CharacterCollisions, CharacterController, CharacterControllerPlugin,
         CharacterMovementSettings, DesiredMotion, GroundDetection,
     },
+    cube_spawner::CubeSpawner,
     fps_controller::{Crosshair, DisableFpsCameraControl, FpsCamera, FpsCameraRotation},
     game_state::GameState,
 };
@@ -97,12 +98,16 @@ pub fn respawn_player(
             parent
                 .spawn((Transform::from_xyz(0., 0.5, 0.),))
                 .with_children(|parent| {
-                    parent.spawn((
-                        Camera3d::default(),
-                        FpsCamera::new(),
-                        Transform::IDENTITY,
-                        IsDefaultUiCamera,
-                    ));
+                    parent
+                        .spawn((
+                            Camera3d::default(),
+                            FpsCamera::new(),
+                            Transform::IDENTITY,
+                            IsDefaultUiCamera,
+                        ))
+                        .with_children(|parent| {
+                            parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), CubeSpawner));
+                        });
                 });
         });
 }
