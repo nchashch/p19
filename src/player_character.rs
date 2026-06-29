@@ -1,13 +1,14 @@
 use crate::{
     character_controller::{
         CharacterCollisions, CharacterController, CharacterControllerPlugin,
-        CharacterMovementSettings, GroundDetection,
+        CharacterMovementSettings, DesiredMotion, GroundDetection,
     },
     fps_controller::{Crosshair, DisableFpsCameraControl, FpsCamera, FpsCameraRotation},
     game_state::GameState,
 };
 use avian3d::prelude::*;
 use bevy::{
+    input::gamepad::GamepadInput,
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
 };
@@ -53,9 +54,9 @@ pub fn respawn_player(
         return;
     };
     let character_movement_settings = CharacterMovementSettings {
-        acceleration: 50.0,
+        acceleration: 100.0,
         damping: 10.0,
-        jump_impulse: 20.0,
+        jump_impulse: 10.0,
         gravity: -10.0 * Vec3::Y * 2.0,
         terminal_velocity: 300.0,
     };
@@ -71,9 +72,15 @@ pub fn respawn_player(
                 ..default()
             },
             Collider::capsule(0.4, 1.0),
+            DesiredMotion::default(),
             RigidBody::Kinematic,
             Transform::from_translation(spawner_transform.translation),
             Actions::<PlayerCharacter>::spawn(SpawnWith(|context: &mut ActionSpawner<_>| {
+                context.spawn((
+                    Action::<Movement>::new(),
+                    Bindings::spawn((Cardinal::wasd_keys(),)),
+                ));
+                context.spawn((Action::<Jump>::new(), bindings![KeyCode::Space]));
                 context.spawn((
                     Action::<FpsCameraRotation>::new(),
                     bindings![Binding::mouse_motion()],
@@ -103,6 +110,14 @@ pub fn respawn_player(
 #[derive(InputAction)]
 #[action_output(bool)]
 pub struct MenuAction;
+
+#[derive(InputAction)]
+#[action_output(Vec2)]
+pub struct Movement;
+
+#[derive(InputAction)]
+#[action_output(bool)]
+pub struct Jump;
 
 fn initial_lock_cursor(mut cursor_options: Single<&mut CursorOptions>) {
     cursor_options.visible = false;

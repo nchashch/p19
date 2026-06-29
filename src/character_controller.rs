@@ -1,7 +1,10 @@
+use crate::{
+    fps_controller::FpsCamera,
+    player_character::{Jump, Movement},
+};
 use avian3d::{math::*, prelude::*};
 use bevy::{ecs::query::Has, prelude::*};
-
-use crate::fps_controller::FpsCamera;
+use bevy_enhanced_input::prelude::*;
 
 /// A plugin that implements a basic platformer kinematic character controller using move-and-slide,
 /// with support for ground detection and configurable movement settings.
@@ -9,32 +12,24 @@ pub struct CharacterControllerPlugin;
 
 impl Plugin for CharacterControllerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<MovementAction>();
-
-        // Collect input in `PreUpdate` so that it's processed before the physics update.
-        app.add_systems(PreUpdate, (keyboard_input, gamepad_input).chain());
-
         // Run movement logic in `FixedUpdate` to ensure consistent behavior regardless of frame rate.
         app.add_systems(
             FixedUpdate,
             (
                 update_grounded,
                 apply_gravity,
-                movement,
+                // movement,
+                integrate_horizontal_linear_velocity,
                 apply_movement_damping,
                 move_and_slide,
                 apply_forces_to_dynamic_bodies,
             )
                 .chain(),
         );
+        app.add_observer(on_jump);
+        app.add_observer(on_movement);
+        app.add_observer(on_movement_stop);
     }
-}
-
-/// A [`Message`] written for a movement input action.
-#[derive(Message)]
-pub enum MovementAction {
-    Move(Vector2),
-    Jump,
 }
 
 /// A marker component indicating that an entity is using a character controller.
@@ -70,7 +65,7 @@ pub struct CharacterMovementSettings {
 impl Default for CharacterMovementSettings {
     fn default() -> Self {
         Self {
-            acceleration: 50.0,
+            acceleration: 100.0,
             damping: 10.0,
             jump_impulse: 7.0,
             gravity: Vector::new(0.0, -9.81 * 2.0, 0.0),
@@ -129,47 +124,6 @@ pub struct CharacterCollision {
     pub character_velocity: Vector,
 }
 
-/// Sends [`MovementAction`] events based on keyboard input.
-fn keyboard_input(
-    mut movement_writer: MessageWriter<MovementAction>,
-    keyboard_input: Res<ButtonInput<KeyCode>>,
-) {
-    let up = keyboard_input.any_pressed([KeyCode::KeyW, KeyCode::ArrowUp]);
-    let down = keyboard_input.any_pressed([KeyCode::KeyS, KeyCode::ArrowDown]);
-    let left = keyboard_input.any_pressed([KeyCode::KeyA, KeyCode::ArrowLeft]);
-    let right = keyboard_input.any_pressed([KeyCode::KeyD, KeyCode::ArrowRight]);
-
-    let horizontal = right as i8 - left as i8;
-    let vertical = up as i8 - down as i8;
-    let direction = Vector2::new(horizontal as Scalar, vertical as Scalar).clamp_length_max(1.0);
-
-    if direction != Vector2::ZERO {
-        movement_writer.write(MovementAction::Move(direction));
-    }
-
-    if keyboard_input.just_pressed(KeyCode::Space) {
-        movement_writer.write(MovementAction::Jump);
-    }
-}
-
-/// Sends [`MovementAction`] events based on gamepad input.
-fn gamepad_input(mut movement_writer: MessageWriter<MovementAction>, gamepads: Query<&Gamepad>) {
-    for gamepad in gamepads.iter() {
-        if let (Some(x), Some(y)) = (
-            gamepad.get(GamepadAxis::LeftStickX),
-            gamepad.get(GamepadAxis::LeftStickY),
-        ) {
-            movement_writer.write(MovementAction::Move(
-                Vector2::new(x as Scalar, y as Scalar).clamp_length_max(1.0),
-            ));
-        }
-
-        if gamepad.just_pressed(GamepadButton::South) {
-            movement_writer.write(MovementAction::Jump);
-        }
-    }
-}
-
 /// Updates the [`Grounded`] status for character controllers.
 fn update_grounded(
     mut commands: Commands,
@@ -209,38 +163,62 @@ fn update_grounded(
     }
 }
 
-/// Responds to [`MovementAction`] events and moves character controllers accordingly.
-fn movement(
-    time: Res<Time>,
-    fps_camera: Query<&FpsCamera>,
-    mut movement_reader: MessageReader<MovementAction>,
+fn on_jump(
+    _jump_event: On<Fire<Jump>>,
     mut controllers: Query<(
         &CharacterMovementSettings,
         &mut LinearVelocity,
         Has<Grounded>,
     )>,
 ) {
+    for (movement, mut linear_velocity, is_grounded) in &mut controllers {
+        if is_grounded {
+            linear_velocity.y = movement.jump_impulse;
+        }
+    }
+}
+
+fn on_movement_stop(
+    movement_event: On<Complete<Movement>>,
+    mut controllers: Query<(&mut DesiredMotion)>,
+) {
+    for (mut acceleration) in &mut controllers {
+        acceleration.0 = Vec3::ZERO;
+    }
+}
+
+/// Responds to [`MovementAction`] events and moves character controllers accordingly.
+fn on_movement(
+    movement_event: On<Fire<Movement>>,
+    fps_camera: Query<&FpsCamera>,
+    mut controllers: Query<(&CharacterMovementSettings, &mut DesiredMotion)>,
+) {
     let Ok(fps_camera) = fps_camera.single() else {
         return;
     };
-    let delta_secs = time.delta_secs_f64().adjust_precision();
+    for (movement, mut acceleration) in &mut controllers {
+        let rotation = Rot2::radians(fps_camera.yaw);
+        let acceleration2 = rotation * movement_event.value;
+        acceleration.0.x = -acceleration2.x;
+        acceleration.0.z = acceleration2.y;
+    }
+}
 
-    for event in movement_reader.read() {
-        for (movement, mut linear_velocity, is_grounded) in &mut controllers {
-            match event {
-                MovementAction::Move(direction) => {
-                    let rotation = Rot2::radians(fps_camera.yaw);
-                    let direction = rotation * (-*direction);
-                    linear_velocity.x += direction.x * movement.acceleration * delta_secs;
-                    linear_velocity.z -= direction.y * movement.acceleration * delta_secs;
-                }
-                MovementAction::Jump => {
-                    if is_grounded {
-                        linear_velocity.y = movement.jump_impulse;
-                    }
-                }
-            }
-        }
+#[derive(Component, Default)]
+pub struct DesiredMotion(Vec3);
+
+fn integrate_horizontal_linear_velocity(
+    time: Res<Time>,
+    mut controllers: Query<(
+        &CharacterMovementSettings,
+        &mut LinearVelocity,
+        &mut DesiredMotion,
+    )>,
+) {
+    let delta_secs = time.delta_secs_f64().adjust_precision();
+    for (movement, mut linear_velocity, desired_motion) in &mut controllers {
+        let acceleration = desired_motion.0.normalize_or_zero() * movement.acceleration;
+        linear_velocity.0 += acceleration * delta_secs;
     }
 }
 

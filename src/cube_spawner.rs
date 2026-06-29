@@ -22,7 +22,7 @@ pub fn spawn_cube(
         return;
     };
     commands.entity(cube_spawner).with_child((
-        WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("Cube_opt.glb"))),
+        WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("Cube.glb"))),
         DespawnOnEnter(GameState::MainMenu),
     ));
 }
