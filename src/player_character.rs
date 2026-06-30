@@ -10,7 +10,11 @@ use crate::{
 };
 use avian3d::prelude::*;
 use bevy::{
+    anti_alias::taa::TemporalAntiAliasing,
+    light::Skybox,
+    pbr::ScreenSpaceAmbientOcclusion,
     prelude::*,
+    render::render_resource::{TextureViewDescriptor, TextureViewDimension},
     window::{CursorGrabMode, CursorOptions},
 };
 use bevy_enhanced_input::prelude::*;
@@ -21,6 +25,11 @@ pub struct PlayerCharacterPlugin;
 
 impl Plugin for PlayerCharacterPlugin {
     fn build(&self, app: &mut App) {
+        app.insert_resource(Cubemap {
+            is_loaded: false,
+            index: 0,
+            image_handle: None,
+        });
         app.add_plugins(CharacterControllerPlugin);
         app.add_systems(
             OnEnter(GameState::MainMenu),
@@ -38,7 +47,7 @@ impl Plugin for PlayerCharacterPlugin {
         app.add_observer(despawn);
         app.add_plugins(EnhancedInputPlugin)
             .add_input_context::<PlayerCharacter>();
-        app.add_systems(Update, (raycast_from_center, tick_lifetimes));
+        app.add_systems(Update, (raycast_from_center, tick_lifetimes, asset_loaded));
         app.insert_resource(Hovered(None));
     }
 }
@@ -71,6 +80,7 @@ pub fn respawn_player(
     mut commands: Commands,
     player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
     player_character: Query<Entity, With<PlayerCharacter>>,
+    asset_server: Res<AssetServer>,
 ) {
     if let Ok(player_character) = player_character.single() {
         commands.entity(player_character).despawn();
@@ -79,7 +89,6 @@ pub fn respawn_player(
     let Ok(spawner_transform) = player_spawner.single() else {
         return;
     };
-    dbg!("respawn_player");
     let character_movement_settings = CharacterMovementSettings {
         acceleration: 100.0,
         damping: 10.0,
@@ -87,6 +96,7 @@ pub fn respawn_player(
         gravity: -10.0 * Vec3::Y * 2.0,
         terminal_velocity: 300.0,
     };
+    let skybox_handle = asset_server.load("Ryfjallet_cubemap.png");
     commands
         .spawn((
             PlayerCharacter,
@@ -136,12 +146,35 @@ pub fn respawn_player(
                             FpsCamera::new(),
                             Transform::IDENTITY,
                             IsDefaultUiCamera,
+                            Msaa::Off,
+                            TemporalAntiAliasing::default(),
+                            ScreenSpaceAmbientOcclusion::default(),
+                            Skybox {
+                                image: Some(skybox_handle.clone()),
+                                brightness: 1000.0,
+                                ..default()
+                            },
                         ))
                         .with_children(|parent| {
                             parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), CubeSpawner));
                         });
                 });
         });
+
+    // ambient light
+    // NOTE: The ambient light is used to scale how bright the environment map is so with a bright
+    // environment map, use an appropriate color and brightness to match
+    commands.insert_resource(GlobalAmbientLight {
+        color: Color::srgb_u8(210, 220, 240),
+        brightness: 1.0,
+        ..default()
+    });
+
+    commands.insert_resource(Cubemap {
+        is_loaded: false,
+        index: 0,
+        image_handle: Some(skybox_handle),
+    });
 }
 
 #[derive(InputAction)]
@@ -310,3 +343,48 @@ fn raycast_from_center(
 
 #[derive(Resource)]
 pub struct Hovered(pub Option<Entity>);
+
+fn asset_loaded(
+    asset_server: Res<AssetServer>,
+    mut images: ResMut<Assets<Image>>,
+    mut cubemap: ResMut<Cubemap>,
+    mut skyboxes: Query<&mut Skybox>,
+) {
+    if cubemap.image_handle.is_none() {
+        return;
+    }
+    if !cubemap.is_loaded
+        && asset_server
+            .load_state(&cubemap.image_handle.clone().unwrap())
+            .is_loaded()
+    {
+        let mut image = images
+            .get_mut(&cubemap.image_handle.clone().unwrap())
+            .unwrap();
+        // NOTE: PNGs do not have any metadata that could indicate they contain a cubemap texture,
+        // so they appear as one texture. The following code reconfigures the texture as necessary.
+        if image.texture_descriptor.array_layer_count() == 1 {
+            let layers = image.height() / image.width();
+            image
+                .reinterpret_stacked_2d_as_array(layers)
+                .expect("asset should be 2d texture and height will always be evenly divisible with the given layers");
+            image.texture_view_descriptor = Some(TextureViewDescriptor {
+                dimension: Some(TextureViewDimension::Cube),
+                ..default()
+            });
+        }
+
+        for mut skybox in &mut skyboxes {
+            skybox.image = cubemap.image_handle.clone();
+        }
+
+        cubemap.is_loaded = true;
+    }
+}
+
+#[derive(Resource)]
+struct Cubemap {
+    is_loaded: bool,
+    index: usize,
+    image_handle: Option<Handle<Image>>,
+}
