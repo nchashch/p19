@@ -1,4 +1,5 @@
 use crate::game_state::GameState;
+use crate::player_character::Hovered;
 use crate::{LevelScene, cube_spawner::Cube};
 use bevy::{
     color::palettes::css::{BLACK, DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},
@@ -12,6 +13,7 @@ impl Plugin for PrototypeUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(show_tooltip);
         app.add_observer(hide_tooltip);
+        app.add_systems(Update, update_console);
     }
 }
 
@@ -31,7 +33,7 @@ fn main_menu() -> impl Scene {
             panel(px(400), px(400))
             Children [
                 (
-                    button("PLAY")
+                    button("play")
                     Tooltip("Start the game.")
                     on(play_button)
                 ),
@@ -67,10 +69,17 @@ fn ui() -> impl Scene {
                     Text("[LMB] shoot cube")
                 ),
                 (
+                    Text("[RMB] despawn cube")
+                ),
+                (
                     Text("[R] respawn")
                 ),
                 (
                     Text("[Q] despawn all cubes")
+                ),
+                (
+                    Text("Entity hovered: None")
+                    Console
                 ),
             ]
         ]
@@ -221,4 +230,17 @@ fn hide_tooltip(_out: On<Pointer<Out>>, q: Query<Entity, With<TooltipUi>>, mut c
     for e in &q {
         commands.entity(e).despawn();
     }
+}
+
+#[derive(Component, Clone, Default, Debug)]
+struct Console;
+
+fn update_console(mut query: Query<&mut Text, With<Console>>, hovered: Res<Hovered>) {
+    if !hovered.is_changed() {
+        return;
+    }
+    let Ok(mut text) = query.single_mut() else {
+        return;
+    };
+    text.0 = format!("Entity hovered: {:?}", hovered.0);
 }

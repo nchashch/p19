@@ -25,9 +25,12 @@ impl Plugin for PlayerCharacterPlugin {
         app.add_observer(respawn_player);
         app.add_observer(main_menu);
         app.add_observer(shoot);
+        app.add_observer(despawn_cube);
         app.add_observer(despawn);
         app.add_plugins(EnhancedInputPlugin)
             .add_input_context::<PlayerCharacter>();
+        app.add_systems(Update, raycast_from_center);
+        app.insert_resource(Hovered(None));
     }
 }
 
@@ -98,6 +101,7 @@ pub fn respawn_player(
                 ));
                 context.spawn((Action::<Jump>::new(), bindings![KeyCode::Space]));
                 context.spawn((Action::<Shoot>::new(), bindings![MouseButton::Left]));
+                context.spawn((Action::<DespawnCube>::new(), bindings![MouseButton::Right]));
                 context.spawn((Action::<Respawn>::new(), bindings![KeyCode::KeyR]));
                 context.spawn((Action::<Despawn>::new(), bindings![KeyCode::KeyQ]));
                 context.spawn((Action::<MainMenu>::new(), bindings![KeyCode::Escape]));
@@ -196,3 +200,67 @@ fn lock_cursor(
     };
     *visibility = Visibility::Visible;
 }
+
+#[derive(InputAction)]
+#[action_output(bool)]
+struct DespawnCube;
+
+fn despawn_cube(
+    _: On<Start<DespawnCube>>,
+    hovered: Res<Hovered>,
+    cube: Query<Entity, With<Cube>>,
+    mut commands: Commands,
+) {
+    if let Some(entity) = hovered.0 {
+        if let Ok(entity) = cube.get(entity) {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+fn raycast_from_center(
+    player_collider_entity: Query<Entity, (With<PlayerCharacter>, With<Collider>)>,
+    spatial_query: SpatialQuery,
+    camera_query: Query<(&Camera, &GlobalTransform), With<FpsCamera>>,
+    window_query: Query<&Window>,
+    mut hovered: ResMut<Hovered>,
+    disable_fps_camera_control: Res<DisableFpsCameraControl>,
+) {
+    let Ok((camera, camera_transform)) = camera_query.single() else {
+        return;
+    };
+    let Ok(window) = window_query.single() else {
+        return;
+    };
+    let Ok(player_collider_entity) = player_collider_entity.single() else {
+        return;
+    };
+
+    // Center of the screen in logical (not physical) pixels.
+    let screen_origin = if disable_fps_camera_control.0 {
+        window.cursor_position().unwrap_or(Vec2::ZERO)
+    } else {
+        window.size() / 2.0
+    };
+
+    // Screen space -> world ray. Returns Err if the camera has no usable
+    // viewport/projection this frame.
+    let Ok(ray) = camera.viewport_to_world(camera_transform, screen_origin) else {
+        return;
+    };
+
+    if let Some(hit) = spatial_query.cast_ray(
+        ray.origin,
+        ray.direction, // already a Dir3
+        f32::MAX,      // max distance
+        true,          // treat shapes as solid (hit registers if origin is inside)
+        &SpatialQueryFilter::from_excluded_entities([player_collider_entity]),
+    ) {
+        hovered.0 = Some(hit.entity);
+    } else {
+        hovered.0 = None;
+    }
+}
+
+#[derive(Resource)]
+pub struct Hovered(pub Option<Entity>);
