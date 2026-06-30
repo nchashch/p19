@@ -45,10 +45,7 @@ fn main_menu() -> impl Scene {
 }
 
 pub fn in_game_scene() -> impl SceneList {
-    let camera_2d = bsn! {
-        Camera2d
-    };
-    bsn_list![camera_2d, ui()]
+    bsn_list![ui()]
 }
 
 fn ui() -> impl Scene {

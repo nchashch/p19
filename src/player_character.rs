@@ -223,7 +223,7 @@ fn despawn_cube(
             commands.spawn((
                 ParticleEffect::new(effect.0.clone()),
                 *transform,
-                Lifetime(Timer::from_seconds(5.0, TimerMode::Once)),
+                Lifetime(Timer::from_seconds(2.0, TimerMode::Once)),
             ));
         }
     }
