@@ -22,8 +22,14 @@ pub struct PlayerCharacterPlugin;
 impl Plugin for PlayerCharacterPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(CharacterControllerPlugin);
-        app.add_systems(OnEnter(GameState::MainMenu), unlock_cursor);
-        app.add_systems(OnEnter(GameState::InGame), (lock_cursor, initial_respawn));
+        app.add_systems(
+            OnEnter(GameState::MainMenu),
+            (unlock_cursor, play_menu_music),
+        );
+        app.add_systems(
+            OnEnter(GameState::InGame),
+            (lock_cursor, initial_respawn, play_music),
+        );
         app.add_observer(respawn);
         app.add_observer(respawn_player);
         app.add_observer(main_menu);
@@ -210,6 +216,20 @@ struct DespawnCube;
 
 #[derive(Component)]
 struct Lifetime(Timer);
+
+fn play_menu_music(asset_server: Res<AssetServer>, mut commands: Commands) {
+    commands.spawn((
+        SamplePlayer::new(asset_server.load("menu_music.mp3")).looping(),
+        DespawnOnExit(GameState::MainMenu),
+    ));
+}
+
+fn play_music(asset_server: Res<AssetServer>, mut commands: Commands) {
+    commands.spawn((
+        SamplePlayer::new(asset_server.load("music.mp3")).looping(),
+        DespawnOnExit(GameState::InGame),
+    ));
+}
 
 fn despawn_cube(
     _: On<Start<DespawnCube>>,
