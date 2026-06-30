@@ -13,6 +13,7 @@ avian3d = { path = "../avian/crates/avian3d", features = ["simd"] }
 bevy_skein = { path = "../skein" }
 bevy_enhanced_input = { path = "../bevy_enhanced_input" }
 bevy_asset_loader = { path = "../bevy_asset_loader/bevy_asset_loader" }
+bevy_hanabi = { path = "../bevy_hanabi" }
 
 fluent = "0.17.0"
 noiz = "0.5.0"

@@ -6,6 +6,7 @@ use crate::{
     cube_spawner::{Cube, CubeSpawner, SpawnCube},
     fps_controller::{Crosshair, DisableFpsCameraControl, FpsCamera, FpsCameraRotation},
     game_state::GameState,
+    particles::CubeParticleEffect,
 };
 use avian3d::prelude::*;
 use bevy::{
@@ -13,6 +14,7 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions},
 };
 use bevy_enhanced_input::prelude::*;
+use bevy_hanabi::prelude::*;
 
 pub struct PlayerCharacterPlugin;
 
@@ -29,7 +31,7 @@ impl Plugin for PlayerCharacterPlugin {
         app.add_observer(despawn);
         app.add_plugins(EnhancedInputPlugin)
             .add_input_context::<PlayerCharacter>();
-        app.add_systems(Update, raycast_from_center);
+        app.add_systems(Update, (raycast_from_center, tick_lifetimes));
         app.insert_resource(Hovered(None));
     }
 }
@@ -205,14 +207,35 @@ fn lock_cursor(
 #[action_output(bool)]
 struct DespawnCube;
 
+#[derive(Component)]
+struct Lifetime(Timer);
+
 fn despawn_cube(
     _: On<Start<DespawnCube>>,
     hovered: Res<Hovered>,
-    cube: Query<Entity, With<Cube>>,
+    cube: Query<(Entity, &Transform), With<Cube>>,
+    effect: Res<CubeParticleEffect>,
     mut commands: Commands,
 ) {
     if let Some(entity) = hovered.0 {
-        if let Ok(entity) = cube.get(entity) {
+        if let Ok((entity, transform)) = cube.get(entity) {
+            commands.entity(entity).despawn();
+            commands.spawn((
+                ParticleEffect::new(effect.0.clone()),
+                *transform,
+                Lifetime(Timer::from_seconds(5.0, TimerMode::Once)),
+            ));
+        }
+    }
+}
+
+fn tick_lifetimes(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut Lifetime)>,
+) {
+    for (entity, mut lifetime) in &mut query {
+        if lifetime.0.tick(time.delta()).just_finished() {
             commands.entity(entity).despawn();
         }
     }

@@ -1,19 +1,21 @@
 use avian3d::prelude::*;
 use bevy::dev_tools::fps_overlay::FpsOverlayPlugin;
 use bevy::prelude::*;
+use bevy_hanabi::prelude::*;
 use bevy_skein::SkeinPlugin;
 
 use cube_spawner::CubeSpawnerPlugin;
 use game_state::{GameState, GameStatePlugin};
 use player_character::PlayerCharacterPlugin;
 
-use crate::fps_controller::FpsControllerPlugin;
+use crate::{fps_controller::FpsControllerPlugin, particles::ParticleEffectsPlugin};
 
 mod character_controller;
 mod cube_spawner;
 mod fps_camera;
 mod fps_controller;
 mod game_state;
+mod particles;
 mod player_character;
 mod ui;
 
@@ -27,6 +29,7 @@ impl Plugin for Prototype19 {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             DefaultPlugins,
+            ParticleEffectsPlugin,
             SkeinPlugin::default(),
             PhysicsPlugins::default(),
             CubeSpawnerPlugin,

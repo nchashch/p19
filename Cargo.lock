@@ -978,6 +978,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_hanabi"
+version = "0.19.0"
+dependencies = [
+ "anyhow",
+ "bevy",
+ "bitflags 2.13.0",
+ "bytemuck",
+ "fixedbitset",
+ "getrandom 0.4.3",
+ "naga",
+ "naga_oil",
+ "rand",
+ "rand_pcg",
+ "ron",
+ "serde",
+ "thiserror 2.0.18",
+ "wgpu",
+]
+
+[[package]]
 name = "bevy_heavy"
 version = "0.5.0"
 dependencies = [
@@ -3000,9 +3020,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 6.0.0",
  "rand_core",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -4868,6 +4890,7 @@ dependencies = [
  "bevy",
  "bevy_asset_loader",
  "bevy_enhanced_input",
+ "bevy_hanabi",
  "bevy_skein",
  "fluent",
  "noiz",
@@ -4941,6 +4964,15 @@ checksum = "4d431c2703ccf129de4d45253c03f49ebb22b97d6ad79ee3ecfc7e3f4862c1d8"
 dependencies = [
  "num-traits",
  "rand",
+]
+
+[[package]]
+name = "rand_pcg"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "caa0f4137e1c0a72f4c651489402276c8e8e1cf081f3b0ba156d2cbeef09e86a"
+dependencies = [
+ "rand_core",
 ]
 
 [[package]]
