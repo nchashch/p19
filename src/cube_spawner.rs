@@ -37,6 +37,7 @@ pub fn spawn_cube(
         );
         let linear_velocity = Vec3::Z.rotate_x(fps_camera.pitch).rotate_y(fps_camera.yaw) * 100.;
         commands.spawn((
+            Cube,
             transform.compute_transform(),
             DespawnOnEnter(GameState::MainMenu),
             AngularVelocity(angular_velocity),

@@ -3,13 +3,12 @@ use crate::{
         CharacterCollisions, CharacterController, CharacterControllerPlugin,
         CharacterMovementSettings, DesiredMotion, GroundDetection,
     },
-    cube_spawner::CubeSpawner,
+    cube_spawner::{Cube, CubeSpawner, SpawnCube},
     fps_controller::{Crosshair, DisableFpsCameraControl, FpsCamera, FpsCameraRotation},
     game_state::GameState,
 };
 use avian3d::prelude::*;
 use bevy::{
-    input::gamepad::GamepadInput,
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
 };
@@ -20,15 +19,21 @@ pub struct PlayerCharacterPlugin;
 impl Plugin for PlayerCharacterPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(CharacterControllerPlugin);
-        // app.add_systems(OnEnter(GameState::InGame), initial_lock_cursor);
-        // app.add_systems(OnEnter(GameState::InGame), initial_respawn_player);
+        app.add_systems(OnEnter(GameState::MainMenu), unlock_cursor);
+        app.add_systems(OnEnter(GameState::InGame), (lock_cursor, initial_respawn));
+        app.add_observer(respawn);
         app.add_observer(respawn_player);
-        app.add_observer(lock_cursor);
-        app.add_observer(unlock_cursor);
+        app.add_observer(main_menu);
+        app.add_observer(shoot);
+        app.add_observer(despawn);
         app.add_plugins(EnhancedInputPlugin)
             .add_input_context::<PlayerCharacter>();
     }
 }
+
+#[derive(InputAction)]
+#[action_output(bool)]
+pub struct Respawn;
 
 #[derive(Event)]
 pub struct RespawnPlayer;
@@ -40,6 +45,14 @@ pub struct PlayerCharacterSpawner;
 #[derive(Component, Reflect, Default)]
 #[reflect(Component)]
 pub struct PlayerCharacter;
+
+pub fn initial_respawn(mut commands: Commands) {
+    commands.trigger(RespawnPlayer);
+}
+
+pub fn respawn(_event: On<Complete<Respawn>>, mut commands: Commands) {
+    commands.trigger(RespawnPlayer);
+}
 
 pub fn respawn_player(
     _event: On<RespawnPlayer>,
@@ -54,6 +67,7 @@ pub fn respawn_player(
     let Ok(spawner_transform) = player_spawner.single() else {
         return;
     };
+    dbg!("respawn_player");
     let character_movement_settings = CharacterMovementSettings {
         acceleration: 100.0,
         damping: 10.0,
@@ -83,6 +97,10 @@ pub fn respawn_player(
                     Bindings::spawn((Cardinal::wasd_keys(),)),
                 ));
                 context.spawn((Action::<Jump>::new(), bindings![KeyCode::Space]));
+                context.spawn((Action::<Shoot>::new(), bindings![MouseButton::Left]));
+                context.spawn((Action::<Respawn>::new(), bindings![KeyCode::KeyR]));
+                context.spawn((Action::<Despawn>::new(), bindings![KeyCode::KeyQ]));
+                context.spawn((Action::<MainMenu>::new(), bindings![KeyCode::Escape]));
                 context.spawn((
                     Action::<FpsCameraRotation>::new(),
                     bindings![Binding::mouse_motion()],
@@ -125,13 +143,19 @@ pub struct Movement;
 #[action_output(bool)]
 pub struct Jump;
 
-fn initial_lock_cursor(mut cursor_options: Single<&mut CursorOptions>) {
-    cursor_options.visible = false;
-    cursor_options.grab_mode = CursorGrabMode::Locked;
-}
+#[derive(InputAction)]
+#[action_output(bool)]
+pub struct MainMenu;
+
+#[derive(InputAction)]
+#[action_output(bool)]
+pub struct Shoot;
+
+#[derive(InputAction)]
+#[action_output(bool)]
+pub struct Despawn;
 
 fn unlock_cursor(
-    _menu: On<Fire<MenuAction>>,
     mut cursor_options: Single<&mut CursorOptions>,
     mut disable_fps_camera: ResMut<DisableFpsCameraControl>,
     mut crosshair: Query<&mut Visibility, With<Crosshair>>,
@@ -145,8 +169,21 @@ fn unlock_cursor(
     *visibility = Visibility::Hidden;
 }
 
+fn shoot(_: On<Start<Shoot>>, mut commands: Commands) {
+    commands.trigger(SpawnCube);
+}
+
+fn despawn(_: On<Start<Despawn>>, mut commands: Commands, cubes: Query<Entity, With<Cube>>) {
+    for cube in cubes {
+        commands.entity(cube).despawn();
+    }
+}
+
+fn main_menu(_: On<Start<MainMenu>>, mut commands: Commands) {
+    commands.set_state(GameState::MainMenu);
+}
+
 fn lock_cursor(
-    _menu: On<Complete<MenuAction>>,
     mut cursor_options: Single<&mut CursorOptions>,
     mut disable_fps_camera: ResMut<DisableFpsCameraControl>,
     mut crosshair: Query<&mut Visibility, With<Crosshair>>,

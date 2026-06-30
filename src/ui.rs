@@ -1,6 +1,5 @@
-use crate::cube_spawner::{Cube, SpawnCube};
 use crate::game_state::GameState;
-use crate::player_character::RespawnPlayer;
+use crate::{LevelScene, cube_spawner::Cube};
 use bevy::{
     color::palettes::css::{BLACK, DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},
     prelude::*,
@@ -62,28 +61,19 @@ fn ui() -> impl Scene {
             panel(px(400), px(400))
             Children [
                 (
-                    button("RESPAWN")
-                    Tooltip("Respawn player character.")
-                    on(respawn_button)
+                    Text("[ESC] main menu")
                 ),
                 (
-                    button("SPAWN")
-                    Tooltip("Spawn a cube.")
-                    on(spawn_button)
+                    Text("[LMB] shoot cube")
                 ),
                 (
-                    button("DESPAWN")
-                    Tooltip("Despawn all cubes.")
-                    on(despawn_button)
+                    Text("[R] respawn")
                 ),
                 (
-                    button("MENU")
-                    Tooltip("Go back to menu.")
-                    on(menu_button)
+                    Text("[Q] despawn all cubes")
                 ),
             ]
         ]
-        WorldAssetRoot("Level.glb#Scene0")
         DespawnOnExit::<GameState>(GameState::InGame)
     }
 }
@@ -150,15 +140,7 @@ const BUTTON_TEXT_COLOR: Srgba = WHITE;
 const BUTTON_TEXT_FONT_SIZE: f32 = 33.0;
 
 fn play_button(_event: On<Pointer<Press>>, mut commands: Commands) {
-    commands.set_state(GameState::InGame);
-}
-
-fn spawn_button(_event: On<Pointer<Press>>, mut commands: Commands) {
-    commands.trigger(SpawnCube);
-}
-
-fn respawn_button(_event: On<Pointer<Press>>, mut commands: Commands) {
-    commands.trigger(RespawnPlayer);
+    commands.set_state(GameState::Loading);
 }
 
 fn menu_button(_event: On<Pointer<Press>>, mut commands: Commands) {
