@@ -15,6 +15,7 @@ use bevy::{
 };
 use bevy_enhanced_input::prelude::*;
 use bevy_hanabi::prelude::*;
+use bevy_seedling::prelude::*;
 
 pub struct PlayerCharacterPlugin;
 
@@ -215,10 +216,12 @@ fn despawn_cube(
     hovered: Res<Hovered>,
     cube: Query<(Entity, &Transform), With<Cube>>,
     effect: Res<CubeParticleEffect>,
+    asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
     if let Some(entity) = hovered.0 {
         if let Ok((entity, transform)) = cube.get(entity) {
+            commands.spawn(SamplePlayer::new(asset_server.load("crunch.wav")));
             commands.entity(entity).despawn();
             commands.spawn((
                 ParticleEffect::new(effect.0.clone()),

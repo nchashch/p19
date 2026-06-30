@@ -1,7 +1,7 @@
 use avian3d::prelude::*;
 use bevy::dev_tools::fps_overlay::FpsOverlayPlugin;
 use bevy::prelude::*;
-use bevy_hanabi::prelude::*;
+use bevy_seedling::prelude::*;
 use bevy_skein::SkeinPlugin;
 
 use cube_spawner::CubeSpawnerPlugin;
@@ -29,6 +29,7 @@ impl Plugin for Prototype19 {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             DefaultPlugins,
+            SeedlingPlugins,
             ParticleEffectsPlugin,
             SkeinPlugin::default(),
             PhysicsPlugins::default(),

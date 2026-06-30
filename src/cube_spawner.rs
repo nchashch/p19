@@ -1,10 +1,8 @@
 use crate::{GameState, fps_controller::FpsCamera};
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use rand::{
-    Rng, RngExt,
-    distr::{Distribution, Uniform},
-};
+use bevy_seedling::prelude::*;
+use rand::distr::{Distribution, Uniform};
 
 pub struct CubeSpawnerPlugin;
 
@@ -36,6 +34,7 @@ pub fn spawn_cube(
             between.sample(&mut rng),
         );
         let linear_velocity = Vec3::Z.rotate_x(fps_camera.pitch).rotate_y(fps_camera.yaw) * 100.;
+        commands.spawn(SamplePlayer::new(asset_server.load("explosion.wav")));
         commands.spawn((
             Cube,
             transform.compute_transform(),
