@@ -6,6 +6,7 @@ use bevy::{
     prelude::*,
     text::FontSourceTemplate,
 };
+use bevy_mod_outline::OutlineVolume;
 
 pub struct PrototypeUiPlugin;
 
@@ -13,7 +14,7 @@ impl Plugin for PrototypeUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(show_tooltip);
         app.add_observer(hide_tooltip);
-        app.add_systems(Update, update_console);
+        app.add_systems(Update, (update_console, update_outline_hovered));
     }
 }
 
@@ -240,4 +241,17 @@ fn update_console(mut query: Query<&mut Text, With<Console>>, hovered: Res<Hover
         return;
     };
     text.0 = format!("Entity hovered: {:?}", hovered.0);
+}
+
+fn update_outline_hovered(mut query: Query<(Entity, &mut OutlineVolume)>, hovered: Res<Hovered>) {
+    if !hovered.is_changed() {
+        return;
+    }
+    for (entity, mut outline) in query {
+        if Some(entity) == hovered.0 {
+            outline.visible = true;
+        } else {
+            outline.visible = false;
+        }
+    }
 }

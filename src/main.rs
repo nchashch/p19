@@ -5,10 +5,10 @@ use bevy_seedling::prelude::*;
 use bevy_skein::SkeinPlugin;
 
 use cube_spawner::CubeSpawnerPlugin;
+use fps_controller::FpsControllerPlugin;
 use game_state::{GameState, GameStatePlugin};
+use particles::ParticleEffectsPlugin;
 use player_character::PlayerCharacterPlugin;
-
-use crate::{fps_controller::FpsControllerPlugin, particles::ParticleEffectsPlugin};
 
 mod character_controller;
 mod cube_spawner;

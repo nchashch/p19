@@ -1,14 +1,16 @@
 use crate::{GameState, fps_controller::FpsCamera};
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use bevy_seedling::prelude::*;
+use bevy_mod_outline::{AsyncWorldInheritOutline, OutlinePlugin, OutlineVolume};
 use rand::distr::{Distribution, Uniform};
 
 pub struct CubeSpawnerPlugin;
 
 impl Plugin for CubeSpawnerPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(OutlinePlugin::JUMP_FLOOD);
         app.add_observer(spawn_cube);
+        app.add_systems(Update, add_outline_component);
     }
 }
 
@@ -34,17 +36,37 @@ pub fn spawn_cube(
             between.sample(&mut rng),
         );
         let linear_velocity = Vec3::Z.rotate_x(fps_camera.pitch).rotate_y(fps_camera.yaw) * 100.;
-        commands.spawn(SamplePlayer::new(asset_server.load("explosion.wav")));
+        // commands.spawn(SamplePlayer::new(asset_server.load("explosion.wav")));
         commands.spawn((
             Cube,
+            NoOutline,
             transform.compute_transform(),
-            DespawnOnEnter(GameState::MainMenu),
             AngularVelocity(angular_velocity),
             LinearVelocity(linear_velocity),
             RigidBody::Dynamic,
             Collider::cuboid(2.0, 2.0, 2.0),
-            WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset("Cube.glb"))),
+            WorldAssetRoot(asset_server.load("Cube.glb#Scene0")),
+            DespawnOnEnter(GameState::MainMenu),
         ));
+    }
+}
+
+#[derive(Component)]
+struct NoOutline;
+
+fn add_outline_component(mut commands: Commands, query: Query<Entity, With<NoOutline>>) {
+    for entity in query {
+        commands
+            .entity(entity)
+            .insert((
+                OutlineVolume {
+                    visible: false,
+                    width: 4.0,
+                    colour: Color::srgb(1.0, 1.0, 1.0),
+                },
+                AsyncWorldInheritOutline::default(),
+            ))
+            .remove::<NoOutline>();
     }
 }
 

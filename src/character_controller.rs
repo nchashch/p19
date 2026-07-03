@@ -164,7 +164,7 @@ fn update_grounded(
 }
 
 fn on_jump(
-    _jump_event: On<Fire<Jump>>,
+    _: On<Fire<Jump>>,
     mut controllers: Query<(
         &CharacterMovementSettings,
         &mut LinearVelocity,
@@ -178,11 +178,8 @@ fn on_jump(
     }
 }
 
-fn on_movement_stop(
-    movement_event: On<Complete<Movement>>,
-    mut controllers: Query<(&mut DesiredMotion)>,
-) {
-    for (mut acceleration) in &mut controllers {
+fn on_movement_stop(_: On<Complete<Movement>>, mut controllers: Query<(&mut DesiredMotion)>) {
+    for mut acceleration in &mut controllers {
         acceleration.0 = Vec3::ZERO;
     }
 }

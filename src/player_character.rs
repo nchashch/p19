@@ -33,11 +33,13 @@ impl Plugin for PlayerCharacterPlugin {
         app.add_plugins(CharacterControllerPlugin);
         app.add_systems(
             OnEnter(GameState::MainMenu),
-            (unlock_cursor, play_menu_music),
+            unlock_cursor,
+            // (unlock_cursor, play_menu_music),
         );
         app.add_systems(
             OnEnter(GameState::InGame),
-            (lock_cursor, initial_respawn, play_music),
+            (lock_cursor, initial_respawn),
+            // (lock_cursor, initial_respawn, play_music),
         );
         app.add_observer(respawn);
         app.add_observer(respawn_player);
