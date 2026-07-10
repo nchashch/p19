@@ -39,7 +39,7 @@ pub struct FpsCameraRotation;
 
 fn apply_fps_camera_rotation(
     rotation: On<Fire<FpsCameraRotation>>,
-    mut fps_camera: Query<(&mut FpsCamera, &mut Transform), With<Camera3d>>,
+    mut fps_camera: Query<(&mut FpsCamera, &mut Transform)>,
     disable_fps_camera_control: Res<DisableFpsCameraControl>,
 ) {
     if disable_fps_camera_control.0 {
@@ -65,54 +65,4 @@ pub struct DisableFpsCameraControl(pub bool);
 #[derive(Component)]
 pub struct Crosshair;
 
-fn spawn_crosshair(mut commands: Commands) {
-    // Fullscreen centered overlay
-    commands
-        .spawn((
-            Crosshair,
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                position_type: PositionType::Absolute,
-                ..default()
-            },
-            DespawnOnEnter(GameState::MainMenu),
-        ))
-        .with_children(|parent| {
-            // Zero-size pivot at screen center
-            parent
-                .spawn(Node {
-                    width: Val::Px(0.0),
-                    height: Val::Px(0.0),
-                    ..default()
-                })
-                .with_children(|pivot| {
-                    // Horizontal bar
-                    pivot.spawn((
-                        Node {
-                            position_type: PositionType::Absolute,
-                            width: Val::Px(16.0),
-                            height: Val::Px(2.0),
-                            left: Val::Px(-8.0),
-                            top: Val::Px(-1.0),
-                            ..default()
-                        },
-                        BackgroundColor(Color::WHITE),
-                    ));
-                    // Vertical bar
-                    pivot.spawn((
-                        Node {
-                            position_type: PositionType::Absolute,
-                            width: Val::Px(2.0),
-                            height: Val::Px(16.0),
-                            left: Val::Px(-1.0),
-                            top: Val::Px(-8.0),
-                            ..default()
-                        },
-                        BackgroundColor(Color::WHITE),
-                    ));
-                });
-        });
-}
+fn spawn_crosshair(mut commands: Commands) {}

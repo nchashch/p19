@@ -1,6 +1,7 @@
 use crate::game_state::GameState;
-use crate::player_character::Hovered;
+use crate::player_character::{DESPAWN_RANGE, Hovered, SELECT_RANGE, Selected};
 use crate::{LevelScene, cube_spawner::Cube};
+use bevy::color::palettes::css::{BLUE, GRAY, RED};
 use bevy::{
     color::palettes::css::{BLACK, DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},
     prelude::*,
@@ -14,7 +15,7 @@ impl Plugin for PrototypeUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(show_tooltip);
         app.add_observer(hide_tooltip);
-        app.add_systems(Update, (update_console, update_outline_hovered));
+        app.add_systems(Update, (update_console, update_outline_hovered_selected));
     }
 }
 
@@ -233,25 +234,44 @@ fn hide_tooltip(_out: On<Pointer<Out>>, q: Query<Entity, With<TooltipUi>>, mut c
 #[derive(Component, Clone, Default, Debug)]
 struct Console;
 
-fn update_console(mut query: Query<&mut Text, With<Console>>, hovered: Res<Hovered>) {
-    if !hovered.is_changed() {
+fn update_console(
+    mut query: Query<&mut Text, With<Console>>,
+    hovered: Res<Hovered>,
+    selected: Res<Selected>,
+) {
+    if !hovered.is_changed() && !selected.is_changed() {
         return;
     }
     let Ok(mut text) = query.single_mut() else {
         return;
     };
-    text.0 = format!("Entity hovered: {:?}", hovered.0);
+    text.0 = format!("Hovered: {:?}\nSelected: {:?}", hovered.0, selected.0);
 }
 
-fn update_outline_hovered(mut query: Query<(Entity, &mut OutlineVolume)>, hovered: Res<Hovered>) {
+fn update_outline_hovered_selected(
+    query: Query<(Entity, &mut OutlineVolume)>,
+    hovered: Res<Hovered>,
+    selected: Res<Selected>,
+) {
     if !hovered.is_changed() {
         return;
     }
     for (entity, mut outline) in query {
-        if Some(entity) == hovered.0 {
-            outline.visible = true;
-        } else {
-            outline.visible = false;
+        if let Some((hovered_entity, distance)) = hovered.0 {
+            if selected.0 == Some(entity) {
+                outline.colour = WHITE.into();
+                outline.visible = true;
+            } else if hovered_entity == entity {
+                if distance < SELECT_RANGE {
+                    outline.colour = GRAY.into();
+                    outline.visible = true;
+                } else {
+                    outline.colour = DARK_SLATE_GRAY.into();
+                    outline.visible = true;
+                }
+            } else {
+                outline.visible = false;
+            }
         }
     }
 }

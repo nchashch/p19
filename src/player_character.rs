@@ -3,7 +3,7 @@ use crate::{
         CharacterCollisions, CharacterController, CharacterControllerPlugin,
         CharacterMovementSettings, DesiredMotion, GroundDetection,
     },
-    cube_spawner::{Cube, CubeSpawner, SpawnCube},
+    cube_spawner::{Cube, CubeSpawner, Selectable, SpawnCube},
     fps_controller::{Crosshair, DisableFpsCameraControl, FpsCamera, FpsCameraRotation},
     game_state::GameState,
     particles::CubeParticleEffect,
@@ -38,19 +38,29 @@ impl Plugin for PlayerCharacterPlugin {
         );
         app.add_systems(
             OnEnter(GameState::InGame),
-            (lock_cursor, initial_respawn),
+            // (spawn_camera, hide_crosshair),
+            (unlock_cursor, initial_respawn),
             // (lock_cursor, initial_respawn, play_music),
         );
+        app.add_observer(lock_cursor_camera_drag);
+        app.add_observer(unlock_cursor_camera_drag);
+        app.add_observer(lock_cursor_menu);
+        app.add_observer(unlock_cursor_menu);
+        app.add_observer(drag_camera);
         app.add_observer(respawn);
         app.add_observer(respawn_player);
         app.add_observer(main_menu);
         app.add_observer(shoot);
         app.add_observer(despawn_cube);
         app.add_observer(despawn);
+        app.add_observer(select);
+        app.add_observer(deselect);
         app.add_plugins(EnhancedInputPlugin)
+            .add_input_context::<PlayerCamera>()
             .add_input_context::<PlayerCharacter>();
         app.add_systems(Update, (raycast_from_center, tick_lifetimes, asset_loaded));
         app.insert_resource(Hovered(None));
+        app.insert_resource(Selected(None));
     }
 }
 
@@ -83,6 +93,8 @@ pub fn respawn_player(
     player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
     player_character: Query<Entity, With<PlayerCharacter>>,
     asset_server: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     if let Ok(player_character) = player_character.single() {
         commands.entity(player_character).despawn();
@@ -111,6 +123,11 @@ pub fn respawn_player(
                 ..default()
             },
             Collider::capsule(0.4, 1.0),
+            Mesh3d(meshes.add(Capsule3d {
+                radius: 0.4,
+                half_length: (1.0) / 2.0,
+            })),
+            MeshMaterial3d(materials.add(Color::srgb(0.8, 0.2, 0.2))),
             DesiredMotion::default(),
             PointLight { ..default() },
             RigidBody::Kinematic,
@@ -121,19 +138,26 @@ pub fn respawn_player(
                     Bindings::spawn((Cardinal::wasd_keys(),)),
                 ));
                 context.spawn((Action::<Jump>::new(), bindings![KeyCode::Space]));
-                context.spawn((Action::<Shoot>::new(), bindings![MouseButton::Left]));
-                context.spawn((Action::<DespawnCube>::new(), bindings![MouseButton::Right]));
+                context.spawn((Action::<DespawnCube>::new(), bindings![KeyCode::KeyT]));
+
+                // context.spawn((Action::<Shoot>::new(), bindings![MouseButton::Left]));
+                context.spawn((Action::<Shoot>::new(), bindings![KeyCode::KeyE]));
+                context.spawn((Action::<Deselect>::new(), bindings![KeyCode::Escape]));
+                context.spawn((Action::<Select>::new(), bindings![MouseButton::Left]));
+                // context.spawn((Action::<Interact>::new(), bindings![MouseButton::Right]));
+
                 context.spawn((Action::<Respawn>::new(), bindings![KeyCode::KeyR]));
                 context.spawn((Action::<Despawn>::new(), bindings![KeyCode::KeyQ]));
-                context.spawn((Action::<MainMenu>::new(), bindings![KeyCode::Escape]));
+                context.spawn((Action::<MainMenu>::new(), bindings![KeyCode::F1]));
                 context.spawn((
                     Action::<FpsCameraRotation>::new(),
                     bindings![Binding::mouse_motion()],
                 ));
                 context.spawn((
                     Action::<MenuAction>::new(),
-                    Toggle::new(1.0),
-                    bindings![KeyCode::Tab],
+                    bindings![MouseButton::Right],
+                    // Toggle::new(1.0),
+                    // bindings![KeyCode::Tab],
                 ));
             })),
             DespawnOnEnter(GameState::MainMenu),
@@ -143,25 +167,77 @@ pub fn respawn_player(
                 .spawn((Transform::from_xyz(0., 0.5, 0.),))
                 .with_children(|parent| {
                     parent
-                        .spawn((
-                            Camera3d::default(),
-                            FpsCamera::new(),
-                            Transform::IDENTITY,
-                            IsDefaultUiCamera,
-                            Msaa::Off,
-                            TemporalAntiAliasing::default(),
-                            ScreenSpaceAmbientOcclusion::default(),
-                            Skybox {
-                                image: Some(skybox_handle.clone()),
-                                brightness: 1000.0,
-                                ..default()
-                            },
-                        ))
+                        .spawn((FpsCamera::new(), Transform::IDENTITY))
                         .with_children(|parent| {
                             parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), CubeSpawner));
+                            parent.spawn((
+                                Transform::from_xyz(0.0, 0.0, 10.0),
+                                Camera3d::default(),
+                                IsDefaultUiCamera,
+                                Msaa::Off,
+                                TemporalAntiAliasing::default(),
+                                ScreenSpaceAmbientOcclusion::default(),
+                                Skybox {
+                                    image: Some(skybox_handle.clone()),
+                                    brightness: 1000.0,
+                                    ..default()
+                                },
+                            ));
                         });
                 });
         });
+
+    /*
+        // Fullscreen centered overlay
+        commands
+            .spawn((
+                Crosshair,
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    position_type: PositionType::Absolute,
+                    ..default()
+                },
+                DespawnOnEnter(GameState::MainMenu),
+            ))
+            .with_children(|parent| {
+                // Zero-size pivot at screen center
+                parent
+                    .spawn(Node {
+                        width: Val::Px(0.0),
+                        height: Val::Px(0.0),
+                        ..default()
+                    })
+                    .with_children(|pivot| {
+                        // Horizontal bar
+                        pivot.spawn((
+                            Node {
+                                position_type: PositionType::Absolute,
+                                width: Val::Px(16.0),
+                                height: Val::Px(2.0),
+                                left: Val::Px(-8.0),
+                                top: Val::Px(-1.0),
+                                ..default()
+                            },
+                            BackgroundColor(Color::WHITE),
+                        ));
+                        // Vertical bar
+                        pivot.spawn((
+                            Node {
+                                position_type: PositionType::Absolute,
+                                width: Val::Px(2.0),
+                                height: Val::Px(16.0),
+                                left: Val::Px(-1.0),
+                                top: Val::Px(-8.0),
+                                ..default()
+                            },
+                            BackgroundColor(Color::WHITE),
+                        ));
+                    });
+            });
+    */
 
     // ambient light
     // NOTE: The ambient light is used to scale how bright the environment map is so with a bright
@@ -198,6 +274,18 @@ pub struct MainMenu;
 #[derive(InputAction)]
 #[action_output(bool)]
 pub struct Shoot;
+
+#[derive(InputAction)]
+#[action_output(bool)]
+struct Deselect;
+
+#[derive(InputAction)]
+#[action_output(bool)]
+struct Select;
+
+#[derive(InputAction)]
+#[action_output(bool)]
+struct Interact;
 
 #[derive(InputAction)]
 #[action_output(bool)]
@@ -266,15 +354,17 @@ fn play_music(asset_server: Res<AssetServer>, mut commands: Commands) {
     ));
 }
 
+pub const DESPAWN_RANGE: f32 = f32::INFINITY;
+
 fn despawn_cube(
     _: On<Start<DespawnCube>>,
-    hovered: Res<Hovered>,
+    selected: Res<Selected>,
     cube: Query<(Entity, &Transform), With<Cube>>,
     effect: Res<CubeParticleEffect>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
-    if let Some(entity) = hovered.0 {
+    if let Some(entity) = selected.0 {
         if let Ok((entity, transform)) = cube.get(entity) {
             commands.spawn(SamplePlayer::new(asset_server.load("crunch.wav")));
             commands.entity(entity).despawn();
@@ -302,7 +392,7 @@ fn tick_lifetimes(
 fn raycast_from_center(
     player_collider_entity: Query<Entity, (With<PlayerCharacter>, With<Collider>)>,
     spatial_query: SpatialQuery,
-    camera_query: Query<(&Camera, &GlobalTransform), With<FpsCamera>>,
+    camera_query: Query<(&Camera, &GlobalTransform)>,
     window_query: Query<&Window>,
     mut hovered: ResMut<Hovered>,
     disable_fps_camera_control: Res<DisableFpsCameraControl>,
@@ -321,7 +411,8 @@ fn raycast_from_center(
     let screen_origin = if disable_fps_camera_control.0 {
         window.cursor_position().unwrap_or(Vec2::ZERO)
     } else {
-        window.size() / 2.0
+        return;
+        // window.size() / 2.0
     };
 
     // Screen space -> world ray. Returns Err if the camera has no usable
@@ -337,14 +428,38 @@ fn raycast_from_center(
         true,          // treat shapes as solid (hit registers if origin is inside)
         &SpatialQueryFilter::from_excluded_entities([player_collider_entity]),
     ) {
-        hovered.0 = Some(hit.entity);
+        hovered.0 = Some((hit.entity, hit.distance));
     } else {
         hovered.0 = None;
     }
 }
 
 #[derive(Resource)]
-pub struct Hovered(pub Option<Entity>);
+pub struct Hovered(pub Option<(Entity, f32)>);
+
+#[derive(Resource)]
+pub struct Selected(pub Option<Entity>);
+
+pub const SELECT_RANGE: f32 = 50.0;
+
+fn select(
+    _event: On<Fire<Select>>,
+    hovered: Res<Hovered>,
+    mut selected: ResMut<Selected>,
+    query: Query<Entity, With<Selectable>>,
+) {
+    if let Some((entity, distance)) = hovered.0 {
+        if query.get(entity).is_ok() {
+            if distance < SELECT_RANGE {
+                selected.0 = Some(entity);
+            }
+        }
+    }
+}
+
+fn deselect(_event: On<Fire<Deselect>>, mut selected: ResMut<Selected>) {
+    selected.0 = None;
+}
 
 fn asset_loaded(
     asset_server: Res<AssetServer>,
@@ -389,4 +504,249 @@ struct Cubemap {
     is_loaded: bool,
     index: usize,
     image_handle: Option<Handle<Image>>,
+}
+
+fn hide_crosshair(mut crosshair: Query<&mut Visibility, With<Crosshair>>) {
+    let Ok(mut visibility) = crosshair.single_mut() else {
+        return;
+    };
+    *visibility = Visibility::Hidden;
+}
+
+fn unlock_cursor_menu(
+    _menu: On<Complete<MenuAction>>,
+    mut cursor_options: Single<&mut CursorOptions>,
+    mut disable_fps_camera: ResMut<DisableFpsCameraControl>,
+    mut crosshair: Query<&mut Visibility, With<Crosshair>>,
+) {
+    // cursor_options.visible = true;
+    cursor_options.grab_mode = CursorGrabMode::None;
+    disable_fps_camera.0 = true;
+    let Ok(mut visibility) = crosshair.single_mut() else {
+        return;
+    };
+    // *visibility = Visibility::Hidden;
+}
+
+fn lock_cursor_menu(
+    _menu: On<Fire<MenuAction>>,
+    mut cursor_options: Single<&mut CursorOptions>,
+    mut disable_fps_camera: ResMut<DisableFpsCameraControl>,
+    mut crosshair: Query<&mut Visibility, With<Crosshair>>,
+) {
+    // cursor_options.visible = false;
+    cursor_options.grab_mode = CursorGrabMode::Locked;
+    disable_fps_camera.0 = false;
+    let Ok(mut visibility) = crosshair.single_mut() else {
+        return;
+    };
+    // *visibility = Visibility::Visible;
+}
+
+fn unlock_cursor_camera_drag(
+    _menu: On<Complete<DragCameraButton>>,
+    mut cursor_options: Single<&mut CursorOptions>,
+    mut disable_fps_camera: ResMut<DisableFpsCameraControl>,
+    mut crosshair: Query<&mut Visibility, With<Crosshair>>,
+) {
+    // cursor_options.visible = true;
+    cursor_options.grab_mode = CursorGrabMode::None;
+    disable_fps_camera.0 = true;
+    /*
+        let Ok(mut visibility) = crosshair.single_mut() else {
+            return;
+        };
+        *visibility = Visibility::Hidden;
+    */
+}
+
+fn lock_cursor_camera_drag(
+    _menu: On<Fire<DragCameraButton>>,
+    mut cursor_options: Single<&mut CursorOptions>,
+    mut disable_fps_camera: ResMut<DisableFpsCameraControl>,
+    mut crosshair: Query<&mut Visibility, With<Crosshair>>,
+) {
+    // cursor_options.visible = false;
+    cursor_options.grab_mode = CursorGrabMode::Locked;
+    disable_fps_camera.0 = false;
+    /*
+        let Ok(mut visibility) = crosshair.single_mut() else {
+            return;
+        };
+        *visibility = Visibility::Visible;
+    */
+}
+
+#[derive(InputAction)]
+#[action_output(bool)]
+struct DragCameraButton;
+
+#[derive(InputAction)]
+#[action_output(Vec2)]
+struct DragCamera;
+
+const DRAG_SPEED: f32 = 0.5;
+
+fn drag_camera(drag: On<Fire<DragCamera>>, mut query: Query<&mut Transform, With<PlayerCamera>>) {
+    let Ok(mut transform) = query.single_mut() else {
+        return;
+    };
+    transform.translation -= DRAG_SPEED * Vec3::new(drag.value.x, 0.0, drag.value.y);
+}
+
+#[derive(Component)]
+struct PlayerCamera;
+
+fn spawn_camera(mut commands: Commands) {
+    commands.spawn((
+        PlayerCamera,
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 50.0, 0.0).looking_at(Vec3::ZERO, Vec3::Z),
+        Actions::<PlayerCamera>::spawn(SpawnWith(|context: &mut ActionSpawner<_>| {
+            context.spawn((
+                Action::<Movement>::new(),
+                Bindings::spawn((Cardinal::wasd_keys(),)),
+            ));
+            context.spawn((Action::<Jump>::new(), bindings![KeyCode::Space]));
+            context.spawn((Action::<Shoot>::new(), bindings![KeyCode::KeyE]));
+            context.spawn((Action::<Select>::new(), bindings![MouseButton::Left]));
+            context.spawn((Action::<Interact>::new(), bindings![MouseButton::Right]));
+            context.spawn((Action::<DespawnCube>::new(), bindings![MouseButton::Right]));
+            context.spawn((Action::<Respawn>::new(), bindings![KeyCode::KeyR]));
+            context.spawn((Action::<Despawn>::new(), bindings![KeyCode::KeyQ]));
+            context.spawn((Action::<MainMenu>::new(), bindings![KeyCode::Escape]));
+            /*
+            context.spawn((
+                Action::<FpsCameraRotation>::new(),
+                bindings![Binding::mouse_motion()],
+            ));
+            */
+
+            context.spawn((
+                Action::<MenuAction>::new(),
+                Toggle::new(1.0),
+                bindings![KeyCode::Tab],
+            ));
+            let drag_camera_button = context
+                .spawn((
+                    Action::<DragCameraButton>::new(),
+                    bindings![MouseButton::Right],
+                ))
+                .id();
+            context.spawn((
+                Action::<DragCamera>::new(),
+                Chord::single(drag_camera_button),
+                bindings![Binding::mouse_motion()],
+            ));
+        })),
+        DespawnOnEnter(GameState::MainMenu),
+    ));
+}
+
+pub fn spawn_3rd_person(
+    mut commands: Commands,
+    player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
+    player_character: Query<Entity, With<PlayerCharacter>>,
+    asset_server: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    if let Ok(player_character) = player_character.single() {
+        commands.entity(player_character).despawn();
+    } else {
+    };
+    let Ok(spawner_transform) = player_spawner.single() else {
+        return;
+    };
+    let character_movement_settings = CharacterMovementSettings {
+        acceleration: 100.0,
+        damping: 10.0,
+        jump_impulse: 10.0,
+        gravity: -10.0 * Vec3::Y * 2.0,
+        terminal_velocity: 300.0,
+    };
+    let skybox_handle = asset_server.load("Ryfjallet_cubemap.png");
+    commands
+        .spawn((
+            PlayerCharacter,
+            CharacterController,
+            character_movement_settings,
+            CharacterCollisions::default(),
+            GroundDetection {
+                // Use a slightly smaller capsule for shape casts used for ground detection
+                cast_shape: Some(Collider::capsule(0.399, 1.0)),
+                ..default()
+            },
+            Collider::capsule(0.4, 1.0),
+            Mesh3d(meshes.add(Capsule3d {
+                radius: 0.4,
+                half_length: 1.0,
+            })),
+            MeshMaterial3d(materials.add(Color::srgb(0.8, 0.2, 0.2))),
+            DesiredMotion::default(),
+            PointLight { ..default() },
+            RigidBody::Kinematic,
+            Transform::from_translation(spawner_transform.translation),
+            Actions::<PlayerCharacter>::spawn(SpawnWith(|context: &mut ActionSpawner<_>| {
+                context.spawn((
+                    Action::<Movement>::new(),
+                    Bindings::spawn((Cardinal::wasd_keys(),)),
+                ));
+                context.spawn((Action::<Jump>::new(), bindings![KeyCode::Space]));
+                context.spawn((Action::<Shoot>::new(), bindings![MouseButton::Left]));
+                context.spawn((Action::<DespawnCube>::new(), bindings![MouseButton::Right]));
+                context.spawn((Action::<Respawn>::new(), bindings![KeyCode::KeyR]));
+                context.spawn((Action::<Despawn>::new(), bindings![KeyCode::KeyQ]));
+                context.spawn((Action::<MainMenu>::new(), bindings![KeyCode::Escape]));
+                context.spawn((
+                    Action::<FpsCameraRotation>::new(),
+                    bindings![Binding::mouse_motion()],
+                ));
+                context.spawn((
+                    Action::<MenuAction>::new(),
+                    Toggle::new(1.0),
+                    bindings![KeyCode::Tab],
+                ));
+            })),
+            DespawnOnEnter(GameState::MainMenu),
+        ))
+        .with_children(|parent| {
+            parent
+                .spawn((Transform::from_xyz(0., 0.5, 0.),))
+                .with_children(|parent| {
+                    parent
+                        .spawn((FpsCamera::new(), Transform::IDENTITY))
+                        .with_children(|parent| {
+                            parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), CubeSpawner));
+                            parent.spawn((
+                                Transform::from_xyz(0.0, 0.0, 5.0),
+                                Camera3d::default(),
+                                IsDefaultUiCamera,
+                                Msaa::Off,
+                                TemporalAntiAliasing::default(),
+                                ScreenSpaceAmbientOcclusion::default(),
+                                Skybox {
+                                    image: Some(skybox_handle.clone()),
+                                    brightness: 1000.0,
+                                    ..default()
+                                },
+                            ));
+                        });
+                });
+        });
+
+    // ambient light
+    // NOTE: The ambient light is used to scale how bright the environment map is so with a bright
+    // environment map, use an appropriate color and brightness to match
+    commands.insert_resource(GlobalAmbientLight {
+        color: Color::srgb_u8(210, 220, 240),
+        brightness: 1.0,
+        ..default()
+    });
+
+    commands.insert_resource(Cubemap {
+        is_loaded: false,
+        index: 0,
+        image_handle: Some(skybox_handle),
+    });
 }

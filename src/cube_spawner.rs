@@ -39,6 +39,7 @@ pub fn spawn_cube(
         // commands.spawn(SamplePlayer::new(asset_server.load("explosion.wav")));
         commands.spawn((
             Cube,
+            Selectable,
             NoOutline,
             transform.compute_transform(),
             AngularVelocity(angular_velocity),
@@ -52,7 +53,10 @@ pub fn spawn_cube(
 }
 
 #[derive(Component)]
-struct NoOutline;
+pub struct Selectable;
+
+#[derive(Component)]
+pub struct NoOutline;
 
 fn add_outline_component(mut commands: Commands, query: Query<Entity, With<NoOutline>>) {
     for entity in query {
