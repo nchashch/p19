@@ -174,58 +174,6 @@ pub fn respawn_player(
                 });
         });
 
-    /*
-        // Fullscreen centered overlay
-        commands
-            .spawn((
-                Crosshair,
-                Node {
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    position_type: PositionType::Absolute,
-                    ..default()
-                },
-                DespawnOnEnter(GameState::MainMenu),
-            ))
-            .with_children(|parent| {
-                // Zero-size pivot at screen center
-                parent
-                    .spawn(Node {
-                        width: Val::Px(0.0),
-                        height: Val::Px(0.0),
-                        ..default()
-                    })
-                    .with_children(|pivot| {
-                        // Horizontal bar
-                        pivot.spawn((
-                            Node {
-                                position_type: PositionType::Absolute,
-                                width: Val::Px(16.0),
-                                height: Val::Px(2.0),
-                                left: Val::Px(-8.0),
-                                top: Val::Px(-1.0),
-                                ..default()
-                            },
-                            BackgroundColor(Color::WHITE),
-                        ));
-                        // Vertical bar
-                        pivot.spawn((
-                            Node {
-                                position_type: PositionType::Absolute,
-                                width: Val::Px(2.0),
-                                height: Val::Px(16.0),
-                                left: Val::Px(-1.0),
-                                top: Val::Px(-8.0),
-                                ..default()
-                            },
-                            BackgroundColor(Color::WHITE),
-                        ));
-                    });
-            });
-    */
-
     // ambient light
     // NOTE: The ambient light is used to scale how bright the environment map is so with a bright
     // environment map, use an appropriate color and brightness to match
@@ -345,7 +293,7 @@ pub const DESPAWN_RANGE: f32 = f32::INFINITY;
 
 fn despawn_cube(
     _: On<Start<DespawnCube>>,
-    selected: Res<Selected>,
+    mut selected: ResMut<Selected>,
     cube: Query<(Entity, &Transform), With<Cube>>,
     effect: Res<CubeParticleEffect>,
     asset_server: Res<AssetServer>,
@@ -360,6 +308,7 @@ fn despawn_cube(
                 *transform,
                 Lifetime(Timer::from_seconds(2.0, TimerMode::Once)),
             ));
+            selected.0 = None;
         }
     }
 }
@@ -491,13 +440,6 @@ struct Cubemap {
     is_loaded: bool,
     index: usize,
     image_handle: Option<Handle<Image>>,
-}
-
-fn hide_crosshair(mut crosshair: Query<&mut Visibility, With<Crosshair>>) {
-    let Ok(mut visibility) = crosshair.single_mut() else {
-        return;
-    };
-    *visibility = Visibility::Hidden;
 }
 
 fn unlock_cursor_menu(
