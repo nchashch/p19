@@ -62,13 +62,22 @@ fn ui() -> impl Scene {
             panel(px(400), px(400))
             Children [
                 (
-                    Text("[ESC] main menu")
+                    Text("[WASD] move")
                 ),
                 (
-                    Text("[LMB] shoot cube")
+                    Text("[RMB] rotate camera")
                 ),
                 (
-                    Text("[RMB] despawn cube")
+                    Text("[LMB] select")
+                ),
+                (
+                    Text("[ESC] deselect")
+                ),
+                (
+                    Text("[E] spawn cube")
+                ),
+                (
+                    Text("[T] despawn selected")
                 ),
                 (
                     Text("[R] respawn")
@@ -77,7 +86,7 @@ fn ui() -> impl Scene {
                     Text("[Q] despawn all cubes")
                 ),
                 (
-                    Text("Entity hovered: None")
+                    Text("")
                     Console
                 ),
             ]
