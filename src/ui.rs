@@ -86,6 +86,9 @@ fn ui() -> impl Scene {
                     Text("[Q] despawn all cubes")
                 ),
                 (
+                    Text("[F1] main menu")
+                ),
+                (
                     Text("")
                     Console
                 ),
@@ -262,21 +265,22 @@ fn update_outline_hovered_selected(
     hovered: Res<Hovered>,
     selected: Res<Selected>,
 ) {
-    if !hovered.is_changed() {
-        return;
-    }
     for (entity, mut outline) in query {
-        if let Some((hovered_entity, distance)) = hovered.0 {
-            if selected.0 == Some(entity) {
-                outline.colour = WHITE.into();
-                outline.visible = true;
-            } else if hovered_entity == entity {
-                if distance < SELECT_RANGE {
-                    outline.colour = GRAY.into();
-                    outline.visible = true;
+        if selected.0 == Some(entity) {
+            outline.colour = WHITE.into();
+            outline.visible = true;
+        } else {
+            if let Some((hovered_entity, distance)) = hovered.0 {
+                if hovered_entity == entity {
+                    if distance < SELECT_RANGE {
+                        outline.colour = GRAY.into();
+                        outline.visible = true;
+                    } else {
+                        outline.colour = DARK_SLATE_GRAY.into();
+                        outline.visible = true;
+                    }
                 } else {
-                    outline.colour = DARK_SLATE_GRAY.into();
-                    outline.visible = true;
+                    outline.visible = false;
                 }
             } else {
                 outline.visible = false;
