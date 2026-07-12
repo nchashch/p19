@@ -39,6 +39,10 @@ pub fn spawn_cube(
         // commands.spawn(SamplePlayer::new(asset_server.load("explosion.wav")));
         commands.spawn((
             Cube,
+            HitPoints {
+                hit_points: 100,
+                max_hit_points: 100,
+            },
             Selectable,
             NoOutline,
             transform.compute_transform(),
@@ -81,3 +85,10 @@ pub struct Cube;
 #[derive(Component, Clone, Default, Reflect, Debug)]
 #[reflect(Component)]
 pub struct CubeSpawner;
+
+#[derive(Component, Clone, Default, Reflect, Debug)]
+#[reflect(Component)]
+pub struct HitPoints {
+    pub hit_points: i32,
+    pub max_hit_points: i32,
+}

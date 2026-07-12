@@ -1,5 +1,6 @@
+use crate::cube_spawner::HitPoints;
 use crate::game_state::GameState;
-use crate::player_character::{DESPAWN_RANGE, Hovered, SELECT_RANGE, Selected};
+use crate::player_character::{DESPAWN_RANGE, Hovered, PlayerCharacter, SELECT_RANGE, Selected};
 use crate::{LevelScene, cube_spawner::Cube};
 use bevy::color::palettes::css::{BLUE, GRAY, RED};
 use bevy::{
@@ -15,7 +16,15 @@ impl Plugin for PrototypeUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(show_tooltip);
         app.add_observer(hide_tooltip);
-        app.add_systems(Update, (update_console, update_outline_hovered_selected));
+        app.add_systems(
+            Update,
+            (
+                update_player_stats,
+                update_console,
+                update_outline_hovered_selected,
+                update_selected_frame,
+            ),
+        );
     }
 }
 
@@ -47,7 +56,80 @@ fn main_menu() -> impl Scene {
 }
 
 pub fn in_game_scene() -> impl SceneList {
-    bsn_list![ui()]
+    bsn_list![ui(), frame(), console(), player_stats()]
+}
+
+#[derive(Component, Clone, Default)]
+struct SelectedFrame;
+
+#[derive(Component, Clone, Default)]
+struct SelectedText;
+
+fn console() -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(100),
+            height: percent(100),
+            align_items: AlignItems::Start,
+            justify_content: JustifyContent::End,
+        }
+        Children[
+            panel(px(400), px(400))
+            Children [
+                (
+                    Text("")
+                    Console
+                ),
+            ]
+        ]
+        DespawnOnExit::<GameState>(GameState::InGame)
+    }
+}
+
+#[derive(Component, Clone, Default)]
+struct PlayerStats;
+
+fn player_stats() -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(100),
+            height: percent(100),
+            align_items: AlignItems::End,
+            justify_content: JustifyContent::End,
+        }
+        Children[
+            panel(px(400), px(400))
+            Children [
+                (
+                    Text("")
+                    PlayerStats
+                ),
+            ]
+        ]
+        DespawnOnExit::<GameState>(GameState::InGame)
+    }
+}
+
+fn frame() -> impl Scene {
+    bsn! {
+        SelectedFrame
+        Node {
+            width: percent(100),
+            height: percent(100),
+            align_items: AlignItems::Start,
+            justify_content: JustifyContent::Start,
+        }
+        Children[
+            panel(px(400), px(400))
+            Children [
+                (
+                    Text("Frame of selected")
+                    SelectedText
+                ),
+            ]
+        ]
+        DespawnOnExit::<GameState>(GameState::InGame)
+    }
 }
 
 fn ui() -> impl Scene {
@@ -77,7 +159,10 @@ fn ui() -> impl Scene {
                     Text("[E] spawn cube")
                 ),
                 (
-                    Text("[T] despawn selected")
+                    Text("[T] kill selected")
+                ),
+                (
+                    Text("[F] attack selected")
                 ),
                 (
                     Text("[R] respawn")
@@ -87,10 +172,6 @@ fn ui() -> impl Scene {
                 ),
                 (
                     Text("[F1] main menu")
-                ),
-                (
-                    Text("")
-                    Console
                 ),
             ]
         ]
@@ -257,7 +338,53 @@ fn update_console(
     let Ok(mut text) = query.single_mut() else {
         return;
     };
-    text.0 = format!("Hovered: {:?}\nSelected: {:?}", hovered.0, selected.0);
+    if let Some((entity, distance)) = hovered.0 {
+        text.0 = format!("Hovered: {:?}\nDistance: {:.2}", entity, distance);
+    } else {
+        text.0 = format!("Hovered: n/a\nDistance: n/a");
+    }
+}
+
+fn update_player_stats(
+    mut text: Query<&mut Text, With<PlayerStats>>,
+    player: Query<&HitPoints, With<PlayerCharacter>>,
+) {
+    let Ok(hit_points) = player.single() else {
+        return;
+    };
+    let Ok(mut text) = text.single_mut() else {
+        return;
+    };
+    text.0 = format!(
+        "HP: {}/{}",
+        hit_points.hit_points, hit_points.max_hit_points
+    );
+}
+
+fn update_selected_frame(
+    mut frame: Query<&mut Visibility, With<SelectedFrame>>,
+    mut text: Query<&mut Text, With<SelectedText>>,
+    selected: Res<Selected>,
+    query: Query<&HitPoints>,
+) {
+    let Ok(mut visibility) = frame.single_mut() else {
+        return;
+    };
+    let Ok(mut text) = text.single_mut() else {
+        return;
+    };
+    if let Some(entity) = selected.0 {
+        *visibility = Visibility::Visible;
+        text.0 = format!("Selected: {:?}", entity);
+        if let Some(hit_points) = query.get(entity).ok() {
+            text.0 += &format!(
+                "\nHP: {}/{}",
+                hit_points.hit_points, hit_points.max_hit_points
+            );
+        }
+    } else {
+        *visibility = Visibility::Hidden;
+    }
 }
 
 fn update_outline_hovered_selected(

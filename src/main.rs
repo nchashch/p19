@@ -40,7 +40,7 @@ impl Plugin for Prototype19 {
             GameStatePlugin,
             ui::PrototypeUiPlugin,
             // PhysicsDebugPlugin::default(),
-            FpsOverlayPlugin::default(),
+            // FpsOverlayPlugin::default(),
         ));
         app.insert_resource(GlobalAmbientLight {
             color: Color::WHITE,

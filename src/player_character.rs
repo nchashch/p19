@@ -3,7 +3,7 @@ use crate::{
         CharacterCollisions, CharacterController, CharacterControllerPlugin,
         CharacterMovementSettings, DesiredMotion, GroundDetection,
     },
-    cube_spawner::{Cube, CubeSpawner, Selectable, SpawnCube},
+    cube_spawner::{Cube, CubeSpawner, HitPoints, Selectable, SpawnCube},
     fps_controller::{Crosshair, DisableFpsCameraControl, FpsCamera, FpsCameraRotation},
     game_state::GameState,
     particles::CubeParticleEffect,
@@ -17,7 +17,7 @@ use bevy::{
     render::render_resource::{TextureViewDescriptor, TextureViewDimension},
     window::{CursorGrabMode, CursorOptions},
 };
-use bevy_enhanced_input::prelude::*;
+use bevy_enhanced_input::prelude::{Press, *};
 use bevy_hanabi::prelude::*;
 use bevy_seedling::prelude::*;
 
@@ -43,9 +43,18 @@ impl Plugin for PlayerCharacterPlugin {
         app.add_observer(despawn);
         app.add_observer(select);
         app.add_observer(deselect);
+        app.add_observer(attack);
         app.add_plugins(EnhancedInputPlugin)
             .add_input_context::<PlayerCharacter>();
-        app.add_systems(Update, (raycast_from_center, tick_lifetimes, asset_loaded));
+        app.add_systems(
+            Update,
+            (
+                raycast_from_center,
+                tick_lifetimes,
+                asset_loaded,
+                despawn_zero_hp,
+            ),
+        );
         app.insert_resource(Hovered(None));
         app.insert_resource(Selected(None));
     }
@@ -101,6 +110,10 @@ pub fn respawn_player(
     commands
         .spawn((
             PlayerCharacter,
+            HitPoints {
+                hit_points: 100,
+                max_hit_points: 100,
+            },
             CharacterController,
             character_movement_settings,
             CharacterCollisions::default(),
@@ -124,11 +137,29 @@ pub fn respawn_player(
                     Action::<Movement>::new(),
                     Bindings::spawn((Cardinal::wasd_keys(),)),
                 ));
-                context.spawn((Action::<Jump>::new(), bindings![KeyCode::Space]));
+                context.spawn((
+                    Action::<Movement>::new(),
+                    DeadZone {
+                        kind: DeadZoneKind::Radial, // circular; correct for a stick
+                        lower_threshold: 0.15,      // below this magnitude → zero
+                        upper_threshold: 1.0,       // above this → clamped to 1, rescaled between
+                    },
+                    Bindings::spawn(Axial::left_stick()),
+                ));
+                context.spawn((
+                    Action::<Jump>::new(),
+                    Press::new(1.0),
+                    bindings![KeyCode::Space, GamepadButton::South],
+                ));
                 context.spawn((Action::<DespawnCube>::new(), bindings![KeyCode::KeyT]));
 
+                context.spawn((Action::<Attack>::new(), bindings![KeyCode::KeyF]));
+
                 // context.spawn((Action::<Shoot>::new(), bindings![MouseButton::Left]));
-                context.spawn((Action::<Shoot>::new(), bindings![KeyCode::KeyE]));
+                context.spawn((
+                    Action::<Shoot>::new(),
+                    bindings![KeyCode::KeyE, GamepadButton::West],
+                ));
                 context.spawn((Action::<Deselect>::new(), bindings![KeyCode::Escape]));
                 context.spawn((Action::<Select>::new(), bindings![MouseButton::Left]));
                 // context.spawn((Action::<Interact>::new(), bindings![MouseButton::Right]));
@@ -136,15 +167,27 @@ pub fn respawn_player(
                 context.spawn((Action::<Respawn>::new(), bindings![KeyCode::KeyR]));
                 context.spawn((Action::<Despawn>::new(), bindings![KeyCode::KeyQ]));
                 context.spawn((Action::<MainMenu>::new(), bindings![KeyCode::F1]));
+                let id = context
+                    .spawn((
+                        Action::<RotateCamera>::new(),
+                        bindings![MouseButton::Right],
+                        // Toggle::new(1.0),
+                        // bindings![KeyCode::Tab],
+                    ))
+                    .id();
                 context.spawn((
                     Action::<FpsCameraRotation>::new(),
+                    Chord::single(id),
                     bindings![Binding::mouse_motion()],
                 ));
                 context.spawn((
-                    Action::<RotateCamera>::new(),
-                    bindings![MouseButton::Right],
-                    // Toggle::new(1.0),
-                    // bindings![KeyCode::Tab],
+                    Action::<FpsCameraRotation>::new(),
+                    DeadZone {
+                        kind: DeadZoneKind::Radial, // circular; correct for a stick
+                        lower_threshold: 0.15,      // below this magnitude → zero
+                        upper_threshold: 1.0,       // above this → clamped to 1, rescaled between
+                    },
+                    Bindings::spawn(Axial::right_stick()),
                 ));
             })),
             DespawnOnEnter(GameState::MainMenu),
@@ -233,7 +276,7 @@ fn unlock_cursor(
 ) {
     cursor_options.visible = true;
     cursor_options.grab_mode = CursorGrabMode::None;
-    disable_fps_camera.0 = true;
+    // disable_fps_camera.0 = true;
     let Ok(mut visibility) = crosshair.single_mut() else {
         return;
     };
@@ -261,7 +304,7 @@ fn lock_cursor(
 ) {
     cursor_options.visible = false;
     cursor_options.grab_mode = CursorGrabMode::Locked;
-    disable_fps_camera.0 = false;
+    // disable_fps_camera.0 = false;
     let Ok(mut visibility) = crosshair.single_mut() else {
         return;
     };
@@ -271,6 +314,10 @@ fn lock_cursor(
 #[derive(InputAction)]
 #[action_output(bool)]
 struct DespawnCube;
+
+#[derive(InputAction)]
+#[action_output(bool)]
+struct Attack;
 
 #[derive(Component)]
 struct Lifetime(Timer);
@@ -290,6 +337,55 @@ fn play_music(asset_server: Res<AssetServer>, mut commands: Commands) {
 }
 
 pub const DESPAWN_RANGE: f32 = f32::INFINITY;
+pub const DAMAGE: i32 = 7;
+pub const ATTACK_RANGE: f32 = 10.0;
+
+fn attack(
+    _: On<Start<Attack>>,
+    selected: ResMut<Selected>,
+    player: Query<&Transform, With<PlayerCharacter>>,
+    mut target: Query<(&mut HitPoints, &Transform)>,
+) {
+    let Ok(player_transform) = player.single() else {
+        return;
+    };
+    let Some(entity) = selected.0 else {
+        return;
+    };
+    let Ok((mut target_hit_points, target_transform)) = target.get_mut(entity) else {
+        return;
+    };
+    if player_transform
+        .translation
+        .distance(target_transform.translation)
+        <= ATTACK_RANGE
+    {
+        target_hit_points.hit_points -= DAMAGE;
+    }
+}
+
+fn despawn_zero_hp(
+    mut selected: ResMut<Selected>,
+    query: Query<(Entity, &HitPoints, &Transform)>,
+    effect: Res<CubeParticleEffect>,
+    asset_server: Res<AssetServer>,
+    mut commands: Commands,
+) {
+    for (entity, hit_points, transform) in query {
+        if hit_points.hit_points <= 0 {
+            commands.spawn(SamplePlayer::new(asset_server.load("crunch.wav")));
+            commands.entity(entity).despawn();
+            commands.spawn((
+                ParticleEffect::new(effect.0.clone()),
+                *transform,
+                Lifetime(Timer::from_seconds(2.0, TimerMode::Once)),
+            ));
+            if selected.0 == Some(entity) {
+                selected.0 = None;
+            }
+        }
+    }
+}
 
 fn despawn_cube(
     _: On<Start<DespawnCube>>,
