@@ -271,7 +271,7 @@ pub struct Despawn;
 
 fn unlock_cursor(
     mut cursor_options: Single<&mut CursorOptions>,
-    mut disable_fps_camera: ResMut<DisableFpsCameraControl>,
+    _disable_fps_camera: ResMut<DisableFpsCameraControl>,
     mut crosshair: Query<&mut Visibility, With<Crosshair>>,
 ) {
     cursor_options.visible = true;
@@ -299,7 +299,7 @@ fn main_menu(_: On<Start<MainMenu>>, mut commands: Commands) {
 
 fn lock_cursor(
     mut cursor_options: Single<&mut CursorOptions>,
-    mut disable_fps_camera: ResMut<DisableFpsCameraControl>,
+    _disable_fps_camera: ResMut<DisableFpsCameraControl>,
     mut crosshair: Query<&mut Visibility, With<Crosshair>>,
 ) {
     cursor_options.visible = false;

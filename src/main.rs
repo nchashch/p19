@@ -17,7 +17,6 @@ mod fps_controller;
 mod game_state;
 mod particles;
 mod player_character;
-mod third_person_controller;
 mod ui;
 
 fn main() {

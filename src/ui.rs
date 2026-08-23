@@ -4,7 +4,7 @@ use crate::game_state::GameState;
 use crate::player_character::{
     ATTACK_RANGE, DAMAGE, DESPAWN_RANGE, Hovered, PlayerCharacter, SELECT_RANGE, Selected,
 };
-use bevy::color::palettes::css::{BLUE, GRAY, RED};
+use bevy::color::palettes::css::GRAY;
 use bevy::{
     color::palettes::css::{BLACK, DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},
     prelude::*,
@@ -285,7 +285,7 @@ fn show_tooltip(
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
-    let Ok(panel_entity) = panel.single() else {
+    let Ok(_panel_entity) = panel.single() else {
         return;
     };
     let Ok(tip) = tips.get(over.entity) else {

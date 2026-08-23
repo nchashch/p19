@@ -65,4 +65,4 @@ pub struct DisableFpsCameraControl(pub bool);
 #[derive(Component)]
 pub struct Crosshair;
 
-fn spawn_crosshair(mut commands: Commands) {}
+fn spawn_crosshair(_commands: Commands) {}

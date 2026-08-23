@@ -178,7 +178,7 @@ fn on_jump(
     }
 }
 
-fn on_movement_stop(_: On<Complete<Movement>>, mut controllers: Query<(&mut DesiredMotion)>) {
+fn on_movement_stop(_: On<Complete<Movement>>, mut controllers: Query<&mut DesiredMotion >) {
     for mut acceleration in &mut controllers {
         acceleration.0 = Vec3::ZERO;
     }
@@ -193,7 +193,7 @@ fn on_movement(
     let Ok(fps_camera) = fps_camera.single() else {
         return;
     };
-    for (movement, mut acceleration) in &mut controllers {
+    for (_movement, mut acceleration) in &mut controllers {
         let rotation = Rot2::radians(fps_camera.yaw);
         let acceleration2 = rotation * movement_event.value;
         acceleration.0.x = -acceleration2.x;
