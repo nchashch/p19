@@ -1,7 +1,9 @@
+use crate::cube_spawner::Cube;
 use crate::cube_spawner::HitPoints;
 use crate::game_state::GameState;
-use crate::player_character::{DESPAWN_RANGE, Hovered, PlayerCharacter, SELECT_RANGE, Selected};
-use crate::{LevelScene, cube_spawner::Cube};
+use crate::player_character::{
+    ATTACK_RANGE, DAMAGE, DESPAWN_RANGE, Hovered, PlayerCharacter, SELECT_RANGE, Selected,
+};
 use bevy::color::palettes::css::{BLUE, GRAY, RED};
 use bevy::{
     color::palettes::css::{BLACK, DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},
@@ -44,7 +46,7 @@ fn main_menu() -> impl Scene {
             panel(px(400), px(400))
             Children [
                 (
-                    button("play")
+                    button(px(200), px(50), "play")
                     Tooltip("Start the game.")
                     on(play_button)
                 ),
@@ -203,12 +205,12 @@ fn panel(width: Val, height: Val) -> impl Scene {
     }
 }
 
-fn button(label: &str) -> impl Scene {
+fn button(width: Val, height: Val, label: &str) -> impl Scene {
     bsn! {
         Button
         Node {
-            width: px(200),
-            height: px(65),
+            width,
+            height,
             border: px(2),
             border_radius: px(3),
             justify_content: JustifyContent::Center,
@@ -356,8 +358,13 @@ fn update_player_stats(
         return;
     };
     text.0 = format!(
-        "HP: {}/{}",
-        hit_points.hit_points, hit_points.max_hit_points
+        "HP: {}/{}\nDamage: {}\nAttack range: {}\nSelect range: {}\nKill range: {}",
+        hit_points.hit_points,
+        hit_points.max_hit_points,
+        DAMAGE,
+        ATTACK_RANGE,
+        SELECT_RANGE,
+        DESPAWN_RANGE
     );
 }
 
