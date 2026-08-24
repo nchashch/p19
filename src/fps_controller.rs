@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy_enhanced_input::prelude::*;
+use chill_bevy_console::console_closed;
 use std::f32::consts::PI;
 
 use crate::game_state::GameState;
@@ -10,7 +11,7 @@ impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(GameState::InGame), spawn_crosshair);
         app.insert_resource(DisableFpsCameraControl(false));
-        app.add_observer(apply_fps_camera_rotation);
+        app.add_observer(apply_fps_camera_rotation.run_if(console_closed));
     }
 }
 

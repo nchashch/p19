@@ -4,6 +4,9 @@ use bevy::world_serialization::WorldInstanceReady;
 use bevy::{dev_tools::fps_overlay::FpsOverlayPlugin, platform::collections::HashMap};
 use bevy_seedling::prelude::*;
 use bevy_skein::SkeinPlugin;
+use chill_bevy_console::{
+    ChillConsole, CommandArgs, ConsoleAppExt, ConsoleCommand, console_closed,
+};
 use cube_spawner::CubeSpawnerPlugin;
 use fps_controller::FpsControllerPlugin;
 use game_state::{GameState, GameStatePlugin};
@@ -29,6 +32,7 @@ impl Plugin for Prototype19 {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             DefaultPlugins,
+            ChillConsole::default(),
             SeedlingPlugins,
             ParticleEffectsPlugin,
             SkeinPlugin::default(),
@@ -39,7 +43,12 @@ impl Plugin for Prototype19 {
             GameStatePlugin,
             ui::PrototypeUiPlugin,
             // PhysicsDebugPlugin::default(),
-            FpsOverlayPlugin::default(),
+            // FpsOverlayPlugin::default(),
+        ))
+        .add_console_command(ConsoleCommand::new(
+            "say",
+            "say <text> - echo text",
+            say_cmd,
         ));
         app.insert_resource(GlobalAmbientLight {
             color: Color::WHITE,
@@ -55,6 +64,10 @@ impl Plugin for Prototype19 {
         app.add_systems(OnEnter(GameState::InGame), spawn_character);
         app.add_systems(Update, wait_for_level.run_if(in_state(GameState::Loading)));
     }
+}
+
+fn say_cmd(In(args): CommandArgs) -> String {
+    args.join(" ")
 }
 
 #[derive(Resource)]

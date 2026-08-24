@@ -20,6 +20,13 @@ use bevy::{
 use bevy_enhanced_input::prelude::{Press, *};
 use bevy_hanabi::prelude::*;
 use bevy_seedling::prelude::*;
+use chill_bevy_console::console_closed;
+
+macro_rules! add_observers_run_if {
+    ($app:expr, $condition:expr, $($observer:expr),+ $(,)?) => {
+        $( $app.add_observer($observer.run_if($condition)); )+
+    };
+}
 
 pub struct PlayerCharacterPlugin;
 
@@ -33,17 +40,23 @@ impl Plugin for PlayerCharacterPlugin {
         app.add_plugins(CharacterControllerPlugin);
         app.add_systems(OnEnter(GameState::MainMenu), unlock_cursor);
         app.add_systems(OnEnter(GameState::InGame), (unlock_cursor, initial_respawn));
-        app.add_observer(lock_cursor_menu);
-        app.add_observer(unlock_cursor_menu);
-        app.add_observer(respawn);
         app.add_observer(respawn_player);
-        app.add_observer(main_menu);
-        app.add_observer(shoot);
-        app.add_observer(despawn_cube);
-        app.add_observer(despawn);
-        app.add_observer(select);
-        app.add_observer(deselect);
-        app.add_observer(attack);
+
+        add_observers_run_if!(
+            app,
+            console_closed,
+            lock_cursor_menu,
+            unlock_cursor_menu,
+            respawn,
+            main_menu,
+            shoot,
+            despawn_cube,
+            despawn,
+            select,
+            deselect,
+            attack,
+        );
+
         app.add_plugins(EnhancedInputPlugin)
             .add_input_context::<PlayerCharacter>();
         app.add_systems(

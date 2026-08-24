@@ -44,3 +44,4 @@ audionimbus = { path = "../audionimbus/audionimbus", features = [
 	"bevy",
 	"auto-install",
 ] }
+chill_bevy_console = "0.3.1"

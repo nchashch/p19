@@ -5,6 +5,7 @@ use crate::{
 use avian3d::{math::*, prelude::*};
 use bevy::{ecs::query::Has, prelude::*};
 use bevy_enhanced_input::prelude::*;
+use chill_bevy_console::console_closed;
 
 /// A plugin that implements a basic platformer kinematic character controller using move-and-slide,
 /// with support for ground detection and configurable movement settings.
@@ -26,9 +27,9 @@ impl Plugin for CharacterControllerPlugin {
             )
                 .chain(),
         );
-        app.add_observer(on_jump);
-        app.add_observer(on_movement);
-        app.add_observer(on_movement_stop);
+        app.add_observer(on_jump.run_if(console_closed));
+        app.add_observer(on_movement.run_if(console_closed));
+        app.add_observer(on_movement_stop.run_if(console_closed));
     }
 }
 
@@ -178,7 +179,7 @@ fn on_jump(
     }
 }
 
-fn on_movement_stop(_: On<Complete<Movement>>, mut controllers: Query<&mut DesiredMotion >) {
+fn on_movement_stop(_: On<Complete<Movement>>, mut controllers: Query<&mut DesiredMotion>) {
     for mut acceleration in &mut controllers {
         acceleration.0 = Vec3::ZERO;
     }
