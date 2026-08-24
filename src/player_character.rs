@@ -57,10 +57,6 @@ impl Plugin for PlayerCharacterPlugin {
     }
 }
 
-#[derive(InputAction)]
-#[action_output(bool)]
-pub struct Respawn;
-
 #[derive(Event)]
 pub struct RespawnPlayer;
 
@@ -166,8 +162,6 @@ pub fn respawn_player(
                 context.spawn((Action::<Select>::new(), bindings![MouseButton::Left]));
                 // context.spawn((Action::<Interact>::new(), bindings![MouseButton::Right]));
 
-                context.spawn((Action::<Respawn>::new(), bindings![KeyCode::KeyR]));
-                context.spawn((Action::<Despawn>::new(), bindings![KeyCode::KeyQ]));
                 context.spawn((Action::<MainMenu>::new(), bindings![KeyCode::F1]));
                 let id = context
                     .spawn((
@@ -264,10 +258,6 @@ pub struct Shoot;
 #[derive(InputAction)]
 #[action_output(bool)]
 pub struct SpawnNpcAction;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-pub struct Despawn;
 
 fn unlock_cursor(
     mut cursor_options: Single<&mut CursorOptions>,
