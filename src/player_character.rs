@@ -5,10 +5,11 @@ use crate::{
         CharacterMovementSettings, DesiredMotion, GroundDetection, Grounded,
     },
     combat::{Attack, CombatPlugin, DespawnCube},
-    cube_spawner::{Cube, CubeSpawner, HitPoints, SpawnCube},
+    cube_spawner::{CubeSpawner, HitPoints, SpawnCube},
     fps_controller::{Crosshair, DisableFpsCameraControl, FpsCamera, FpsCameraRotation},
     game_state::GameState,
-    targeting::{Deselect, Hovered, Select, Selected, TargetingPlugin},
+    npc_spawner::{NpcSpawner, SpawnNpc},
+    targeting::{Deselect, Hovered, Select, TargetingPlugin},
 };
 use avian3d::prelude::*;
 use bevy::{
@@ -45,6 +46,7 @@ impl Plugin for PlayerCharacterPlugin {
             lock_cursor_for_rotation,
             main_menu,
             shoot,
+            spawn_npc,
             on_jump,
             on_movement,
         );
@@ -69,6 +71,10 @@ pub struct PlayerCharacterSpawner;
 #[derive(Component, Reflect, Default)]
 #[reflect(Component)]
 pub struct PlayerCharacter;
+
+#[derive(Component, Reflect, Default)]
+#[reflect(Component)]
+pub struct PlayerModel;
 
 pub fn initial_respawn(mut commands: Commands) {
     commands.trigger(RespawnPlayer);
@@ -119,10 +125,6 @@ pub fn respawn_player(
                 ..default()
             },
             Collider::capsule(0.4, 1.0),
-            Mesh3d(meshes.add(Capsule3d {
-                radius: 0.4,
-                half_length: (1.0) / 2.0,
-            })),
             MeshMaterial3d(materials.add(Color::srgb(0.8, 0.2, 0.2))),
             DesiredMotion::default(),
             PointLight { ..default() },
@@ -155,6 +157,10 @@ pub fn respawn_player(
                 context.spawn((
                     Action::<Shoot>::new(),
                     bindings![KeyCode::KeyE, GamepadButton::West],
+                ));
+                context.spawn((
+                    Action::<SpawnNpcAction>::new(),
+                    bindings![KeyCode::KeyR, GamepadButton::East],
                 ));
                 context.spawn((Action::<Deselect>::new(), bindings![KeyCode::Escape]));
                 context.spawn((Action::<Select>::new(), bindings![MouseButton::Left]));
@@ -189,6 +195,11 @@ pub fn respawn_player(
             DespawnOnEnter(GameState::MainMenu),
         ))
         .with_children(|parent| {
+            parent.spawn((
+                PlayerModel,
+                WorldAssetRoot(asset_server.load("rig.glb#Scene0")),
+                Transform::from_translation(Vec3::new(0.0, -0.9, 0.0)),
+            ));
             parent
                 .spawn((Transform::from_xyz(0., 0.5, 0.),))
                 .with_children(|parent| {
@@ -196,6 +207,7 @@ pub fn respawn_player(
                         .spawn((FpsCamera::new(), Transform::IDENTITY))
                         .with_children(|parent| {
                             parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), CubeSpawner));
+                            parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), NpcSpawner));
                             parent.spawn((
                                 Transform::from_xyz(0.0, 0.0, 10.0),
                                 Camera3d::default(),
@@ -251,6 +263,10 @@ pub struct Shoot;
 
 #[derive(InputAction)]
 #[action_output(bool)]
+pub struct SpawnNpcAction;
+
+#[derive(InputAction)]
+#[action_output(bool)]
 pub struct Despawn;
 
 fn unlock_cursor(
@@ -269,6 +285,10 @@ fn unlock_cursor(
 
 fn shoot(_: On<Start<Shoot>>, mut commands: Commands) {
     commands.trigger(SpawnCube);
+}
+
+fn spawn_npc(_: On<Start<SpawnNpcAction>>, mut commands: Commands) {
+    commands.trigger(SpawnNpc);
 }
 
 fn main_menu(_: On<Start<MainMenu>>, mut commands: Commands) {

@@ -3,8 +3,9 @@ use bevy::dev_tools::fps_overlay::FpsOverlayPlugin;
 use bevy::{dev_tools::fps_overlay::FpsOverlayConfig, prelude::*};
 use chill_bevy_console::{ChillConsole, CommandArgs, ConsoleAppExt, ConsoleCommand};
 
-use crate::cube_spawner::Npc;
-use crate::{cube_spawner::Cube, player_character::RespawnPlayer, targeting::Selected};
+use crate::{
+    cube_spawner::Cube, npc_spawner::Npc, player_character::RespawnPlayer, targeting::Selected,
+};
 
 pub struct PConsolePlugin;
 

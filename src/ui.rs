@@ -160,6 +160,9 @@ fn ui() -> impl Scene {
                     Text("[E] spawn cube")
                 ),
                 (
+                    Text("[R] spawn NPC")
+                ),
+                (
                     Text("[T] kill selected")
                 ),
                 (

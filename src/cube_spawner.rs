@@ -53,18 +53,8 @@ pub fn spawn_cube(
             WorldAssetRoot(asset_server.load("Cube.glb#Scene0")),
             DespawnOnEnter(GameState::MainMenu),
         ));
-
-        commands.spawn((
-            Npc,
-            transform.compute_transform(),
-            WorldAssetRoot(asset_server.load("rig.glb#Scene0")),
-            DespawnOnEnter(GameState::MainMenu),
-        ));
     }
 }
-
-#[derive(Component)]
-pub struct Npc;
 
 #[derive(Component)]
 pub struct Selectable;

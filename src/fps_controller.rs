@@ -3,7 +3,7 @@ use bevy_enhanced_input::prelude::*;
 use chill_bevy_console::console_closed;
 use std::f32::consts::PI;
 
-use crate::game_state::GameState;
+use crate::{game_state::GameState, player_character::PlayerModel};
 
 pub struct FpsControllerPlugin;
 
@@ -12,6 +12,7 @@ impl Plugin for FpsControllerPlugin {
         app.add_systems(OnEnter(GameState::InGame), spawn_crosshair);
         app.insert_resource(DisableFpsCameraControl(false));
         app.add_observer(apply_fps_camera_rotation.run_if(console_closed));
+        app.add_systems(Update, rotate_player_model);
     }
 }
 
@@ -37,6 +38,19 @@ impl FpsCamera {
 #[derive(InputAction)]
 #[action_output(Vec2)]
 pub struct FpsCameraRotation;
+
+fn rotate_player_model(
+    fps_camera: Query<&FpsCamera>,
+    mut player_model: Query<&mut Transform, With<PlayerModel>>,
+) {
+    let Ok(fps_camera) = fps_camera.single() else {
+        return;
+    };
+    let Ok(mut player_model) = player_model.single_mut() else {
+        return;
+    };
+    player_model.rotation = Quat::from_rotation_y(fps_camera.yaw);
+}
 
 fn apply_fps_camera_rotation(
     rotation: On<Fire<FpsCameraRotation>>,
