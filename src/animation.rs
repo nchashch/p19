@@ -19,9 +19,9 @@ const MODEL: &str = "rig.glb";
 const ANIMATION_NAME: &str = "idle";
 
 #[derive(Resource)]
-struct Animations {
-    graph: Handle<AnimationGraph>,
-    nodes: HashMap<String, AnimationNodeIndex>,
+pub struct Animations {
+    pub graph: Handle<AnimationGraph>,
+    pub nodes: HashMap<String, AnimationNodeIndex>,
 }
 
 fn load_rig_gltf(mut commands: Commands, asset_server: Res<AssetServer>) {

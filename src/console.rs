@@ -3,7 +3,7 @@ use bevy::dev_tools::fps_overlay::FpsOverlayPlugin;
 use bevy::{dev_tools::fps_overlay::FpsOverlayConfig, prelude::*};
 use chill_bevy_console::{ChillConsole, CommandArgs, ConsoleAppExt, ConsoleCommand};
 
-use crate::animation::PlayAnimation;
+use crate::animation::{Animations, PlayAnimation};
 use crate::{
     cube_spawner::Cube, npc_spawner::Npc, player_character::RespawnPlayer, targeting::Selected,
 };
@@ -84,6 +84,7 @@ fn despawn_npcs_cmd(
 
 fn play_animation_cmd(
     In(args): CommandArgs,
+    animations: Res<Animations>,
     selected: Res<Selected>,
     children: Query<&Children>,
     mut commands: Commands,
@@ -92,7 +93,11 @@ fn play_animation_cmd(
         return format!("nothing selected");
     };
     let Some(clip_name) = args.get(0) else {
-        return format!("please provide clip name");
+        let mut clip_names = "".to_string();
+        for clip_name in animations.nodes.keys() {
+            clip_names += &format!(" {clip_name}\n");
+        }
+        return format!("available clip names:\n{clip_names}");
     };
     for entity in std::iter::once(selected).chain(children.iter_descendants(selected)) {
         commands.trigger(PlayAnimation {
