@@ -29,7 +29,6 @@ impl Plugin for PlayerCharacterPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Cubemap {
             is_loaded: false,
-            index: 0,
             image_handle: None,
         });
         app.add_plugins((CharacterControllerPlugin, TargetingPlugin, CombatPlugin));
@@ -88,7 +87,6 @@ pub fn respawn_player(
     player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
     player_character: Query<Entity, With<PlayerCharacter>>,
     asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     if let Ok(player_character) = player_character.single() {
@@ -229,7 +227,6 @@ pub fn respawn_player(
 
     commands.insert_resource(Cubemap {
         is_loaded: false,
-        index: 0,
         image_handle: Some(skybox_handle),
     });
 }
@@ -265,7 +262,6 @@ fn unlock_cursor(
 ) {
     cursor_options.visible = true;
     cursor_options.grab_mode = CursorGrabMode::None;
-    // disable_fps_camera.0 = true;
     let Ok(mut visibility) = crosshair.single_mut() else {
         return;
     };
@@ -325,7 +321,6 @@ fn asset_loaded(
 #[derive(Resource)]
 struct Cubemap {
     is_loaded: bool,
-    index: usize,
     image_handle: Option<Handle<Image>>,
 }
 

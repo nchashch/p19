@@ -34,6 +34,7 @@ pub fn spawn_npc(
         commands
             .spawn((
                 Npc,
+                InheritedVisibility::default(),
                 Transform::from_translation(translation),
                 DespawnOnEnter(GameState::MainMenu),
                 RigidBody::Dynamic,

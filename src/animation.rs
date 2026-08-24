@@ -1,18 +1,20 @@
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
-
-use crate::game_state::GameState;
+use std::time::Duration;
 
 pub struct PAnimationPlugin;
 
 impl Plugin for PAnimationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(GameState::InGame), spawn_character);
+        app.add_systems(Startup, load_rig_gltf);
+        app.add_systems(Update, build_graph_when_loaded);
+        app.add_observer(bind_animation_player);
     }
 }
 
 const MODEL: &str = "rig.glb";
+const ANIMATION_NAME: &str = "metarigAction";
 
 #[derive(Resource)]
 struct Animations {
@@ -20,7 +22,7 @@ struct Animations {
     nodes: HashMap<String, AnimationNodeIndex>,
 }
 
-pub fn spawn_character(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn load_rig_gltf(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.insert_resource(ModelHandle(asset_server.load(MODEL)));
 }
 
@@ -57,10 +59,6 @@ fn build_graph_when_loaded(
         nodes,
     });
 
-    commands
-        .spawn((WorldAssetRoot(gltf.default_scene.clone().unwrap()),))
-        .observe(bind_animation_player);
-
     *done = true;
 }
 
@@ -69,16 +67,27 @@ fn bind_animation_player(
     mut commands: Commands,
     animations: Res<Animations>,
     children: Query<&Children>,
-    players: Query<(), With<AnimationPlayer>>,
+    mut players: Query<&mut AnimationPlayer>,
 ) {
     for child in children.iter_descendants(ready.entity) {
-        if players.contains(child) {
-            commands.entity(child).insert((
-                AnimationGraphHandle(animations.graph.clone()),
-                AnimationTransitions::new(),
-            ));
-            commands.entity(ready.entity).insert(AnimationRoot(child));
-        }
+        let Ok(mut player) = players.get_mut(child) else {
+            continue;
+        };
+        let node = animations.nodes.get(ANIMATION_NAME).copied().or_else(|| {
+            warn!(
+                "animation {ANIMATION_NAME:?} not found; available: {:?}",
+                animations.nodes.keys().collect::<Vec<_>>()
+            );
+            animations.nodes.values().next().copied()
+        });
+        let Some(node) = node else { continue };
+
+        let mut transitions = AnimationTransitions::new();
+        transitions.play(&mut player, node, Duration::ZERO).repeat();
+        commands
+            .entity(child)
+            .insert((AnimationGraphHandle(animations.graph.clone()), transitions));
+        commands.entity(ready.entity).insert(AnimationRoot(child));
     }
 }
 
