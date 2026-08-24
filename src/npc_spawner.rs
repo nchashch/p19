@@ -1,7 +1,10 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
-use crate::game_state::GameState;
+use crate::{
+    game_state::GameState,
+    targeting::{NoOutline, Selectable},
+};
 
 pub struct NpcSpawnerPlugin;
 
@@ -39,8 +42,10 @@ pub fn spawn_npc(
                     .lock_rotation_x()
                     .lock_rotation_y()
                     .lock_rotation_z(),
+                Selectable,
             ))
             .with_child((
+                NoOutline,
                 WorldAssetRoot(asset_server.load("rig.glb#Scene0")),
                 Transform::from_translation(Vec3::new(0.0, -0.9, 0.0)),
             ));

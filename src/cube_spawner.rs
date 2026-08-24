@@ -1,16 +1,17 @@
-use crate::{GameState, fps_controller::FpsCamera};
+use crate::{
+    GameState,
+    fps_controller::FpsCamera,
+    targeting::{NoOutline, Selectable},
+};
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use bevy_mod_outline::{AsyncWorldInheritOutline, OutlinePlugin, OutlineVolume};
 use rand::distr::{Distribution, Uniform};
 
 pub struct CubeSpawnerPlugin;
 
 impl Plugin for CubeSpawnerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(OutlinePlugin::JUMP_FLOOD);
         app.add_observer(spawn_cube);
-        app.add_systems(Update, add_outline_component);
     }
 }
 
@@ -53,28 +54,6 @@ pub fn spawn_cube(
             WorldAssetRoot(asset_server.load("Cube.glb#Scene0")),
             DespawnOnEnter(GameState::MainMenu),
         ));
-    }
-}
-
-#[derive(Component)]
-pub struct Selectable;
-
-#[derive(Component)]
-pub struct NoOutline;
-
-fn add_outline_component(mut commands: Commands, query: Query<Entity, With<NoOutline>>) {
-    for entity in query {
-        commands
-            .entity(entity)
-            .insert((
-                OutlineVolume {
-                    visible: false,
-                    width: 4.0,
-                    colour: Color::srgb(1.0, 1.0, 1.0),
-                },
-                AsyncWorldInheritOutline::default(),
-            ))
-            .remove::<NoOutline>();
     }
 }
 

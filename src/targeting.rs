@@ -1,19 +1,29 @@
 use crate::{
-    add_observers_run_if, cube_spawner::Selectable, fps_controller::DisableFpsCameraControl,
+    add_observers_run_if, fps_controller::DisableFpsCameraControl,
     player_character::PlayerCharacter,
 };
 use avian3d::prelude::*;
+use bevy::color::palettes::css::{DARK_SLATE_GRAY, GRAY, WHITE};
 use bevy::prelude::*;
 use bevy_enhanced_input::prelude::*;
+use bevy_mod_outline::{AsyncWorldInheritOutline, OutlinePlugin, OutlineVolume};
 use chill_bevy_console::console_closed;
 
 pub struct TargetingPlugin;
 
 impl Plugin for TargetingPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(OutlinePlugin::JUMP_FLOOD);
+        app.add_systems(
+            Update,
+            (
+                raycast_from_center,
+                add_outline_component,
+                update_outline_hovered_selected,
+            ),
+        );
         app.insert_resource(Hovered(None));
         app.insert_resource(Selected(None));
-        app.add_systems(Update, raycast_from_center);
         add_observers_run_if!(app, console_closed, select, deselect);
     }
 }
@@ -96,4 +106,58 @@ fn select(
 
 fn deselect(_event: On<Fire<Deselect>>, mut selected: ResMut<Selected>) {
     selected.0 = None;
+}
+
+#[derive(Component)]
+pub struct Selectable;
+
+#[derive(Component)]
+pub struct NoOutline;
+
+fn add_outline_component(mut commands: Commands, query: Query<Entity, With<NoOutline>>) {
+    for entity in query {
+        commands
+            .entity(entity)
+            .insert((
+                OutlineVolume {
+                    visible: false,
+                    width: 4.0,
+                    colour: Color::srgb(1.0, 1.0, 1.0),
+                },
+                AsyncWorldInheritOutline::default(),
+            ))
+            .remove::<NoOutline>();
+    }
+}
+
+fn update_outline_hovered_selected(
+    children: Query<&Children>,
+    hovered: Res<Hovered>,
+    selected: Res<Selected>,
+    mut outlines: Query<&mut OutlineVolume>,
+) {
+    for mut outline in outlines.iter_mut() {
+        outline.visible = false;
+    }
+    if let Some((hovered, distance)) = hovered.0 {
+        for entity in std::iter::once(hovered).chain(children.iter_descendants(hovered)) {
+            if let Ok(mut outline) = outlines.get_mut(entity) {
+                if distance < SELECT_RANGE {
+                    outline.colour = GRAY.into();
+                    outline.visible = true;
+                } else {
+                    outline.colour = DARK_SLATE_GRAY.into();
+                    outline.visible = true;
+                }
+            }
+        }
+    }
+    if let Some(selected) = selected.0 {
+        for entity in std::iter::once(selected).chain(children.iter_descendants(selected)) {
+            if let Ok(mut outline) = outlines.get_mut(entity) {
+                outline.colour = WHITE.into();
+                outline.visible = true;
+            }
+        }
+    }
 }

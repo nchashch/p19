@@ -123,7 +123,6 @@ pub fn respawn_player(
             Collider::capsule(0.4, 1.0),
             MeshMaterial3d(materials.add(Color::srgb(0.8, 0.2, 0.2))),
             DesiredMotion::default(),
-            PointLight { ..default() },
             RigidBody::Kinematic,
             Transform::from_translation(spawner_transform.translation),
             Actions::<PlayerCharacter>::spawn(SpawnWith(|context: &mut ActionSpawner<_>| {

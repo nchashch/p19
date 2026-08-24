@@ -3,13 +3,11 @@ use crate::cube_spawner::HitPoints;
 use crate::game_state::GameState;
 use crate::player_character::PlayerCharacter;
 use crate::targeting::{Hovered, SELECT_RANGE, Selected};
-use bevy::color::palettes::css::GRAY;
 use bevy::{
     color::palettes::css::{BLACK, DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},
     prelude::*,
     text::FontSourceTemplate,
 };
-use bevy_mod_outline::OutlineVolume;
 
 pub struct PrototypeUiPlugin;
 
@@ -19,12 +17,7 @@ impl Plugin for PrototypeUiPlugin {
         app.add_observer(hide_tooltip);
         app.add_systems(
             Update,
-            (
-                update_player_stats,
-                update_console,
-                update_outline_hovered_selected,
-                update_selected_frame,
-            ),
+            (update_player_stats, update_console, update_selected_frame),
         );
     }
 }
@@ -367,34 +360,5 @@ fn update_selected_frame(
         }
     } else {
         *visibility = Visibility::Hidden;
-    }
-}
-
-fn update_outline_hovered_selected(
-    query: Query<(Entity, &mut OutlineVolume)>,
-    hovered: Res<Hovered>,
-    selected: Res<Selected>,
-) {
-    for (entity, mut outline) in query {
-        if selected.0 == Some(entity) {
-            outline.colour = WHITE.into();
-            outline.visible = true;
-        } else {
-            if let Some((hovered_entity, distance)) = hovered.0 {
-                if hovered_entity == entity {
-                    if distance < SELECT_RANGE {
-                        outline.colour = GRAY.into();
-                        outline.visible = true;
-                    } else {
-                        outline.colour = DARK_SLATE_GRAY.into();
-                        outline.visible = true;
-                    }
-                } else {
-                    outline.visible = false;
-                }
-            } else {
-                outline.visible = false;
-            }
-        }
     }
 }
