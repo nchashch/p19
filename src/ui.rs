@@ -1,9 +1,8 @@
-use crate::cube_spawner::Cube;
+use crate::combat::{ATTACK_RANGE, DAMAGE};
 use crate::cube_spawner::HitPoints;
 use crate::game_state::GameState;
-use crate::player_character::{
-    ATTACK_RANGE, DAMAGE, DESPAWN_RANGE, Hovered, PlayerCharacter, SELECT_RANGE, Selected,
-};
+use crate::player_character::PlayerCharacter;
+use crate::targeting::{Hovered, SELECT_RANGE, Selected};
 use bevy::color::palettes::css::GRAY;
 use bevy::{
     color::palettes::css::{BLACK, DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},
@@ -167,12 +166,6 @@ fn ui() -> impl Scene {
                     Text("[F] attack selected")
                 ),
                 (
-                    Text("[R] respawn")
-                ),
-                (
-                    Text("[Q] despawn all cubes")
-                ),
-                (
                     Text("[F1] main menu")
                 ),
             ]
@@ -231,7 +224,6 @@ fn button(width: Val, height: Val, label: &str) -> impl Scene {
     }
 }
 
-const MONO_FONT: &str = "fonts/mono/IBMPlexMono-Regular.ttf";
 const SERIF_FONT: &str = "fonts/serif/IBMPlexSerif-Regular.ttf";
 
 const PANEL_BORDER_COLOR: Srgba = WHITE_SMOKE;
@@ -244,20 +236,6 @@ const BUTTON_TEXT_FONT_SIZE: f32 = 33.0;
 
 fn play_button(_event: On<Pointer<Press>>, mut commands: Commands) {
     commands.set_state(GameState::Loading);
-}
-
-fn menu_button(_event: On<Pointer<Press>>, mut commands: Commands) {
-    commands.set_state(GameState::MainMenu);
-}
-
-fn despawn_button(
-    _event: On<Pointer<Press>>,
-    mut commands: Commands,
-    cubes: Query<Entity, With<Cube>>,
-) {
-    for cube in cubes {
-        commands.entity(cube).despawn();
-    }
 }
 
 fn hover_button(event: On<Pointer<Over>>, mut commands: Commands) {
@@ -358,13 +336,8 @@ fn update_player_stats(
         return;
     };
     text.0 = format!(
-        "HP: {}/{}\nDamage: {}\nAttack range: {}\nSelect range: {}\nKill range: {}",
-        hit_points.hit_points,
-        hit_points.max_hit_points,
-        DAMAGE,
-        ATTACK_RANGE,
-        SELECT_RANGE,
-        DESPAWN_RANGE
+        "HP: {}/{}\nDamage: {}\nAttack range: {}\nSelect range: {}",
+        hit_points.hit_points, hit_points.max_hit_points, DAMAGE, ATTACK_RANGE, SELECT_RANGE,
     );
 }
 

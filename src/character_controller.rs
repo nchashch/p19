@@ -1,11 +1,5 @@
-use crate::{
-    fps_controller::FpsCamera,
-    player_character::{Jump, Movement},
-};
 use avian3d::{math::*, prelude::*};
-use bevy::{ecs::query::Has, prelude::*};
-use bevy_enhanced_input::prelude::*;
-use chill_bevy_console::console_closed;
+use bevy::prelude::*;
 
 /// A plugin that implements a basic platformer kinematic character controller using move-and-slide,
 /// with support for ground detection and configurable movement settings.
@@ -19,7 +13,6 @@ impl Plugin for CharacterControllerPlugin {
             (
                 update_grounded,
                 apply_gravity,
-                // movement,
                 integrate_horizontal_linear_velocity,
                 apply_movement_damping,
                 move_and_slide,
@@ -27,9 +20,6 @@ impl Plugin for CharacterControllerPlugin {
             )
                 .chain(),
         );
-        app.add_observer(on_jump.run_if(console_closed));
-        app.add_observer(on_movement.run_if(console_closed));
-        app.add_observer(on_movement_stop.run_if(console_closed));
     }
 }
 
@@ -164,46 +154,8 @@ fn update_grounded(
     }
 }
 
-fn on_jump(
-    _: On<Fire<Jump>>,
-    mut controllers: Query<(
-        &CharacterMovementSettings,
-        &mut LinearVelocity,
-        Has<Grounded>,
-    )>,
-) {
-    for (movement, mut linear_velocity, is_grounded) in &mut controllers {
-        if is_grounded {
-            linear_velocity.y = movement.jump_impulse;
-        }
-    }
-}
-
-fn on_movement_stop(_: On<Complete<Movement>>, mut controllers: Query<&mut DesiredMotion>) {
-    for mut acceleration in &mut controllers {
-        acceleration.0 = Vec3::ZERO;
-    }
-}
-
-/// Responds to [`MovementAction`] events and moves character controllers accordingly.
-fn on_movement(
-    movement_event: On<Fire<Movement>>,
-    fps_camera: Query<&FpsCamera>,
-    mut controllers: Query<(&CharacterMovementSettings, &mut DesiredMotion)>,
-) {
-    let Ok(fps_camera) = fps_camera.single() else {
-        return;
-    };
-    for (_movement, mut acceleration) in &mut controllers {
-        let rotation = Rot2::radians(fps_camera.yaw);
-        let acceleration2 = rotation * movement_event.value;
-        acceleration.0.x = -acceleration2.x;
-        acceleration.0.z = acceleration2.y;
-    }
-}
-
 #[derive(Component, Default)]
-pub struct DesiredMotion(Vec3);
+pub struct DesiredMotion(pub Vec3);
 
 fn integrate_horizontal_linear_velocity(
     time: Res<Time>,

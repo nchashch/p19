@@ -1,12 +1,11 @@
 use avian3d::prelude::*;
+use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
-use bevy::{dev_tools::fps_overlay::FpsOverlayPlugin, platform::collections::HashMap};
 use bevy_seedling::prelude::*;
 use bevy_skein::SkeinPlugin;
-use chill_bevy_console::{
-    ChillConsole, CommandArgs, ConsoleAppExt, ConsoleCommand, console_closed,
-};
+
+use console::PConsolePlugin;
 use cube_spawner::CubeSpawnerPlugin;
 use fps_controller::FpsControllerPlugin;
 use game_state::{GameState, GameStatePlugin};
@@ -14,13 +13,25 @@ use particles::ParticleEffectsPlugin;
 use player_character::PlayerCharacterPlugin;
 
 mod character_controller;
+mod combat;
+mod console;
 mod cube_spawner;
-mod fps_camera;
 mod fps_controller;
 mod game_state;
 mod particles;
 mod player_character;
+mod targeting;
 mod ui;
+
+/// Registers each `$observer` with `$app`, gated behind `$condition` (e.g.
+/// `chill_bevy_console::console_closed`, to suppress gameplay observers while the
+/// dev console is open).
+macro_rules! add_observers_run_if {
+    ($app:expr, $condition:expr, $($observer:expr),+ $(,)?) => {
+        $( $app.add_observer($observer.run_if($condition)); )+
+    };
+}
+pub(crate) use add_observers_run_if;
 
 fn main() {
     App::new().add_plugins(Prototype19).run();
@@ -32,7 +43,7 @@ impl Plugin for Prototype19 {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             DefaultPlugins,
-            ChillConsole::default(),
+            PConsolePlugin,
             SeedlingPlugins,
             ParticleEffectsPlugin,
             SkeinPlugin::default(),
@@ -42,32 +53,21 @@ impl Plugin for Prototype19 {
             FpsControllerPlugin,
             GameStatePlugin,
             ui::PrototypeUiPlugin,
-            // PhysicsDebugPlugin::default(),
-            // FpsOverlayPlugin::default(),
         ))
-        .add_console_command(ConsoleCommand::new(
-            "say",
-            "say <text> - echo text",
-            say_cmd,
-        ));
-        app.insert_resource(GlobalAmbientLight {
+        .insert_resource(GlobalAmbientLight {
             color: Color::WHITE,
             brightness: 10.,
             ..default()
-        });
-        app.register_type::<ColliderConstructor>();
-        app.add_systems(OnEnter(GameState::MainMenu), ui::main_menu_scene.spawn());
-        app.add_systems(
+        })
+        .register_type::<ColliderConstructor>()
+        .add_systems(OnEnter(GameState::MainMenu), ui::main_menu_scene.spawn())
+        .add_systems(
             OnEnter(GameState::Loading),
             (ui::in_game_scene.spawn(), load_level),
-        );
-        app.add_systems(OnEnter(GameState::InGame), spawn_character);
-        app.add_systems(Update, wait_for_level.run_if(in_state(GameState::Loading)));
+        )
+        .add_systems(OnEnter(GameState::InGame), spawn_character)
+        .add_systems(Update, wait_for_level.run_if(in_state(GameState::Loading)));
     }
-}
-
-fn say_cmd(In(args): CommandArgs) -> String {
-    args.join(" ")
 }
 
 #[derive(Resource)]

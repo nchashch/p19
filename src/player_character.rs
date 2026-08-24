@@ -1,12 +1,14 @@
 use crate::{
+    add_observers_run_if,
     character_controller::{
         CharacterCollisions, CharacterController, CharacterControllerPlugin,
-        CharacterMovementSettings, DesiredMotion, GroundDetection,
+        CharacterMovementSettings, DesiredMotion, GroundDetection, Grounded,
     },
-    cube_spawner::{Cube, CubeSpawner, HitPoints, Selectable, SpawnCube},
+    combat::{Attack, CombatPlugin, DespawnCube},
+    cube_spawner::{Cube, CubeSpawner, HitPoints, SpawnCube},
     fps_controller::{Crosshair, DisableFpsCameraControl, FpsCamera, FpsCameraRotation},
     game_state::GameState,
-    particles::CubeParticleEffect,
+    targeting::{Deselect, Hovered, Select, Selected, TargetingPlugin},
 };
 use avian3d::prelude::*;
 use bevy::{
@@ -18,15 +20,7 @@ use bevy::{
     window::{CursorGrabMode, CursorOptions},
 };
 use bevy_enhanced_input::prelude::{Press, *};
-use bevy_hanabi::prelude::*;
-use bevy_seedling::prelude::*;
 use chill_bevy_console::console_closed;
-
-macro_rules! add_observers_run_if {
-    ($app:expr, $condition:expr, $($observer:expr),+ $(,)?) => {
-        $( $app.add_observer($observer.run_if($condition)); )+
-    };
-}
 
 pub struct PlayerCharacterPlugin;
 
@@ -37,39 +31,27 @@ impl Plugin for PlayerCharacterPlugin {
             index: 0,
             image_handle: None,
         });
-        app.add_plugins(CharacterControllerPlugin);
+        app.add_plugins((CharacterControllerPlugin, TargetingPlugin, CombatPlugin));
         app.add_systems(OnEnter(GameState::MainMenu), unlock_cursor);
         app.add_systems(OnEnter(GameState::InGame), (unlock_cursor, initial_respawn));
+
         app.add_observer(respawn_player);
+        app.add_observer(unlock_cursor_after_rotation);
+        app.add_observer(on_movement_stop);
 
         add_observers_run_if!(
             app,
             console_closed,
-            lock_cursor_menu,
-            unlock_cursor_menu,
-            respawn,
+            lock_cursor_for_rotation,
             main_menu,
             shoot,
-            despawn_cube,
-            despawn,
-            select,
-            deselect,
-            attack,
+            on_jump,
+            on_movement,
         );
 
         app.add_plugins(EnhancedInputPlugin)
             .add_input_context::<PlayerCharacter>();
-        app.add_systems(
-            Update,
-            (
-                raycast_from_center,
-                tick_lifetimes,
-                asset_loaded,
-                despawn_zero_hp,
-            ),
-        );
-        app.insert_resource(Hovered(None));
-        app.insert_resource(Selected(None));
+        app.add_systems(Update, asset_loaded);
     }
 }
 
@@ -92,9 +74,11 @@ pub fn initial_respawn(mut commands: Commands) {
     commands.trigger(RespawnPlayer);
 }
 
-pub fn respawn(_event: On<Complete<Respawn>>, mut commands: Commands) {
-    commands.trigger(RespawnPlayer);
-}
+const PLAYER_ACCELERATION: f32 = 100.0;
+const PLAYER_DAMPING: f32 = 10.0;
+const PLAYER_JUMP_IMPULSE: f32 = 10.0;
+const PLAYER_GRAVITY: Vec3 = Vec3::new(0.0, -20.0, 0.0);
+const PLAYER_TERMINAL_VELOCITY: f32 = 300.0;
 
 pub fn respawn_player(
     _event: On<RespawnPlayer>,
@@ -107,17 +91,16 @@ pub fn respawn_player(
 ) {
     if let Ok(player_character) = player_character.single() {
         commands.entity(player_character).despawn();
-    } else {
-    };
+    }
     let Ok(spawner_transform) = player_spawner.single() else {
         return;
     };
     let character_movement_settings = CharacterMovementSettings {
-        acceleration: 100.0,
-        damping: 10.0,
-        jump_impulse: 10.0,
-        gravity: -10.0 * Vec3::Y * 2.0,
-        terminal_velocity: 300.0,
+        acceleration: PLAYER_ACCELERATION,
+        damping: PLAYER_DAMPING,
+        jump_impulse: PLAYER_JUMP_IMPULSE,
+        gravity: PLAYER_GRAVITY,
+        terminal_velocity: PLAYER_TERMINAL_VELOCITY,
     };
     let skybox_handle = asset_server.load("Ryfjallet_cubemap.png");
     commands
@@ -268,18 +251,6 @@ pub struct Shoot;
 
 #[derive(InputAction)]
 #[action_output(bool)]
-struct Deselect;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-struct Select;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-struct Interact;
-
-#[derive(InputAction)]
-#[action_output(bool)]
 pub struct Despawn;
 
 fn unlock_cursor(
@@ -300,210 +271,8 @@ fn shoot(_: On<Start<Shoot>>, mut commands: Commands) {
     commands.trigger(SpawnCube);
 }
 
-fn despawn(_: On<Start<Despawn>>, mut commands: Commands, cubes: Query<Entity, With<Cube>>) {
-    for cube in cubes {
-        commands.entity(cube).despawn();
-    }
-}
-
 fn main_menu(_: On<Start<MainMenu>>, mut commands: Commands) {
     commands.set_state(GameState::MainMenu);
-}
-
-fn lock_cursor(
-    mut cursor_options: Single<&mut CursorOptions>,
-    _disable_fps_camera: ResMut<DisableFpsCameraControl>,
-    mut crosshair: Query<&mut Visibility, With<Crosshair>>,
-) {
-    cursor_options.visible = false;
-    cursor_options.grab_mode = CursorGrabMode::Locked;
-    // disable_fps_camera.0 = false;
-    let Ok(mut visibility) = crosshair.single_mut() else {
-        return;
-    };
-    *visibility = Visibility::Visible;
-}
-
-#[derive(InputAction)]
-#[action_output(bool)]
-struct DespawnCube;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-struct Attack;
-
-#[derive(Component)]
-struct Lifetime(Timer);
-
-fn play_menu_music(asset_server: Res<AssetServer>, mut commands: Commands) {
-    commands.spawn((
-        SamplePlayer::new(asset_server.load("menu_music.mp3")).looping(),
-        DespawnOnExit(GameState::MainMenu),
-    ));
-}
-
-fn play_music(asset_server: Res<AssetServer>, mut commands: Commands) {
-    commands.spawn((
-        SamplePlayer::new(asset_server.load("music.mp3")).looping(),
-        DespawnOnExit(GameState::InGame),
-    ));
-}
-
-pub const DESPAWN_RANGE: f32 = f32::INFINITY;
-pub const DAMAGE: i32 = 7;
-pub const ATTACK_RANGE: f32 = 10.0;
-
-fn attack(
-    _: On<Start<Attack>>,
-    selected: ResMut<Selected>,
-    player: Query<&Transform, With<PlayerCharacter>>,
-    mut target: Query<(&mut HitPoints, &Transform)>,
-) {
-    let Ok(player_transform) = player.single() else {
-        return;
-    };
-    let Some(entity) = selected.0 else {
-        return;
-    };
-    let Ok((mut target_hit_points, target_transform)) = target.get_mut(entity) else {
-        return;
-    };
-    if player_transform
-        .translation
-        .distance(target_transform.translation)
-        <= ATTACK_RANGE
-    {
-        target_hit_points.hit_points -= DAMAGE;
-    }
-}
-
-fn despawn_zero_hp(
-    mut selected: ResMut<Selected>,
-    query: Query<(Entity, &HitPoints, &Transform)>,
-    effect: Res<CubeParticleEffect>,
-    asset_server: Res<AssetServer>,
-    mut commands: Commands,
-) {
-    for (entity, hit_points, transform) in query {
-        if hit_points.hit_points <= 0 {
-            commands.spawn(SamplePlayer::new(asset_server.load("crunch.wav")));
-            commands.entity(entity).despawn();
-            commands.spawn((
-                ParticleEffect::new(effect.0.clone()),
-                *transform,
-                Lifetime(Timer::from_seconds(2.0, TimerMode::Once)),
-            ));
-            if selected.0 == Some(entity) {
-                selected.0 = None;
-            }
-        }
-    }
-}
-
-fn despawn_cube(
-    _: On<Start<DespawnCube>>,
-    mut selected: ResMut<Selected>,
-    cube: Query<(Entity, &Transform), With<Cube>>,
-    effect: Res<CubeParticleEffect>,
-    asset_server: Res<AssetServer>,
-    mut commands: Commands,
-) {
-    if let Some(entity) = selected.0 {
-        if let Ok((entity, transform)) = cube.get(entity) {
-            commands.spawn(SamplePlayer::new(asset_server.load("crunch.wav")));
-            commands.entity(entity).despawn();
-            commands.spawn((
-                ParticleEffect::new(effect.0.clone()),
-                *transform,
-                Lifetime(Timer::from_seconds(2.0, TimerMode::Once)),
-            ));
-            selected.0 = None;
-        }
-    }
-}
-
-fn tick_lifetimes(
-    mut commands: Commands,
-    time: Res<Time>,
-    mut query: Query<(Entity, &mut Lifetime)>,
-) {
-    for (entity, mut lifetime) in &mut query {
-        if lifetime.0.tick(time.delta()).just_finished() {
-            commands.entity(entity).despawn();
-        }
-    }
-}
-
-fn raycast_from_center(
-    player_collider_entity: Query<Entity, (With<PlayerCharacter>, With<Collider>)>,
-    spatial_query: SpatialQuery,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
-    window_query: Query<&Window>,
-    mut hovered: ResMut<Hovered>,
-    disable_fps_camera_control: Res<DisableFpsCameraControl>,
-) {
-    let Ok((camera, camera_transform)) = camera_query.single() else {
-        return;
-    };
-    let Ok(window) = window_query.single() else {
-        return;
-    };
-    let Ok(player_collider_entity) = player_collider_entity.single() else {
-        return;
-    };
-
-    // Center of the screen in logical (not physical) pixels.
-    let screen_origin = if disable_fps_camera_control.0 {
-        window.cursor_position().unwrap_or(Vec2::ZERO)
-    } else {
-        return;
-        // window.size() / 2.0
-    };
-
-    // Screen space -> world ray. Returns Err if the camera has no usable
-    // viewport/projection this frame.
-    let Ok(ray) = camera.viewport_to_world(camera_transform, screen_origin) else {
-        return;
-    };
-
-    if let Some(hit) = spatial_query.cast_ray(
-        ray.origin,
-        ray.direction, // already a Dir3
-        f32::MAX,      // max distance
-        true,          // treat shapes as solid (hit registers if origin is inside)
-        &SpatialQueryFilter::from_excluded_entities([player_collider_entity]),
-    ) {
-        hovered.0 = Some((hit.entity, hit.distance));
-    } else {
-        hovered.0 = None;
-    }
-}
-
-#[derive(Resource)]
-pub struct Hovered(pub Option<(Entity, f32)>);
-
-#[derive(Resource)]
-pub struct Selected(pub Option<Entity>);
-
-pub const SELECT_RANGE: f32 = 50.0;
-
-fn select(
-    _event: On<Fire<Select>>,
-    hovered: Res<Hovered>,
-    mut selected: ResMut<Selected>,
-    query: Query<Entity, With<Selectable>>,
-) {
-    if let Some((entity, distance)) = hovered.0 {
-        if query.get(entity).is_ok() {
-            if distance < SELECT_RANGE {
-                selected.0 = Some(entity);
-            }
-        }
-    }
-}
-
-fn deselect(_event: On<Fire<Deselect>>, mut selected: ResMut<Selected>) {
-    selected.0 = None;
 }
 
 fn asset_loaded(
@@ -551,7 +320,7 @@ struct Cubemap {
     image_handle: Option<Handle<Image>>,
 }
 
-fn unlock_cursor_menu(
+fn unlock_cursor_after_rotation(
     _: On<Complete<RotateCamera>>,
     mut cursor_options: Single<&mut CursorOptions>,
     mut disable_fps_camera: ResMut<DisableFpsCameraControl>,
@@ -560,7 +329,7 @@ fn unlock_cursor_menu(
     disable_fps_camera.0 = true;
 }
 
-fn lock_cursor_menu(
+fn lock_cursor_for_rotation(
     _: On<Fire<RotateCamera>>,
     mut cursor_options: Single<&mut CursorOptions>,
     mut disable_fps_camera: ResMut<DisableFpsCameraControl>,
@@ -568,6 +337,43 @@ fn lock_cursor_menu(
 ) {
     cursor_options.grab_mode = CursorGrabMode::Locked;
     disable_fps_camera.0 = false;
-    cursor_options.grab_mode = CursorGrabMode::Locked;
     hovered.0 = None;
+}
+
+fn on_jump(
+    _: On<Fire<Jump>>,
+    mut controllers: Query<(
+        &CharacterMovementSettings,
+        &mut LinearVelocity,
+        Has<Grounded>,
+    )>,
+) {
+    for (movement, mut linear_velocity, is_grounded) in &mut controllers {
+        if is_grounded {
+            linear_velocity.y = movement.jump_impulse;
+        }
+    }
+}
+
+fn on_movement_stop(_: On<Complete<Movement>>, mut controllers: Query<&mut DesiredMotion>) {
+    for mut acceleration in &mut controllers {
+        acceleration.0 = Vec3::ZERO;
+    }
+}
+
+/// Responds to [`MovementAction`] events and moves character controllers accordingly.
+fn on_movement(
+    movement_event: On<Fire<Movement>>,
+    fps_camera: Query<&FpsCamera>,
+    mut controllers: Query<(&CharacterMovementSettings, &mut DesiredMotion)>,
+) {
+    let Ok(fps_camera) = fps_camera.single() else {
+        return;
+    };
+    for (_movement, mut acceleration) in &mut controllers {
+        let rotation = Rot2::radians(fps_camera.yaw);
+        let acceleration2 = rotation * movement_event.value;
+        acceleration.0.x = -acceleration2.x;
+        acceleration.0.z = acceleration2.y;
+    }
 }

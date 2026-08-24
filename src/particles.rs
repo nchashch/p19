@@ -54,7 +54,7 @@ fn setup(mut effects: ResMut<Assets<EffectAsset>>, mut commands: Commands) {
         // Move the expression module into the asset
         module,
     )
-    .with_name("MyEffect")
+    .with_name("blood_splatter")
     .init(init_pos)
     .init(init_vel)
     .init(init_lifetime)
