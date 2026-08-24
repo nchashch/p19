@@ -19,6 +19,11 @@ impl Plugin for PConsolePlugin {
         ))
         .add_systems(Startup, (disable_fps_overlay, disable_physics_debug))
         .add_console_command(ConsoleCommand::new(
+            "controls",
+            "controls - get control scheme",
+            controls_cmd,
+        ))
+        .add_console_command(ConsoleCommand::new(
             "respawn",
             "respawn - respawn player",
             respawn_cmd,
@@ -49,6 +54,21 @@ impl Plugin for PConsolePlugin {
             physics_debug_cmd,
         ));
     }
+}
+
+fn controls_cmd(In(_args): CommandArgs) -> String {
+    r#"
+    [WASD] move
+    [RMB] rotate camera
+    [LMB] select
+    [ESC] deselect
+    [E] spawn cube
+    [R] spawn NPC
+    [T] kill selected
+    [F] attack selected
+    [F1] main menu
+    "#
+    .to_string()
 }
 
 fn respawn_cmd(In(_args): CommandArgs, mut commands: Commands) -> String {

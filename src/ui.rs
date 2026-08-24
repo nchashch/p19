@@ -15,10 +15,7 @@ impl Plugin for PrototypeUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(show_tooltip);
         app.add_observer(hide_tooltip);
-        app.add_systems(
-            Update,
-            (update_player_stats, update_console, update_selected_frame),
-        );
+        app.add_systems(Update, update_data_frame);
     }
 }
 
@@ -50,16 +47,10 @@ fn main_menu() -> impl Scene {
 }
 
 pub fn in_game_scene() -> impl SceneList {
-    bsn_list![ui(), frame(), console(), player_stats()]
+    bsn_list![data_frame(),]
 }
 
-#[derive(Component, Clone, Default)]
-struct SelectedFrame;
-
-#[derive(Component, Clone, Default)]
-struct SelectedText;
-
-fn console() -> impl Scene {
+fn data_frame() -> impl Scene {
     bsn! {
         Node {
             width: percent(100),
@@ -72,97 +63,7 @@ fn console() -> impl Scene {
             Children [
                 (
                     Text("")
-                    Console
-                ),
-            ]
-        ]
-        DespawnOnExit::<GameState>(GameState::InGame)
-    }
-}
-
-#[derive(Component, Clone, Default)]
-struct PlayerStats;
-
-fn player_stats() -> impl Scene {
-    bsn! {
-        Node {
-            width: percent(100),
-            height: percent(100),
-            align_items: AlignItems::End,
-            justify_content: JustifyContent::End,
-        }
-        Children[
-            panel(px(400), px(400))
-            Children [
-                (
-                    Text("")
-                    PlayerStats
-                ),
-            ]
-        ]
-        DespawnOnExit::<GameState>(GameState::InGame)
-    }
-}
-
-fn frame() -> impl Scene {
-    bsn! {
-        SelectedFrame
-        Node {
-            width: percent(100),
-            height: percent(100),
-            align_items: AlignItems::Start,
-            justify_content: JustifyContent::Start,
-        }
-        Children[
-            panel(px(400), px(400))
-            Children [
-                (
-                    Text("Frame of selected")
-                    SelectedText
-                ),
-            ]
-        ]
-        DespawnOnExit::<GameState>(GameState::InGame)
-    }
-}
-
-fn ui() -> impl Scene {
-    bsn! {
-        Node {
-            width: percent(100),
-            height: percent(100),
-            align_items: AlignItems::End,
-            justify_content: JustifyContent::Start,
-        }
-        Children[
-            panel(px(400), px(400))
-            Children [
-                (
-                    Text("[WASD] move")
-                ),
-                (
-                    Text("[RMB] rotate camera")
-                ),
-                (
-                    Text("[LMB] select")
-                ),
-                (
-                    Text("[ESC] deselect")
-                ),
-                (
-                    Text("[E] spawn cube")
-                ),
-                (
-                    Text("[R] spawn NPC")
-                ),
-                (
-                    Text("[T] kill selected")
-                ),
-                (
-                    Text("[F] attack selected")
-                ),
-                (
-                    Text("[F1] main menu")
+                    DataFrame
                 ),
             ]
         ]
@@ -301,12 +202,14 @@ fn hide_tooltip(_out: On<Pointer<Out>>, q: Query<Entity, With<TooltipUi>>, mut c
 }
 
 #[derive(Component, Clone, Default, Debug)]
-struct Console;
+struct DataFrame;
 
-fn update_console(
-    mut query: Query<&mut Text, With<Console>>,
+fn update_data_frame(
+    mut query: Query<&mut Text, With<DataFrame>>,
     hovered: Res<Hovered>,
     selected: Res<Selected>,
+    player: Query<&HitPoints, With<PlayerCharacter>>,
+    hit_points: Query<&HitPoints>,
 ) {
     if !hovered.is_changed() && !selected.is_changed() {
         return;
@@ -314,51 +217,29 @@ fn update_console(
     let Ok(mut text) = query.single_mut() else {
         return;
     };
-    if let Some((entity, distance)) = hovered.0 {
-        text.0 = format!("Hovered: {:?}\nDistance: {:.2}", entity, distance);
+
+    if let Ok(hit_points) = player.single() {
+        text.0 = format!(
+            "Press ~ for console\n\nHP: {}/{}\nDamage: {}\nAttack range: {}\nSelect range: {}\n\n",
+            hit_points.hit_points, hit_points.max_hit_points, DAMAGE, ATTACK_RANGE, SELECT_RANGE,
+        );
     } else {
-        text.0 = format!("Hovered: n/a\nDistance: n/a");
+        return;
+    };
+
+    if let Some((entity, distance)) = hovered.0 {
+        text.0 += &format!("Hovered: {:?}\nDistance: {:.2}\n\n", entity, distance);
+    } else {
+        text.0 += &format!("Hovered: n/a\nDistance: n/a\n\n");
     }
-}
 
-fn update_player_stats(
-    mut text: Query<&mut Text, With<PlayerStats>>,
-    player: Query<&HitPoints, With<PlayerCharacter>>,
-) {
-    let Ok(hit_points) = player.single() else {
-        return;
-    };
-    let Ok(mut text) = text.single_mut() else {
-        return;
-    };
-    text.0 = format!(
-        "HP: {}/{}\nDamage: {}\nAttack range: {}\nSelect range: {}",
-        hit_points.hit_points, hit_points.max_hit_points, DAMAGE, ATTACK_RANGE, SELECT_RANGE,
-    );
-}
-
-fn update_selected_frame(
-    mut frame: Query<&mut Visibility, With<SelectedFrame>>,
-    mut text: Query<&mut Text, With<SelectedText>>,
-    selected: Res<Selected>,
-    query: Query<&HitPoints>,
-) {
-    let Ok(mut visibility) = frame.single_mut() else {
-        return;
-    };
-    let Ok(mut text) = text.single_mut() else {
-        return;
-    };
     if let Some(entity) = selected.0 {
-        *visibility = Visibility::Visible;
-        text.0 = format!("Selected: {:?}", entity);
-        if let Some(hit_points) = query.get(entity).ok() {
+        text.0 += &format!("Selected: {:?}\n", entity);
+        if let Some(hit_points) = hit_points.get(entity).ok() {
             text.0 += &format!(
-                "\nHP: {}/{}",
+                "HP: {}/{}\n",
                 hit_points.hit_points, hit_points.max_hit_points
             );
         }
-    } else {
-        *visibility = Visibility::Hidden;
     }
 }
