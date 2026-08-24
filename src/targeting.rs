@@ -112,21 +112,32 @@ fn deselect(_event: On<Fire<Deselect>>, mut selected: ResMut<Selected>) {
 pub struct Selectable;
 
 #[derive(Component)]
-pub struct NoOutline;
+pub struct Outlined;
 
-fn add_outline_component(mut commands: Commands, query: Query<Entity, With<NoOutline>>) {
-    for entity in query {
-        commands
-            .entity(entity)
-            .insert((
-                OutlineVolume {
-                    visible: false,
-                    width: 4.0,
-                    colour: Color::srgb(1.0, 1.0, 1.0),
-                },
-                AsyncWorldInheritOutline::default(),
-            ))
-            .remove::<NoOutline>();
+fn add_outline_component(
+    mut commands: Commands,
+    query: Query<Entity, (With<Selectable>, Without<Outlined>)>,
+    children: Query<&Children>,
+    world_roots: Query<(), With<WorldAssetRoot>>,
+) {
+    for selectable in query {
+        // AsyncWorldInheritOutline only starts inheriting once the *same* entity's own
+        // WorldAssetRoot has finished loading (it checks WorldInstance on itself, not on
+        // an ancestor) — so it has to go on whichever descendant actually carries
+        // WorldAssetRoot, not on `selectable` itself if the model lives on a child (e.g. Npc).
+        for entity in std::iter::once(selectable).chain(children.iter_descendants(selectable)) {
+            if world_roots.contains(entity) {
+                commands.entity(entity).insert((
+                    OutlineVolume {
+                        visible: false,
+                        width: 4.0,
+                        colour: Color::srgb(1.0, 1.0, 1.0),
+                    },
+                    AsyncWorldInheritOutline::default(),
+                ));
+            }
+        }
+        commands.entity(selectable).insert(Outlined);
     }
 }
 

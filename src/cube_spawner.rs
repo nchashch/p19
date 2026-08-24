@@ -1,8 +1,4 @@
-use crate::{
-    GameState,
-    fps_controller::FpsCamera,
-    targeting::{NoOutline, Selectable},
-};
+use crate::{GameState, fps_controller::FpsCamera, targeting::Selectable};
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use rand::distr::{Distribution, Uniform};
@@ -45,7 +41,6 @@ pub fn spawn_cube(
                 max_hit_points: 100,
             },
             Selectable,
-            NoOutline,
             transform.compute_transform(),
             AngularVelocity(angular_velocity),
             LinearVelocity(linear_velocity),
