@@ -10,11 +10,13 @@ impl Plugin for PAnimationPlugin {
         app.add_systems(Startup, load_rig_gltf);
         app.add_systems(Update, build_graph_when_loaded);
         app.add_observer(bind_animation_player);
+        app.add_observer(on_play_animation);
     }
 }
 
 const MODEL: &str = "rig.glb";
-const ANIMATION_NAME: &str = "metarigAction";
+// const ANIMATION_NAME: &str = "metarigAction";
+const ANIMATION_NAME: &str = "idle";
 
 #[derive(Resource)]
 struct Animations {
@@ -89,6 +91,32 @@ fn bind_animation_player(
             .insert((AnimationGraphHandle(animations.graph.clone()), transitions));
         commands.entity(ready.entity).insert(AnimationRoot(child));
     }
+}
+
+#[derive(Event)]
+pub struct PlayAnimation {
+    pub root: Entity,
+    pub name: String,
+}
+
+fn on_play_animation(
+    event: On<PlayAnimation>,
+    roots: Query<&AnimationRoot>,
+    animations: Res<Animations>,
+    mut targets: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
+) {
+    let Ok(AnimationRoot(entity)) = roots.get(event.root) else {
+        return; // rig hasn't finished loading yet
+    };
+    let Some(&node) = animations.nodes.get(&event.name) else {
+        return;
+    };
+    let Ok((mut player, mut transitions)) = targets.get_mut(*entity) else {
+        return;
+    };
+    transitions
+        .play(&mut player, node, Duration::from_millis(250))
+        .repeat();
 }
 
 enum DragonAction {

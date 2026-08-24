@@ -3,6 +3,7 @@ use bevy::dev_tools::fps_overlay::FpsOverlayPlugin;
 use bevy::{dev_tools::fps_overlay::FpsOverlayConfig, prelude::*};
 use chill_bevy_console::{ChillConsole, CommandArgs, ConsoleAppExt, ConsoleCommand};
 
+use crate::animation::PlayAnimation;
 use crate::{
     cube_spawner::Cube, npc_spawner::Npc, player_character::RespawnPlayer, targeting::Selected,
 };
@@ -31,6 +32,11 @@ impl Plugin for PConsolePlugin {
             "despawn_npcs",
             "despawn_npcs - despawn all npcs",
             despawn_npcs_cmd,
+        ))
+        .add_console_command(ConsoleCommand::new(
+            "play_animation",
+            "play_animation <clip_name> - play animation on selected entity",
+            play_animation_cmd,
         ))
         .add_console_command(ConsoleCommand::new(
             "fps",
@@ -74,6 +80,28 @@ fn despawn_npcs_cmd(
         commands.entity(npc).despawn();
     }
     "npcs despawned".to_string()
+}
+
+fn play_animation_cmd(
+    In(args): CommandArgs,
+    selected: Res<Selected>,
+    children: Query<&Children>,
+    mut commands: Commands,
+) -> String {
+    let Some(selected) = selected.0 else {
+        return format!("nothing selected");
+    };
+    let Some(clip_name) = args.get(0) else {
+        return format!("please provide clip name");
+    };
+    for entity in std::iter::once(selected).chain(children.iter_descendants(selected)) {
+        commands.trigger(PlayAnimation {
+            root: entity,
+            name: clip_name.to_string(),
+        });
+    }
+
+    format!("playing clip \"{clip_name}\"")
 }
 
 fn fps_cmd(In(_args): CommandArgs, mut fps_overlay_config: ResMut<FpsOverlayConfig>) -> String {
