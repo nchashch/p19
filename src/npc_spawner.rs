@@ -1,7 +1,7 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
-use crate::{game_state::GameState, targeting::Selectable};
+use crate::{cube_spawner::HitPoints, game_state::GameState, targeting::Selectable};
 
 pub struct NpcSpawnerPlugin;
 
@@ -31,6 +31,11 @@ pub fn spawn_npc(
         commands
             .spawn((
                 Npc,
+                Name::new("NPC"),
+                HitPoints {
+                    hit_points: 100,
+                    max_hit_points: 100,
+                },
                 InheritedVisibility::default(),
                 Transform::from_translation(translation),
                 DespawnOnEnter(GameState::MainMenu),

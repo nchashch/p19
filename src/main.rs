@@ -18,6 +18,7 @@ mod cube_spawner;
 mod fps_controller;
 mod game_state;
 mod loading;
+mod nameplate;
 mod npc_spawner;
 mod particles;
 mod player_character;
@@ -34,7 +35,10 @@ macro_rules! add_observers_run_if {
 }
 pub(crate) use add_observers_run_if;
 
-use crate::{animation::PAnimationPlugin, loading::LoadingPlugin, npc_spawner::NpcSpawnerPlugin};
+use crate::{
+    animation::PAnimationPlugin, loading::LoadingPlugin, nameplate::NameplatePlugin,
+    npc_spawner::NpcSpawnerPlugin,
+};
 
 fn main() {
     App::new().add_plugins(Prototype19).run();
@@ -58,11 +62,12 @@ impl Plugin for Prototype19 {
             PlayerCharacterPlugin,
             FpsControllerPlugin,
             GameStatePlugin,
+            NameplatePlugin,
             ui::PrototypeUiPlugin,
         ))
         .insert_resource(GlobalAmbientLight {
             color: Color::WHITE,
-            brightness: 10.,
+            brightness: 100.,
             ..default()
         })
         .register_type::<ColliderConstructor>()

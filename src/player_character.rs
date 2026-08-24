@@ -106,6 +106,8 @@ pub fn respawn_player(
     commands
         .spawn((
             PlayerCharacter,
+            InheritedVisibility::default(),
+            Name::new("Player"),
             HitPoints {
                 hit_points: 100,
                 max_hit_points: 100,
@@ -221,7 +223,7 @@ pub fn respawn_player(
     // environment map, use an appropriate color and brightness to match
     commands.insert_resource(GlobalAmbientLight {
         color: Color::srgb_u8(210, 220, 240),
-        brightness: 1.0,
+        brightness: 100.0,
         ..default()
     });
 

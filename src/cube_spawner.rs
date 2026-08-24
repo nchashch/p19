@@ -36,6 +36,7 @@ pub fn spawn_cube(
         // commands.spawn(SamplePlayer::new(asset_server.load("explosion.wav")));
         commands.spawn((
             Cube,
+            Name::new("Cube"),
             HitPoints {
                 hit_points: 100,
                 max_hit_points: 100,
