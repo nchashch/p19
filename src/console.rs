@@ -97,8 +97,15 @@ fn play_animation_cmd(
         for clip_name in animations.nodes.keys() {
             clip_names += &format!(" {clip_name}\n");
         }
-        return format!("available clip names:\n{clip_names}");
+        return format!("available clips:\n{clip_names}");
     };
+    if !animations.nodes.contains_key(clip_name) {
+        let mut clip_names = "".to_string();
+        for clip_name in animations.nodes.keys() {
+            clip_names += &format!(" {clip_name}\n");
+        }
+        return format!("clip {clip_name} doesn't exist, available clips:\n{clip_names}");
+    }
     for entity in std::iter::once(selected).chain(children.iter_descendants(selected)) {
         commands.trigger(PlayAnimation {
             root: entity,
