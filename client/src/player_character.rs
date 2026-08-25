@@ -216,11 +216,13 @@ pub fn respawn_player(
                                 Msaa::Off,
                                 TemporalAntiAliasing::default(),
                                 ScreenSpaceAmbientOcclusion::default(),
-                                Skybox {
-                                    image: Some(skybox_handle.clone()),
-                                    brightness: 1000.0,
-                                    ..default()
-                                },
+                                /*
+                                                                Skybox {
+                                                                    image: Some(skybox_handle.clone()),
+                                                                    brightness: 1000.0,
+                                                                    ..default()
+                                                                },
+                                */
                             ));
                         });
                 });
@@ -231,7 +233,7 @@ pub fn respawn_player(
     // environment map, use an appropriate color and brightness to match
     commands.insert_resource(GlobalAmbientLight {
         color: Color::srgb_u8(210, 220, 240),
-        brightness: 100.0,
+        brightness: 400.0,
         ..default()
     });
 

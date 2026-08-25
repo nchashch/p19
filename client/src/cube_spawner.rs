@@ -29,7 +29,7 @@ pub fn spawn_cube(
     time: Res<Time>,
     spatial_query: SpatialQuery,
 ) {
-    let rng = NoiseRng((time.elapsed_secs() * 1_000_000.0) as u32);
+    let rng = NoiseRng(time.elapsed_secs().to_bits());
     let Ok(fps_camera) = fps_camera.single() else {
         return;
     };
@@ -44,7 +44,7 @@ pub fn spawn_cube(
             )
             .is_empty()
         {
-            continue; // would clip existing geometry — don't spawn stuck-in-geometry
+            // continue; // would clip existing geometry — don't spawn stuck-in-geometry
         }
         let angular_velocity = Vec3::new(
             random_angular_component(&rng, 0),

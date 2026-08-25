@@ -55,7 +55,7 @@ pub fn spawn_npc(
         }
         const SEED: u32 = 112;
         let rng = NoiseRng(SEED); // seed: u32 — anything, e.g. an entity index
-        let bits = rng.rand_u32((time.elapsed_secs() * 1000_000.0) as u32); // input: u32, or UVec2/3/4, IVec2/3/4 — a "coordinate"
+        let bits = rng.rand_u32(time.elapsed_secs().to_bits()); // input: u32, or UVec2/3/4, IVec2/3/4 — a "coordinate"
         let normalized: f32 = UNorm.any_value(bits); // UNorm maps bits -> f32 in (0, 1)
         let random_angle = normalized * TAU; // 0..2π
         commands
