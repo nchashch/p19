@@ -1,6 +1,6 @@
 use crate::{
     add_observers_run_if,
-    combat::{AttackAction, CombatPlugin, DespawnCube},
+    combat::{AttackAction, CombatPlugin, KillAction},
     cube_spawner::SpawnCube,
     fps_controller::{Crosshair, DisableFpsCameraControl, FpsCamera, FpsCameraRotation},
     game_state::GameState,
@@ -8,13 +8,6 @@ use crate::{
     targeting::{Deselect, Hovered, Select, TargetingPlugin},
 };
 use avian3d::prelude::*;
-use shared::character_controller::{
-    Character, CharacterCollisions, CharacterController, CharacterControllerPlugin,
-    CharacterMovementSettings, DesiredMotion, GroundDetection, Idle, JumpInput, MovementInput,
-};
-use shared::combat::HitPoints;
-use shared::cube_spawner::CubeSpawner;
-use shared::npc_spawner::NpcSpawner;
 use bevy::{
     anti_alias::taa::TemporalAntiAliasing,
     light::Skybox,
@@ -25,6 +18,13 @@ use bevy::{
 };
 use bevy_enhanced_input::prelude::{Press, *};
 use chill_bevy_console::console_closed;
+use shared::character_controller::{
+    Character, CharacterCollisions, CharacterController, CharacterControllerPlugin,
+    CharacterMovementSettings, DesiredMotion, GroundDetection, Idle, JumpInput, MovementInput,
+};
+use shared::combat::{Gcd, HitPoints};
+use shared::cube_spawner::CubeSpawner;
+use shared::npc_spawner::NpcSpawner;
 
 pub struct PlayerCharacterPlugin;
 
@@ -118,6 +118,7 @@ pub fn respawn_player(
                     hit_points: 100,
                     max_hit_points: 100,
                 },
+                Gcd::default(),
             ),
             InheritedVisibility::default(),
             character_movement_settings,
@@ -151,7 +152,7 @@ pub fn respawn_player(
                     Press::new(1.0),
                     bindings![KeyCode::Space, GamepadButton::South],
                 ));
-                context.spawn((Action::<DespawnCube>::new(), bindings![KeyCode::KeyT]));
+                context.spawn((Action::<KillAction>::new(), bindings![KeyCode::KeyT]));
 
                 context.spawn((Action::<AttackAction>::new(), bindings![KeyCode::KeyF]));
 

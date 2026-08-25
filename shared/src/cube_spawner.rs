@@ -7,7 +7,7 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use noiz::rng::{AnyValueFromBits, NoiseRng, SNorm};
 
-use crate::combat::HitPoints;
+use crate::combat::{Gcd, HitPoints};
 
 pub struct SharedCubeSpawnerPlugin;
 
@@ -29,11 +29,13 @@ pub struct CubeSpawner;
 pub const CUBE_LAUNCH_SPEED: f32 = 100.0;
 
 /// A request to spawn a cube at each `CubeSpawner`, launched along `aim_direction` — not yet
-/// confirmed (a spawner currently overlapping geometry may reject it). Fired by client input
-/// today; a future server would fire it from a received network message instead. `aim_direction`
-/// is supplied by the caller since `shared` has no camera/look-direction concept of its own.
+/// confirmed (a spawner currently overlapping geometry may reject it, or `caster` may still be on
+/// its global cooldown). Fired by client input today; a future server would fire it from a
+/// received network message instead. `aim_direction` is supplied by the caller since `shared` has
+/// no camera/look-direction concept of its own.
 #[derive(Event)]
 pub struct SpawnCubeRequest {
+    pub caster: Entity,
     pub aim_direction: Vec3,
 }
 
@@ -54,9 +56,18 @@ fn spawn_cube(
     request: On<SpawnCubeRequest>,
     mut commands: Commands,
     cube_spawner: Query<&GlobalTransform, With<CubeSpawner>>,
+    mut casters: Query<&mut Gcd>,
     time: Res<Time>,
     spatial_query: SpatialQuery,
 ) {
+    let Ok(mut gcd) = casters.get_mut(request.caster) else {
+        return;
+    };
+    if !gcd.0.is_finished() {
+        return; // still on global cooldown
+    }
+    gcd.0.reset();
+
     let rng = NoiseRng(time.elapsed_secs().to_bits());
     for transform in cube_spawner {
         let shape = Collider::cuboid(2.0, 2.0, 2.0);

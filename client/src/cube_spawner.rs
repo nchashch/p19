@@ -1,4 +1,7 @@
-use crate::{fps_controller::FpsCamera, game_state::GameState, targeting::Selectable};
+use crate::{
+    fps_controller::FpsCamera, game_state::GameState, player_character::PlayerCharacter,
+    targeting::Selectable,
+};
 use bevy::prelude::*;
 use shared::cube_spawner::{CubeSpawned, SpawnCubeRequest};
 
@@ -19,13 +22,20 @@ pub struct SpawnCube;
 fn request_spawn_cube(
     _event: On<SpawnCube>,
     fps_camera: Query<&FpsCamera>,
+    player: Query<Entity, With<PlayerCharacter>>,
     mut commands: Commands,
 ) {
     let Ok(fps_camera) = fps_camera.single() else {
         return;
     };
+    let Ok(caster) = player.single() else {
+        return;
+    };
     let aim_direction = Vec3::Z.rotate_x(fps_camera.pitch).rotate_y(fps_camera.yaw);
-    commands.trigger(SpawnCubeRequest { aim_direction });
+    commands.trigger(SpawnCubeRequest {
+        caster,
+        aim_direction,
+    });
 }
 
 fn on_cube_spawned(

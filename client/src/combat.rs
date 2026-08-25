@@ -2,14 +2,16 @@
 //! The actual range check, damage application, and death detection live in `shared::combat` —
 //! this module only reacts to the events that logic fires, it doesn't decide anything itself.
 
-use crate::{add_observers_run_if, particles::CubeParticleEffect, player_character::PlayerCharacter, targeting::Selected};
+use crate::{
+    add_observers_run_if, particles::CubeParticleEffect, player_character::PlayerCharacter,
+    targeting::Selected,
+};
 use bevy::prelude::*;
 use bevy_enhanced_input::prelude::*;
 use bevy_hanabi::prelude::*;
 use bevy_seedling::prelude::*;
 use chill_bevy_console::console_closed;
-use shared::cube_spawner::Cube;
-use shared::combat::{Attack, AttackAttempt, EntityDied, HitPoints, SharedCombatPlugin};
+use shared::combat::{Attack, AttackAttempt, EntityDied, Kill, KillAttempt, SharedCombatPlugin};
 
 pub struct CombatPlugin;
 
@@ -18,8 +20,9 @@ impl Plugin for CombatPlugin {
         app.add_plugins(SharedCombatPlugin);
         app.add_systems(Update, tick_lifetimes);
         app.add_observer(on_attack);
+        app.add_observer(on_kill);
         app.add_observer(on_entity_died);
-        add_observers_run_if!(app, console_closed, attack, despawn_cube);
+        add_observers_run_if!(app, console_closed, attack, kill);
     }
 }
 
@@ -29,7 +32,7 @@ pub(crate) struct AttackAction;
 
 #[derive(InputAction)]
 #[action_output(bool)]
-pub(crate) struct DespawnCube;
+pub(crate) struct KillAction;
 
 #[derive(Component)]
 struct Lifetime(Timer);
@@ -51,24 +54,32 @@ fn attack(
     commands.trigger(AttackAttempt { entity, attacker });
 }
 
-/// Debug/console kill: zeroes the selected cube's HP rather than despawning it directly, so it
-/// dies through the same `shared::combat::despawn_zero_hp` path as a real combat death — one
-/// death path, not two.
-fn despawn_cube(
-    _: On<Start<DespawnCube>>,
+/// Input handling only — decides *who* the player wants to kill, not whether it lands.
+/// `shared::combat::resolve_kill` does the range check and zeroes `HitPoints`. Structurally
+/// identical to `attack`, just targeting `KillAttempt` instead of `AttackAttempt`.
+fn kill(
+    _: On<Start<KillAction>>,
     selected: Res<Selected>,
-    mut hit_points: Query<&mut HitPoints, With<Cube>>,
+    player: Query<Entity, With<PlayerCharacter>>,
+    mut commands: Commands,
 ) {
-    if let Some(entity) = selected.0 {
-        if let Ok(mut hit_points) = hit_points.get_mut(entity) {
-            hit_points.hit_points = 0;
-        }
-    }
+    let Ok(killer) = player.single() else {
+        return;
+    };
+    let Some(entity) = selected.0 else {
+        return;
+    };
+    commands.trigger(KillAttempt { entity, killer });
 }
 
 /// Reacts to a confirmed hit — sound only. Animation (attacker's "attack"/"hurt" one-offs) reacts
 /// to the same `Attack` event independently in `animation.rs`.
 fn on_attack(_: On<Attack>, mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.spawn(SamplePlayer::new(asset_server.load("explosion.wav")));
+}
+
+/// Reacts to a confirmed kill — sound only, mirroring `on_attack`.
+fn on_kill(_: On<Kill>, mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(SamplePlayer::new(asset_server.load("explosion.wav")));
 }
 
@@ -103,3 +114,4 @@ fn tick_lifetimes(
         }
     }
 }
+

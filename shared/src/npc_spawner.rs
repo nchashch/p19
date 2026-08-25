@@ -13,7 +13,7 @@ use noiz::{
 };
 
 use crate::character_controller::{Character, Idle};
-use crate::combat::HitPoints;
+use crate::combat::{Gcd, HitPoints};
 
 pub struct SharedNpcSpawnerPlugin;
 
@@ -30,10 +30,12 @@ pub struct Npc;
 pub struct NpcSpawner;
 
 /// A request to spawn an NPC at each `NpcSpawner` — not yet confirmed (a spawner currently
-/// overlapping geometry rejects it). Fired by client input today; a future server would fire it
-/// from a received network message instead.
+/// overlapping geometry rejects it, or `caster` may still be on its global cooldown). Fired by
+/// client input today; a future server would fire it from a received network message instead.
 #[derive(Event)]
-pub struct SpawnNpcRequest;
+pub struct SpawnNpcRequest {
+    pub caster: Entity,
+}
 
 /// Fired once an NPC has actually been spawned — the fact client-side presentation (model,
 /// selectability, despawn-on-menu) reacts to. `facing_yaw` is the spawn-time random rotation,
@@ -45,12 +47,21 @@ pub struct NpcSpawned {
 }
 
 fn spawn_npc(
-    _request: On<SpawnNpcRequest>,
+    request: On<SpawnNpcRequest>,
     mut commands: Commands,
     npc_spawner: Query<&GlobalTransform, With<NpcSpawner>>,
+    mut casters: Query<&mut Gcd>,
     time: Res<Time>,
     spatial_query: SpatialQuery,
 ) {
+    let Ok(mut gcd) = casters.get_mut(request.caster) else {
+        return;
+    };
+    if !gcd.0.is_finished() {
+        return; // still on global cooldown
+    }
+    gcd.0.reset();
+
     for transform in npc_spawner {
         let translation = transform.translation();
         let shape = Collider::capsule(0.4, 1.0);

@@ -1,4 +1,6 @@
-use crate::{game_state::GameState, targeting::Selectable};
+use crate::{
+    game_state::GameState, player_character::PlayerCharacter, targeting::Selectable,
+};
 use bevy::prelude::*;
 use shared::npc_spawner::{NpcSpawned, SpawnNpcRequest};
 
@@ -15,8 +17,15 @@ impl Plugin for NpcSpawnerPlugin {
 #[derive(Event)]
 pub struct SpawnNpc;
 
-fn request_spawn_npc(_event: On<SpawnNpc>, mut commands: Commands) {
-    commands.trigger(SpawnNpcRequest);
+fn request_spawn_npc(
+    _event: On<SpawnNpc>,
+    player: Query<Entity, With<PlayerCharacter>>,
+    mut commands: Commands,
+) {
+    let Ok(caster) = player.single() else {
+        return;
+    };
+    commands.trigger(SpawnNpcRequest { caster });
 }
 
 fn on_npc_spawned(spawned: On<NpcSpawned>, asset_server: Res<AssetServer>, mut commands: Commands) {
