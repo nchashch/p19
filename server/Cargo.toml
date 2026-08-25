@@ -1,0 +1,11 @@
+[package]
+name = "server"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Declared directly (not via workspace = true) since this needs a different, smaller feature set
+# than the client's `[workspace.dependencies] bevy` entry — Cargo doesn't allow overriding
+# default-features on an inherited workspace dependency.
+bevy = { version = "0.19.0", default-features = false }
+shared = { path = "../shared" }

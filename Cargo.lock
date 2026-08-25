@@ -2602,6 +2602,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
+name = "client"
+version = "0.1.0"
+dependencies = [
+ "audionimbus",
+ "avian3d",
+ "bevy",
+ "bevy_asset_loader",
+ "bevy_enhanced_input",
+ "bevy_hanabi",
+ "bevy_mod_outline",
+ "bevy_quinnet",
+ "bevy_replicon_quinnet",
+ "bevy_seedling",
+ "bevy_skein",
+ "bevy_vello",
+ "chill_bevy_console",
+ "fluent",
+ "noiz",
+ "polyanya",
+ "rerecast",
+ "shared",
+]
+
+[[package]]
 name = "clipboard-win"
 version = "5.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5953,29 +5977,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
-name = "prototype_19"
-version = "0.1.0"
-dependencies = [
- "audionimbus",
- "avian3d",
- "bevy",
- "bevy_asset_loader",
- "bevy_enhanced_input",
- "bevy_hanabi",
- "bevy_mod_outline",
- "bevy_quinnet",
- "bevy_replicon_quinnet",
- "bevy_seedling",
- "bevy_skein",
- "bevy_vello",
- "chill_bevy_console",
- "fluent",
- "noiz",
- "polyanya",
- "rerecast",
-]
-
-[[package]]
 name = "pxfm"
 version = "0.1.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6762,12 +6763,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "server"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "shared",
+]
+
+[[package]]
 name = "sharded-slab"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
+]
+
+[[package]]
+name = "shared"
+version = "0.1.0"
+dependencies = [
+ "bevy",
 ]
 
 [[package]]
