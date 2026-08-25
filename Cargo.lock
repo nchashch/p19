@@ -5972,7 +5972,6 @@ dependencies = [
  "fluent",
  "noiz",
  "polyanya",
- "rand 0.10.1",
  "rerecast",
 ]
 

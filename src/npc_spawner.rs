@@ -37,9 +37,22 @@ pub fn spawn_npc(
     asset_server: Res<AssetServer>,
     npc_spawner: Query<&GlobalTransform, With<NpcSpawner>>,
     time: Res<Time>,
+    spatial_query: SpatialQuery,
 ) {
     for transform in npc_spawner {
         let translation = transform.translation();
+        let shape = Collider::capsule(0.4, 1.0);
+        if !spatial_query
+            .shape_intersections(
+                &shape,
+                translation,
+                Quat::IDENTITY,
+                &SpatialQueryFilter::default(),
+            )
+            .is_empty()
+        {
+            continue; // would clip existing geometry — don't spawn stuck-in-geometry
+        }
         const SEED: u32 = 112;
         let rng = NoiseRng(SEED); // seed: u32 — anything, e.g. an entity index
         let bits = rng.rand_u32((time.elapsed_secs() * 1000_000.0) as u32); // input: u32, or UVec2/3/4, IVec2/3/4 — a "coordinate"
@@ -61,7 +74,7 @@ pub fn spawn_npc(
                 Transform::from_translation(translation),
                 DespawnOnEnter(GameState::MainMenu),
                 RigidBody::Dynamic,
-                Collider::capsule(0.4, 1.0),
+                shape,
                 LockedAxes::new()
                     .lock_rotation_x()
                     .lock_rotation_y()

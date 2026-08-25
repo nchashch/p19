@@ -46,6 +46,7 @@ fn attack(
     player: Query<(Entity, &Transform), With<PlayerCharacter>>,
     mut target: Query<(&mut HitPoints, &Transform)>,
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
 ) {
     let Ok((attacker, player_transform)) = player.single() else {
         return;
@@ -63,6 +64,7 @@ fn attack(
     {
         target_hit_points.hit_points -= DAMAGE;
         commands.trigger(Attack { entity, attacker });
+        commands.spawn(SamplePlayer::new(asset_server.load("explosion.wav")));
     }
 }
 
