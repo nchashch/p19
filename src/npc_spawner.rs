@@ -8,7 +8,6 @@ use noiz::{
 };
 
 use crate::{
-    character_controller::CharacterController,
     cube_spawner::HitPoints,
     game_state::GameState,
     player_character::{Character, Idle},

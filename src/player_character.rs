@@ -378,12 +378,12 @@ fn on_movement_stop(
     _: On<Complete<Movement>>,
     mut controllers: Query<&mut DesiredMotion>,
     player: Query<Entity, With<PlayerCharacter>>,
-    mut commands: Commands,
+    _commands: Commands,
 ) {
     for mut acceleration in &mut controllers {
         acceleration.0 = Vec3::ZERO;
     }
-    let Ok(player) = player.single() else {
+    let Ok(_player) = player.single() else {
         return;
     };
 }
@@ -394,7 +394,7 @@ fn on_movement(
     fps_camera: Query<&FpsCamera>,
     mut controllers: Query<(&CharacterMovementSettings, &mut DesiredMotion)>,
     player: Query<Entity, With<PlayerCharacter>>,
-    mut commands: Commands,
+    _commands: Commands,
 ) {
     let Ok(fps_camera) = fps_camera.single() else {
         return;
@@ -405,7 +405,7 @@ fn on_movement(
         acceleration.0.x = -acceleration2.x;
         acceleration.0.z = acceleration2.y;
     }
-    let Ok(player) = player.single() else {
+    let Ok(_player) = player.single() else {
         return;
     };
 }
