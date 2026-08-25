@@ -46,7 +46,7 @@ fn main_menu() -> impl Scene {
 }
 
 pub fn in_game_scene() -> impl SceneList {
-    bsn_list![data_frame(),]
+    bsn_list![data_frame(), hotbar(),]
 }
 
 fn data_frame() -> impl Scene {
@@ -67,6 +67,46 @@ fn data_frame() -> impl Scene {
             ]
         ]
         DespawnOnExit::<GameState>(GameState::InGame)
+    }
+}
+
+const HOTBAR_SLOT_SIZE: f32 = 64.0;
+const HOTBAR_SLOT_GAP: f32 = 4.0;
+const HOTBAR_BOTTOM_PADDING: f32 = 20.0;
+
+fn hotbar() -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(100),
+            height: percent(100),
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::End,
+            justify_content: JustifyContent::Center,
+            column_gap: px(HOTBAR_SLOT_GAP),
+            padding: UiRect::bottom(px(HOTBAR_BOTTOM_PADDING)),
+        }
+        Children [
+            hotbar_slot(), hotbar_slot(), hotbar_slot(), hotbar_slot(),
+            hotbar_slot(), hotbar_slot(), hotbar_slot(), hotbar_slot(),
+        ]
+        DespawnOnExit::<GameState>(GameState::InGame)
+    }
+}
+
+#[derive(Component, Clone, Default)]
+struct HotbarSlot;
+
+fn hotbar_slot() -> impl Scene {
+    bsn! {
+        HotbarSlot
+        Node {
+            width: px(HOTBAR_SLOT_SIZE),
+            height: px(HOTBAR_SLOT_SIZE),
+            border: px(2),
+            border_radius: px(3),
+        }
+        BorderColor::from(PANEL_BORDER_COLOR)
+        BackgroundColor(PANEL_COLOR)
     }
 }
 
