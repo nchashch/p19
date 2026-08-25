@@ -3,7 +3,7 @@ use bevy::dev_tools::fps_overlay::FpsOverlayPlugin;
 use bevy::{dev_tools::fps_overlay::FpsOverlayConfig, prelude::*};
 use chill_bevy_console::{ChillConsole, CommandArgs, ConsoleAppExt, ConsoleCommand};
 
-use crate::animation::{Animations, PlayAnimation};
+use crate::animation::{Animations, PlayAnimationLooping};
 use crate::{
     cube_spawner::Cube, npc_spawner::Npc, player_character::RespawnPlayer, targeting::Selected,
 };
@@ -106,7 +106,6 @@ fn play_animation_cmd(
     In(args): CommandArgs,
     animations: Res<Animations>,
     selected: Res<Selected>,
-    children: Query<&Children>,
     mut commands: Commands,
 ) -> String {
     let Some(selected) = selected.0 else {
@@ -126,13 +125,10 @@ fn play_animation_cmd(
         }
         return format!("clip {clip_name} doesn't exist, available clips:\n{clip_names}");
     }
-    for entity in std::iter::once(selected).chain(children.iter_descendants(selected)) {
-        commands.trigger(PlayAnimation {
-            root: entity,
-            name: clip_name.to_string(),
-        });
-    }
-
+    commands.trigger(PlayAnimationLooping {
+        entity: selected,
+        name: clip_name.to_string(),
+    });
     format!("playing clip \"{clip_name}\"")
 }
 

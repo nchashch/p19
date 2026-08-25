@@ -208,8 +208,10 @@ fn update_data_frame(
     mut query: Query<&mut Text, With<DataFrame>>,
     hovered: Res<Hovered>,
     selected: Res<Selected>,
-    player: Query<&HitPoints, With<PlayerCharacter>>,
+    player: Query<(&HitPoints, &GlobalTransform), With<PlayerCharacter>>,
+    global_transforms: Query<&GlobalTransform>,
     hit_points: Query<&HitPoints>,
+    name: Query<&Name>,
 ) {
     if !hovered.is_changed() && !selected.is_changed() {
         return;
@@ -218,14 +220,17 @@ fn update_data_frame(
         return;
     };
 
-    if let Ok(hit_points) = player.single() {
-        text.0 = format!(
-            "Press ~ for console\n\nHP: {}/{}\nDamage: {}\nAttack range: {}\nSelect range: {}\n\n",
-            hit_points.hit_points, hit_points.max_hit_points, DAMAGE, ATTACK_RANGE, SELECT_RANGE,
-        );
-    } else {
+    let Ok((player_hit_points, player_global_transform)) = player.single() else {
         return;
     };
+    text.0 = format!(
+        "Press ~ for console\n\nHP: {}/{}\nDamage: {}\nAttack range: {}\nSelect range: {}\n\n",
+        player_hit_points.hit_points,
+        player_hit_points.max_hit_points,
+        DAMAGE,
+        ATTACK_RANGE,
+        SELECT_RANGE,
+    );
 
     if let Some((entity, distance)) = hovered.0 {
         text.0 += &format!("Hovered: {:?}\nDistance: {:.2}\n\n", entity, distance);
@@ -234,7 +239,26 @@ fn update_data_frame(
     }
 
     if let Some(entity) = selected.0 {
+        let distance_to_selected = {
+            match global_transforms.get(entity) {
+                Ok(selected_global_transform) => Some(
+                    (selected_global_transform.compute_transform().translation
+                        - player_global_transform.compute_transform().translation)
+                        .length(),
+                ),
+                Err(_) => None,
+            }
+        };
         text.0 += &format!("Selected: {:?}\n", entity);
+        match distance_to_selected {
+            Some(distance_to_selected) => {
+                text.0 += &format!("Distance: {:.2}\n", distance_to_selected);
+            }
+            None => text.0 += &format!("Distance: n/a\n"),
+        };
+        if let Some(name) = name.get(entity).ok() {
+            text.0 += &format!("Name: {name}\n");
+        }
         if let Some(hit_points) = hit_points.get(entity).ok() {
             text.0 += &format!(
                 "HP: {}/{}\n",

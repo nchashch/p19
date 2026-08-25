@@ -4,7 +4,7 @@ use crate::{
         CharacterCollisions, CharacterController, CharacterControllerPlugin,
         CharacterMovementSettings, DesiredMotion, GroundDetection, Grounded,
     },
-    combat::{Attack, CombatPlugin, DespawnCube},
+    combat::{AttackAction, CombatPlugin, DespawnCube},
     cube_spawner::{CubeSpawner, HitPoints, SpawnCube},
     fps_controller::{Crosshair, DisableFpsCameraControl, FpsCamera, FpsCameraRotation},
     game_state::GameState,
@@ -69,6 +69,10 @@ pub struct PlayerCharacter;
 
 #[derive(Component, Reflect, Default)]
 #[reflect(Component)]
+pub struct Character;
+
+#[derive(Component, Reflect, Default)]
+#[reflect(Component)]
 pub struct PlayerModel;
 
 pub fn initial_respawn(mut commands: Commands) {
@@ -105,14 +109,18 @@ pub fn respawn_player(
     let skybox_handle = asset_server.load("Ryfjallet_cubemap.png");
     commands
         .spawn((
-            PlayerCharacter,
+            (
+                PlayerCharacter,
+                Character,
+                Idle,
+                CharacterController,
+                Name::new("Player"),
+                HitPoints {
+                    hit_points: 100,
+                    max_hit_points: 100,
+                },
+            ),
             InheritedVisibility::default(),
-            Name::new("Player"),
-            HitPoints {
-                hit_points: 100,
-                max_hit_points: 100,
-            },
-            CharacterController,
             character_movement_settings,
             CharacterCollisions::default(),
             GroundDetection {
@@ -146,7 +154,7 @@ pub fn respawn_player(
                 ));
                 context.spawn((Action::<DespawnCube>::new(), bindings![KeyCode::KeyT]));
 
-                context.spawn((Action::<Attack>::new(), bindings![KeyCode::KeyF]));
+                context.spawn((Action::<AttackAction>::new(), bindings![KeyCode::KeyF]));
 
                 // context.spawn((Action::<Shoot>::new(), bindings![MouseButton::Left]));
                 context.spawn((
@@ -202,7 +210,7 @@ pub fn respawn_player(
                             parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), CubeSpawner));
                             parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), NpcSpawner));
                             parent.spawn((
-                                Transform::from_xyz(0.0, 0.0, 10.0),
+                                Transform::from_xyz(0.0, 0.0, 3.0),
                                 Camera3d::default(),
                                 IsDefaultUiCamera,
                                 Msaa::Off,
@@ -361,10 +369,23 @@ fn on_jump(
     }
 }
 
-fn on_movement_stop(_: On<Complete<Movement>>, mut controllers: Query<&mut DesiredMotion>) {
+// Moving or standing still -- not performing any kind of action.
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+pub struct Idle;
+
+fn on_movement_stop(
+    _: On<Complete<Movement>>,
+    mut controllers: Query<&mut DesiredMotion>,
+    player: Query<Entity, With<PlayerCharacter>>,
+    mut commands: Commands,
+) {
     for mut acceleration in &mut controllers {
         acceleration.0 = Vec3::ZERO;
     }
+    let Ok(player) = player.single() else {
+        return;
+    };
 }
 
 /// Responds to [`MovementAction`] events and moves character controllers accordingly.
@@ -372,6 +393,8 @@ fn on_movement(
     movement_event: On<Fire<Movement>>,
     fps_camera: Query<&FpsCamera>,
     mut controllers: Query<(&CharacterMovementSettings, &mut DesiredMotion)>,
+    player: Query<Entity, With<PlayerCharacter>>,
+    mut commands: Commands,
 ) {
     let Ok(fps_camera) = fps_camera.single() else {
         return;
@@ -382,4 +405,7 @@ fn on_movement(
         acceleration.0.x = -acceleration2.x;
         acceleration.0.z = acceleration2.y;
     }
+    let Ok(player) = player.single() else {
+        return;
+    };
 }

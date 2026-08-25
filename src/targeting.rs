@@ -14,14 +14,8 @@ pub struct TargetingPlugin;
 impl Plugin for TargetingPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(OutlinePlugin::JUMP_FLOOD);
-        app.add_systems(
-            Update,
-            (
-                raycast_from_center,
-                add_outline_component,
-                update_outline_hovered_selected,
-            ),
-        );
+        app.add_systems(Update, (raycast_from_center, update_outline_hovered_selected));
+        app.add_observer(add_outline_component);
         app.insert_resource(Hovered(None));
         app.insert_resource(Selected(None));
         add_observers_run_if!(app, console_closed, select, deselect);
@@ -111,33 +105,31 @@ fn deselect(_event: On<Fire<Deselect>>, mut selected: ResMut<Selected>) {
 #[derive(Component)]
 pub struct Selectable;
 
-#[derive(Component)]
-pub struct Outlined;
-
+/// AsyncWorldInheritOutline only starts inheriting once the *same* entity's own WorldAssetRoot
+/// has finished loading (it checks WorldInstance on itself, not on an ancestor) — so this reacts
+/// to WorldAssetRoot being added anywhere, and outlines it if it's Selectable itself or a
+/// descendant of a Selectable ancestor (e.g. Npc, whose model lives on a child entity spawned
+/// after — and so already linked to — its Selectable parent).
 fn add_outline_component(
+    add: On<Add, WorldAssetRoot>,
     mut commands: Commands,
-    query: Query<Entity, (With<Selectable>, Without<Outlined>)>,
-    children: Query<&Children>,
-    world_roots: Query<(), With<WorldAssetRoot>>,
+    selectables: Query<(), With<Selectable>>,
+    ancestors: Query<&ChildOf>,
 ) {
-    for selectable in query {
-        // AsyncWorldInheritOutline only starts inheriting once the *same* entity's own
-        // WorldAssetRoot has finished loading (it checks WorldInstance on itself, not on
-        // an ancestor) — so it has to go on whichever descendant actually carries
-        // WorldAssetRoot, not on `selectable` itself if the model lives on a child (e.g. Npc).
-        for entity in std::iter::once(selectable).chain(children.iter_descendants(selectable)) {
-            if world_roots.contains(entity) {
-                commands.entity(entity).insert((
-                    OutlineVolume {
-                        visible: false,
-                        width: 4.0,
-                        colour: Color::srgb(1.0, 1.0, 1.0),
-                    },
-                    AsyncWorldInheritOutline::default(),
-                ));
-            }
-        }
-        commands.entity(selectable).insert(Outlined);
+    let entity = add.entity;
+    let is_outlinable = selectables.contains(entity)
+        || ancestors
+            .iter_ancestors(entity)
+            .any(|ancestor| selectables.contains(ancestor));
+    if is_outlinable {
+        commands.entity(entity).insert((
+            OutlineVolume {
+                visible: false,
+                width: 4.0,
+                colour: Color::srgb(1.0, 1.0, 1.0),
+            },
+            AsyncWorldInheritOutline::default(),
+        ));
     }
 }
 

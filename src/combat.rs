@@ -20,27 +20,34 @@ impl Plugin for CombatPlugin {
     }
 }
 
+#[derive(EntityEvent)]
+pub struct Attack {
+    pub entity: Entity,
+    pub attacker: Entity,
+}
+
 #[derive(InputAction)]
 #[action_output(bool)]
-pub(crate) struct Attack;
+pub(crate) struct AttackAction;
 
 #[derive(InputAction)]
 #[action_output(bool)]
 pub(crate) struct DespawnCube;
 
-pub const DAMAGE: i32 = 7;
+pub const DAMAGE: i32 = 49;
 pub const ATTACK_RANGE: f32 = 10.0;
 
 #[derive(Component)]
 struct Lifetime(Timer);
 
 fn attack(
-    _: On<Start<Attack>>,
+    _: On<Start<AttackAction>>,
     selected: ResMut<Selected>,
-    player: Query<&Transform, With<PlayerCharacter>>,
+    player: Query<(Entity, &Transform), With<PlayerCharacter>>,
     mut target: Query<(&mut HitPoints, &Transform)>,
+    mut commands: Commands,
 ) {
-    let Ok(player_transform) = player.single() else {
+    let Ok((attacker, player_transform)) = player.single() else {
         return;
     };
     let Some(entity) = selected.0 else {
@@ -55,6 +62,7 @@ fn attack(
         <= ATTACK_RANGE
     {
         target_hit_points.hit_points -= DAMAGE;
+        commands.trigger(Attack { entity, attacker });
     }
 }
 
