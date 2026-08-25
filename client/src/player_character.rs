@@ -5,13 +5,14 @@ use crate::{
         CharacterMovementSettings, DesiredMotion, GroundDetection, Grounded,
     },
     combat::{AttackAction, CombatPlugin, DespawnCube},
-    cube_spawner::{CubeSpawner, HitPoints, SpawnCube},
+    cube_spawner::{CubeSpawner, SpawnCube},
     fps_controller::{Crosshair, DisableFpsCameraControl, FpsCamera, FpsCameraRotation},
     game_state::GameState,
     npc_spawner::{NpcSpawner, SpawnNpc},
     targeting::{Deselect, Hovered, Select, TargetingPlugin},
 };
 use avian3d::prelude::*;
+use shared::combat::HitPoints;
 use bevy::{
     anti_alias::taa::TemporalAntiAliasing,
     light::Skybox,

@@ -1,29 +1,25 @@
-use crate::{
-    add_observers_run_if,
-    cube_spawner::{Cube, HitPoints},
-    particles::CubeParticleEffect,
-    player_character::PlayerCharacter,
-    targeting::Selected,
-};
+//! Client-side combat: input handling and presentation (sound, particles, `Selected` bookkeeping).
+//! The actual range check, damage application, and death detection live in `shared::combat` —
+//! this module only reacts to the events that logic fires, it doesn't decide anything itself.
+
+use crate::{add_observers_run_if, cube_spawner::Cube, particles::CubeParticleEffect, player_character::PlayerCharacter, targeting::Selected};
 use bevy::prelude::*;
 use bevy_enhanced_input::prelude::*;
 use bevy_hanabi::prelude::*;
 use bevy_seedling::prelude::*;
 use chill_bevy_console::console_closed;
+use shared::combat::{Attack, AttackAttempt, EntityDied, HitPoints, SharedCombatPlugin};
 
 pub struct CombatPlugin;
 
 impl Plugin for CombatPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (tick_lifetimes, despawn_zero_hp));
+        app.add_plugins(SharedCombatPlugin);
+        app.add_systems(Update, tick_lifetimes);
+        app.add_observer(on_attack);
+        app.add_observer(on_entity_died);
         add_observers_run_if!(app, console_closed, attack, despawn_cube);
     }
-}
-
-#[derive(EntityEvent)]
-pub struct Attack {
-    pub entity: Entity,
-    pub attacker: Entity,
 }
 
 #[derive(InputAction)]
@@ -34,101 +30,63 @@ pub(crate) struct AttackAction;
 #[action_output(bool)]
 pub(crate) struct DespawnCube;
 
-pub const DAMAGE: i32 = 49;
-pub const ATTACK_RANGE: f32 = 10.0;
-
 #[derive(Component)]
 struct Lifetime(Timer);
 
+/// Input handling only — decides *who* the player wants to attack, not whether it lands.
+/// `shared::combat::resolve_attack` does the range check and applies damage.
 fn attack(
     _: On<Start<AttackAction>>,
-    selected: ResMut<Selected>,
-    player: Query<(Entity, &Transform), With<PlayerCharacter>>,
-    mut target: Query<(&mut HitPoints, &Transform)>,
+    selected: Res<Selected>,
+    player: Query<Entity, With<PlayerCharacter>>,
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
 ) {
-    let Ok((attacker, player_transform)) = player.single() else {
+    let Ok(attacker) = player.single() else {
         return;
     };
     let Some(entity) = selected.0 else {
         return;
     };
-    let Ok((mut target_hit_points, target_transform)) = target.get_mut(entity) else {
-        return;
-    };
-    if player_transform
-        .translation
-        .distance(target_transform.translation)
-        <= ATTACK_RANGE
-    {
-        target_hit_points.hit_points -= DAMAGE;
-        commands.trigger(Attack { entity, attacker });
-        commands.spawn(SamplePlayer::new(asset_server.load("explosion.wav")));
-    }
+    commands.trigger(AttackAttempt { entity, attacker });
 }
 
-fn despawn_zero_hp(
-    mut selected: ResMut<Selected>,
-    query: Query<(Entity, &HitPoints, &Transform)>,
-    effect: Res<CubeParticleEffect>,
-    asset_server: Res<AssetServer>,
-    mut commands: Commands,
-) {
-    for (entity, hit_points, transform) in query {
-        if hit_points.hit_points <= 0 {
-            kill_entity(
-                &mut commands,
-                &effect,
-                &asset_server,
-                &mut selected,
-                entity,
-                *transform,
-            );
-        }
-    }
-}
-
+/// Debug/console kill: zeroes the selected cube's HP rather than despawning it directly, so it
+/// dies through the same `shared::combat::despawn_zero_hp` path as a real combat death — one
+/// death path, not two.
 fn despawn_cube(
     _: On<Start<DespawnCube>>,
-    mut selected: ResMut<Selected>,
-    cube: Query<(Entity, &Transform), With<Cube>>,
-    effect: Res<CubeParticleEffect>,
-    asset_server: Res<AssetServer>,
-    mut commands: Commands,
+    selected: Res<Selected>,
+    mut hit_points: Query<&mut HitPoints, With<Cube>>,
 ) {
     if let Some(entity) = selected.0 {
-        if let Ok((entity, transform)) = cube.get(entity) {
-            kill_entity(
-                &mut commands,
-                &effect,
-                &asset_server,
-                &mut selected,
-                entity,
-                *transform,
-            );
+        if let Ok(mut hit_points) = hit_points.get_mut(entity) {
+            hit_points.hit_points = 0;
         }
     }
 }
 
-/// Plays the destruction sound and particle effect, despawns `entity`, and clears
-/// `selected` if it pointed at the entity being destroyed.
-fn kill_entity(
-    commands: &mut Commands,
-    effect: &CubeParticleEffect,
-    asset_server: &AssetServer,
-    selected: &mut Selected,
-    entity: Entity,
-    transform: Transform,
+/// Reacts to a confirmed hit — sound only. Animation (attacker's "attack"/"hurt" one-offs) reacts
+/// to the same `Attack` event independently in `animation.rs`.
+fn on_attack(_: On<Attack>, mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.spawn(SamplePlayer::new(asset_server.load("explosion.wav")));
+}
+
+/// Reacts to an authoritative death — sound, particle effect, and clearing `Selected` if it
+/// pointed at whatever just died. The despawn itself already happened in `shared`.
+fn on_entity_died(
+    died: On<EntityDied>,
+    effect: Res<CubeParticleEffect>,
+    asset_server: Res<AssetServer>,
+    mut selected: ResMut<Selected>,
+    mut commands: Commands,
 ) {
     commands.spawn(SamplePlayer::new(asset_server.load("crunch.wav")));
-    commands.entity(entity).despawn();
     commands.spawn((
         ParticleEffect::new(effect.0.clone()),
-        transform,
+        died.transform,
         Lifetime(Timer::from_seconds(2.0, TimerMode::Once)),
     ));
-    if selected.0 == Some(entity) {
+    if selected.0 == Some(died.entity) {
         selected.0 = None;
     }
 }

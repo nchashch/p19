@@ -1,8 +1,7 @@
-use crate::combat::{ATTACK_RANGE, DAMAGE};
-use crate::cube_spawner::HitPoints;
 use crate::game_state::GameState;
 use crate::player_character::PlayerCharacter;
 use crate::targeting::{Hovered, SELECT_RANGE, Selected};
+use shared::combat::{ATTACK_RANGE, DAMAGE, HitPoints};
 use bevy::{
     color::palettes::css::{BLACK, DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},
     prelude::*,

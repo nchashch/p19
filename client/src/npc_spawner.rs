@@ -8,11 +8,11 @@ use noiz::{
 };
 
 use crate::{
-    cube_spawner::HitPoints,
     game_state::GameState,
     player_character::{Character, Idle},
     targeting::Selectable,
 };
+use shared::combat::HitPoints;
 
 pub struct NpcSpawnerPlugin;
 

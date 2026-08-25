@@ -2,6 +2,7 @@ use crate::{GameState, fps_controller::FpsCamera, targeting::Selectable};
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use noiz::rng::{AnyValueFromBits, NoiseRng, SNorm};
+use shared::combat::HitPoints;
 
 pub struct CubeSpawnerPlugin;
 
@@ -78,10 +79,3 @@ pub struct Cube;
 #[derive(Component, Clone, Default, Reflect, Debug)]
 #[reflect(Component)]
 pub struct CubeSpawner;
-
-#[derive(Component, Clone, Default, Reflect, Debug)]
-#[reflect(Component)]
-pub struct HitPoints {
-    pub hit_points: i32,
-    pub max_hit_points: i32,
-}

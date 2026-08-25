@@ -5,8 +5,8 @@ use bevy::world_serialization::WorldInstanceReady;
 use std::time::Duration;
 
 use crate::character_controller::Grounded;
-use crate::combat::Attack;
 use crate::player_character::{Character, Idle};
+use shared::combat::Attack;
 
 pub struct PAnimationPlugin;
 

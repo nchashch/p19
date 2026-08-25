@@ -1,4 +1,5 @@
-use crate::{cube_spawner::HitPoints, game_state::GameState};
+use crate::game_state::GameState;
+use shared::combat::HitPoints;
 use bevy::color::palettes::css::{DARK_SLATE_GRAY, GREEN};
 use bevy::prelude::*;
 
