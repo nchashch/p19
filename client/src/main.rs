@@ -11,7 +11,6 @@ use particles::ParticleEffectsPlugin;
 use player_character::PlayerCharacterPlugin;
 
 mod animation;
-mod character_controller;
 mod combat;
 mod console;
 mod cube_spawner;

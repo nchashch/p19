@@ -3,10 +3,17 @@ use bevy::prelude::*;
 
 /// A plugin that implements a basic platformer kinematic character controller using move-and-slide,
 /// with support for ground detection and configurable movement settings.
+///
+/// Driven entirely by [`MovementInput`]/[`JumpInput`] events rather than any input library —
+/// anything can trigger them for any entity with [`CharacterController`]: `client`'s
+/// `player_character.rs` translates `bevy_enhanced_input` events into them for the player, and an
+/// AI system could trigger the same events for an NPC to reuse this exact controller.
 pub struct CharacterControllerPlugin;
 
 impl Plugin for CharacterControllerPlugin {
     fn build(&self, app: &mut App) {
+        app.add_observer(on_movement_input);
+        app.add_observer(on_jump_input);
         // Run movement logic in `FixedUpdate` to ensure consistent behavior regardless of frame rate.
         app.add_systems(
             FixedUpdate,
@@ -20,6 +27,41 @@ impl Plugin for CharacterControllerPlugin {
             )
                 .chain(),
         );
+    }
+}
+
+/// Request to set `entity`'s desired horizontal movement direction (world-space, XZ plane — only
+/// direction matters, magnitude is discarded by `normalize_or_zero` during integration). A zero
+/// vector means "stop."
+#[derive(EntityEvent)]
+pub struct MovementInput {
+    pub entity: Entity,
+    pub direction: Vec3,
+}
+
+/// Request for `entity` to jump — a no-op unless it currently has [`Grounded`].
+#[derive(EntityEvent)]
+pub struct JumpInput {
+    pub entity: Entity,
+}
+
+fn on_movement_input(
+    input: On<MovementInput>,
+    mut controllers: Query<&mut DesiredMotion>,
+) {
+    if let Ok(mut desired_motion) = controllers.get_mut(input.entity) {
+        desired_motion.0 = input.direction;
+    }
+}
+
+fn on_jump_input(
+    input: On<JumpInput>,
+    mut controllers: Query<(&CharacterMovementSettings, &mut LinearVelocity, Has<Grounded>)>,
+) {
+    if let Ok((movement, mut linear_velocity, is_grounded)) = controllers.get_mut(input.entity)
+        && is_grounded
+    {
+        linear_velocity.y = movement.jump_impulse;
     }
 }
 

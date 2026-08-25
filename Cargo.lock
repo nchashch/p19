@@ -6766,6 +6766,7 @@ dependencies = [
 name = "server"
 version = "0.1.0"
 dependencies = [
+ "avian3d",
  "bevy",
  "shared",
 ]
@@ -6783,6 +6784,7 @@ dependencies = [
 name = "shared"
 version = "0.1.0"
 dependencies = [
+ "avian3d",
  "bevy",
 ]
 

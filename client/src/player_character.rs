@@ -1,9 +1,5 @@
 use crate::{
     add_observers_run_if,
-    character_controller::{
-        CharacterCollisions, CharacterController, CharacterControllerPlugin,
-        CharacterMovementSettings, DesiredMotion, GroundDetection, Grounded,
-    },
     combat::{AttackAction, CombatPlugin, DespawnCube},
     cube_spawner::{CubeSpawner, SpawnCube},
     fps_controller::{Crosshair, DisableFpsCameraControl, FpsCamera, FpsCameraRotation},
@@ -12,6 +8,10 @@ use crate::{
     targeting::{Deselect, Hovered, Select, TargetingPlugin},
 };
 use avian3d::prelude::*;
+use shared::character_controller::{
+    CharacterCollisions, CharacterController, CharacterControllerPlugin,
+    CharacterMovementSettings, DesiredMotion, GroundDetection, JumpInput, MovementInput,
+};
 use shared::combat::HitPoints;
 use bevy::{
     anti_alias::taa::TemporalAntiAliasing,
@@ -357,19 +357,17 @@ fn lock_cursor_for_rotation(
     hovered.0 = None;
 }
 
+/// Translates the `bevy_enhanced_input` jump action into the input-library-agnostic
+/// `shared::character_controller::JumpInput` the controller actually runs on.
 fn on_jump(
     _: On<Fire<Jump>>,
-    mut controllers: Query<(
-        &CharacterMovementSettings,
-        &mut LinearVelocity,
-        Has<Grounded>,
-    )>,
+    player: Query<Entity, With<PlayerCharacter>>,
+    mut commands: Commands,
 ) {
-    for (movement, mut linear_velocity, is_grounded) in &mut controllers {
-        if is_grounded {
-            linear_velocity.y = movement.jump_impulse;
-        }
-    }
+    let Ok(player) = player.single() else {
+        return;
+    };
+    commands.trigger(JumpInput { entity: player });
 }
 
 // Moving or standing still -- not performing any kind of action.
@@ -379,36 +377,37 @@ pub struct Idle;
 
 fn on_movement_stop(
     _: On<Complete<Movement>>,
-    mut controllers: Query<&mut DesiredMotion>,
     player: Query<Entity, With<PlayerCharacter>>,
-    _commands: Commands,
+    mut commands: Commands,
 ) {
-    for mut acceleration in &mut controllers {
-        acceleration.0 = Vec3::ZERO;
-    }
-    let Ok(_player) = player.single() else {
+    let Ok(player) = player.single() else {
         return;
     };
+    commands.trigger(MovementInput {
+        entity: player,
+        direction: Vec3::ZERO,
+    });
 }
 
-/// Responds to [`MovementAction`] events and moves character controllers accordingly.
+/// Translates the `bevy_enhanced_input` movement action (plus the camera's yaw — a client-only
+/// concept the controller itself knows nothing about) into a world-space
+/// `shared::character_controller::MovementInput`.
 fn on_movement(
     movement_event: On<Fire<Movement>>,
     fps_camera: Query<&FpsCamera>,
-    mut controllers: Query<(&CharacterMovementSettings, &mut DesiredMotion)>,
     player: Query<Entity, With<PlayerCharacter>>,
-    _commands: Commands,
+    mut commands: Commands,
 ) {
     let Ok(fps_camera) = fps_camera.single() else {
         return;
     };
-    for (_movement, mut acceleration) in &mut controllers {
-        let rotation = Rot2::radians(fps_camera.yaw);
-        let acceleration2 = rotation * movement_event.value;
-        acceleration.0.x = -acceleration2.x;
-        acceleration.0.z = acceleration2.y;
-    }
-    let Ok(_player) = player.single() else {
+    let Ok(player) = player.single() else {
         return;
     };
+    let rotation = Rot2::radians(fps_camera.yaw);
+    let rotated = rotation * movement_event.value;
+    commands.trigger(MovementInput {
+        entity: player,
+        direction: Vec3::new(-rotated.x, 0.0, rotated.y),
+    });
 }
