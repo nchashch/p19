@@ -1,18 +1,20 @@
 use crate::{
     add_observers_run_if,
     combat::{AttackAction, CombatPlugin, DespawnCube},
-    cube_spawner::{CubeSpawner, SpawnCube},
+    cube_spawner::SpawnCube,
     fps_controller::{Crosshair, DisableFpsCameraControl, FpsCamera, FpsCameraRotation},
     game_state::GameState,
-    npc_spawner::{NpcSpawner, SpawnNpc},
+    npc_spawner::SpawnNpc,
     targeting::{Deselect, Hovered, Select, TargetingPlugin},
 };
 use avian3d::prelude::*;
 use shared::character_controller::{
-    CharacterCollisions, CharacterController, CharacterControllerPlugin,
-    CharacterMovementSettings, DesiredMotion, GroundDetection, JumpInput, MovementInput,
+    Character, CharacterCollisions, CharacterController, CharacterControllerPlugin,
+    CharacterMovementSettings, DesiredMotion, GroundDetection, Idle, JumpInput, MovementInput,
 };
 use shared::combat::HitPoints;
+use shared::cube_spawner::CubeSpawner;
+use shared::npc_spawner::NpcSpawner;
 use bevy::{
     anti_alias::taa::TemporalAntiAliasing,
     light::Skybox,
@@ -67,10 +69,6 @@ pub struct PlayerCharacterSpawner;
 #[derive(Component, Reflect, Default)]
 #[reflect(Component)]
 pub struct PlayerCharacter;
-
-#[derive(Component, Reflect, Default)]
-#[reflect(Component)]
-pub struct Character;
 
 #[derive(Component, Reflect, Default)]
 #[reflect(Component)]
@@ -369,11 +367,6 @@ fn on_jump(
     };
     commands.trigger(JumpInput { entity: player });
 }
-
-// Moving or standing still -- not performing any kind of action.
-#[derive(Component)]
-#[component(storage = "SparseSet")]
-pub struct Idle;
 
 fn on_movement_stop(
     _: On<Complete<Movement>>,

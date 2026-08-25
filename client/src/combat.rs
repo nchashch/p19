@@ -2,12 +2,13 @@
 //! The actual range check, damage application, and death detection live in `shared::combat` —
 //! this module only reacts to the events that logic fires, it doesn't decide anything itself.
 
-use crate::{add_observers_run_if, cube_spawner::Cube, particles::CubeParticleEffect, player_character::PlayerCharacter, targeting::Selected};
+use crate::{add_observers_run_if, particles::CubeParticleEffect, player_character::PlayerCharacter, targeting::Selected};
 use bevy::prelude::*;
 use bevy_enhanced_input::prelude::*;
 use bevy_hanabi::prelude::*;
 use bevy_seedling::prelude::*;
 use chill_bevy_console::console_closed;
+use shared::cube_spawner::Cube;
 use shared::combat::{Attack, AttackAttempt, EntityDied, HitPoints, SharedCombatPlugin};
 
 pub struct CombatPlugin;

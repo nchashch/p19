@@ -79,6 +79,18 @@ fn on_jump_input(
 )]
 pub struct CharacterController;
 
+/// Marks an entity as a character driven by this controller — the player and NPCs alike.
+#[derive(Component, Reflect, Default)]
+#[reflect(Component)]
+pub struct Character;
+
+/// Moving or standing still — not performing any kind of action (attack, hurt, etc). Removed
+/// while a one-off animation/action plays and re-inserted once it finishes; systems that drive
+/// locomotion (walk/idle/jump) only act while this is present.
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+pub struct Idle;
+
 /// Component for configuring movement settings for a character controller.
 #[derive(Component)]
 pub struct CharacterMovementSettings {

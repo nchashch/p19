@@ -2,6 +2,8 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy_seedling::prelude::*;
 use bevy_skein::SkeinPlugin;
+use shared::cube_spawner::SharedCubeSpawnerPlugin;
+use shared::npc_spawner::SharedNpcSpawnerPlugin;
 
 use console::PConsolePlugin;
 use cube_spawner::CubeSpawnerPlugin;
@@ -56,13 +58,17 @@ impl Plugin for Prototype19 {
             ParticleEffectsPlugin,
             SkeinPlugin::default(),
             PhysicsPlugins::default(),
-            CubeSpawnerPlugin,
-            NpcSpawnerPlugin,
-            PlayerCharacterPlugin,
-            FpsControllerPlugin,
-            GameStatePlugin,
-            NameplatePlugin,
-            ui::PrototypeUiPlugin,
+            (
+                SharedCubeSpawnerPlugin,
+                SharedNpcSpawnerPlugin,
+                CubeSpawnerPlugin,
+                NpcSpawnerPlugin,
+                PlayerCharacterPlugin,
+                FpsControllerPlugin,
+                GameStatePlugin,
+                NameplatePlugin,
+                ui::PrototypeUiPlugin,
+            ),
         ))
         .insert_resource(GlobalAmbientLight {
             color: Color::WHITE,
