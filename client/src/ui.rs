@@ -52,7 +52,33 @@ fn main_menu() -> impl Scene {
 }
 
 pub fn in_game_scene() -> impl SceneList {
-    bsn_list![data_frame(), hotbar(),]
+    bsn_list![data_frame(), hotbar(), crosshair(),]
+}
+
+const CROSSHAIR_SIZE: f32 = 4.0;
+
+fn crosshair() -> impl Scene {
+    bsn! {
+        Node {
+            width: percent(100),
+            height: percent(100),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+        }
+        Pickable::IGNORE
+        Children [
+            (
+                Node {
+                    width: px(CROSSHAIR_SIZE),
+                    height: px(CROSSHAIR_SIZE),
+                    border_radius: px(CROSSHAIR_SIZE / 2.0),
+                }
+                BackgroundColor(WHITE)
+                Pickable::IGNORE
+            ),
+        ]
+        DespawnOnExit::<GameState>(GameState::InGame)
+    }
 }
 
 fn data_frame() -> impl Scene {

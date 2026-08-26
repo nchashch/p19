@@ -1,7 +1,4 @@
-use crate::{
-    add_observers_run_if, fps_controller::DisableFpsCameraControl,
-    player_character::PlayerCharacter,
-};
+use crate::{add_observers_run_if, player_character::PlayerCharacter};
 use avian3d::prelude::*;
 use bevy::color::palettes::css::{DARK_SLATE_GRAY, GRAY, WHITE};
 use bevy::prelude::*;
@@ -14,7 +11,10 @@ pub struct TargetingPlugin;
 impl Plugin for TargetingPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(OutlinePlugin::JUMP_FLOOD);
-        app.add_systems(Update, (raycast_from_center, update_outline_hovered_selected));
+        app.add_systems(
+            Update,
+            (raycast_from_center, update_outline_hovered_selected),
+        );
         app.add_observer(add_outline_component);
         app.insert_resource(Hovered(None));
         app.insert_resource(Selected(None));
@@ -44,7 +44,6 @@ fn raycast_from_center(
     camera_query: Query<(&Camera, &GlobalTransform)>,
     window_query: Query<&Window>,
     mut hovered: ResMut<Hovered>,
-    disable_fps_camera_control: Res<DisableFpsCameraControl>,
 ) {
     let Ok((camera, camera_transform)) = camera_query.single() else {
         return;
@@ -56,6 +55,7 @@ fn raycast_from_center(
         return;
     };
 
+    /*
     // Center of the screen in logical (not physical) pixels.
     let screen_origin = if disable_fps_camera_control.0 {
         window.cursor_position().unwrap_or(Vec2::ZERO)
@@ -63,6 +63,9 @@ fn raycast_from_center(
         return;
         // window.size() / 2.0
     };
+    */
+
+    let screen_origin = window.size() / 2.0;
 
     // Screen space -> world ray. Returns Err if the camera has no usable
     // viewport/projection this frame.

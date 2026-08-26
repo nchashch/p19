@@ -2,10 +2,10 @@ use crate::{
     add_observers_run_if,
     combat::{AttackAction, CombatPlugin, KillAction},
     cube_spawner::SpawnCube,
-    fps_controller::{Crosshair, DisableFpsCameraControl, FpsCamera, FpsCameraRotation},
+    fps_controller::{FpsCamera, FpsCameraRotation},
     game_state::GameState,
     npc_spawner::SpawnNpc,
-    targeting::{Deselect, Hovered, Select, TargetingPlugin},
+    targeting::{Deselect, Select, TargetingPlugin},
 };
 use avian3d::prelude::*;
 use bevy::{
@@ -36,16 +36,14 @@ impl Plugin for PlayerCharacterPlugin {
         });
         app.add_plugins((CharacterControllerPlugin, TargetingPlugin, CombatPlugin));
         app.add_systems(OnEnter(GameState::MainMenu), unlock_cursor);
-        app.add_systems(OnEnter(GameState::InGame), (unlock_cursor, initial_respawn));
+        app.add_systems(OnEnter(GameState::InGame), (lock_cursor, initial_respawn));
 
         app.add_observer(respawn_player);
-        app.add_observer(unlock_cursor_after_rotation);
         app.add_observer(on_movement_stop);
 
         add_observers_run_if!(
             app,
             console_closed,
-            lock_cursor_for_rotation,
             main_menu,
             shoot,
             spawn_npc,
@@ -170,17 +168,8 @@ pub fn respawn_player(
                 // context.spawn((Action::<Interact>::new(), bindings![MouseButton::Right]));
 
                 context.spawn((Action::<MainMenu>::new(), bindings![KeyCode::F1]));
-                let id = context
-                    .spawn((
-                        Action::<RotateCamera>::new(),
-                        bindings![MouseButton::Right],
-                        // Toggle::new(1.0),
-                        // bindings![KeyCode::Tab],
-                    ))
-                    .id();
                 context.spawn((
                     Action::<FpsCameraRotation>::new(),
-                    Chord::single(id),
                     bindings![Binding::mouse_motion()],
                 ));
                 context.spawn((
@@ -196,11 +185,13 @@ pub fn respawn_player(
             DespawnOnEnter(GameState::MainMenu),
         ))
         .with_children(|parent| {
-            parent.spawn((
-                PlayerModel,
-                WorldAssetRoot(asset_server.load("rig.glb#Scene0")),
-                Transform::from_translation(Vec3::new(0.0, -0.9, 0.0)),
-            ));
+            /*
+                        parent.spawn((
+                            PlayerModel,
+                            WorldAssetRoot(asset_server.load("rig.glb#Scene0")),
+                            Transform::from_translation(Vec3::new(0.0, -0.9, 0.0)),
+                        ));
+            */
             parent
                 .spawn((Transform::from_xyz(0., 0.5, 0.),))
                 .with_children(|parent| {
@@ -210,7 +201,7 @@ pub fn respawn_player(
                             parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), CubeSpawner));
                             parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), NpcSpawner));
                             parent.spawn((
-                                Transform::from_xyz(0.0, 0.0, 3.0),
+                                // Transform::from_xyz(0.0, 0.0, 3.0),
                                 Camera3d::default(),
                                 IsDefaultUiCamera,
                                 Msaa::Off,
@@ -244,10 +235,6 @@ pub fn respawn_player(
 }
 
 #[derive(InputAction)]
-#[action_output(bool)]
-pub struct RotateCamera;
-
-#[derive(InputAction)]
 #[action_output(Vec2)]
 pub struct Movement;
 
@@ -267,17 +254,14 @@ pub struct Shoot;
 #[action_output(bool)]
 pub struct SpawnNpcAction;
 
-fn unlock_cursor(
-    mut cursor_options: Single<&mut CursorOptions>,
-    _disable_fps_camera: ResMut<DisableFpsCameraControl>,
-    mut crosshair: Query<&mut Visibility, With<Crosshair>>,
-) {
+fn unlock_cursor(mut cursor_options: Single<&mut CursorOptions>) {
     cursor_options.visible = true;
     cursor_options.grab_mode = CursorGrabMode::None;
-    let Ok(mut visibility) = crosshair.single_mut() else {
-        return;
-    };
-    *visibility = Visibility::Hidden;
+}
+
+fn lock_cursor(mut cursor_options: Single<&mut CursorOptions>) {
+    cursor_options.visible = false;
+    cursor_options.grab_mode = CursorGrabMode::Locked;
 }
 
 fn shoot(_: On<Start<Shoot>>, mut commands: Commands) {
@@ -334,26 +318,6 @@ fn asset_loaded(
 struct Cubemap {
     is_loaded: bool,
     image_handle: Option<Handle<Image>>,
-}
-
-fn unlock_cursor_after_rotation(
-    _: On<Complete<RotateCamera>>,
-    mut cursor_options: Single<&mut CursorOptions>,
-    mut disable_fps_camera: ResMut<DisableFpsCameraControl>,
-) {
-    cursor_options.grab_mode = CursorGrabMode::None;
-    disable_fps_camera.0 = true;
-}
-
-fn lock_cursor_for_rotation(
-    _: On<Fire<RotateCamera>>,
-    mut cursor_options: Single<&mut CursorOptions>,
-    mut disable_fps_camera: ResMut<DisableFpsCameraControl>,
-    mut hovered: ResMut<Hovered>,
-) {
-    cursor_options.grab_mode = CursorGrabMode::Locked;
-    disable_fps_camera.0 = false;
-    hovered.0 = None;
 }
 
 /// Translates the `bevy_enhanced_input` jump action into the input-library-agnostic

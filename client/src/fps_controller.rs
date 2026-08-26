@@ -3,14 +3,12 @@ use bevy_enhanced_input::prelude::*;
 use chill_bevy_console::console_closed;
 use std::f32::consts::PI;
 
-use crate::{game_state::GameState, player_character::PlayerModel};
+use crate::player_character::PlayerModel;
 
 pub struct FpsControllerPlugin;
 
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(GameState::InGame), spawn_crosshair);
-        app.insert_resource(DisableFpsCameraControl(false));
         app.add_observer(apply_fps_camera_rotation.run_if(console_closed));
         app.add_systems(Update, rotate_player_model);
     }
@@ -55,11 +53,7 @@ fn rotate_player_model(
 fn apply_fps_camera_rotation(
     rotation: On<Fire<FpsCameraRotation>>,
     mut fps_camera: Query<(&mut FpsCamera, &mut Transform)>,
-    disable_fps_camera_control: Res<DisableFpsCameraControl>,
 ) {
-    if disable_fps_camera_control.0 {
-        return;
-    }
     if let Ok((mut fps_camera, mut camera_transform)) = fps_camera.single_mut() {
         let delta_pitch = rotation.value.y * fps_camera.sensitivity;
         let delta_yaw = -rotation.value.x * fps_camera.sensitivity;
@@ -74,10 +68,3 @@ fn apply_fps_camera_rotation(
     }
 }
 
-#[derive(Resource)]
-pub struct DisableFpsCameraControl(pub bool);
-
-#[derive(Component)]
-pub struct Crosshair;
-
-fn spawn_crosshair(_commands: Commands) {}
