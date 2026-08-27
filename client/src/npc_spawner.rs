@@ -1,4 +1,4 @@
-use crate::{game_state::GameState, player_character::PlayerCharacter, targeting::Selectable};
+use crate::{loading::LevelRoot, player_character::PlayerCharacter, targeting::Selectable};
 use bevy::prelude::*;
 use shared::npc_spawner::{NpcSpawned, SpawnNpcRequest};
 
@@ -26,13 +26,18 @@ fn request_spawn_npc(
     commands.trigger(SpawnNpcRequest { caster });
 }
 
-fn on_npc_spawned(spawned: On<NpcSpawned>, asset_server: Res<AssetServer>, mut commands: Commands) {
+fn on_npc_spawned(
+    spawned: On<NpcSpawned>,
+    asset_server: Res<AssetServer>,
+    level_root: Single<Entity, With<LevelRoot>>,
+    mut commands: Commands,
+) {
     commands
         .entity(spawned.entity)
         .insert((
             InheritedVisibility::default(),
             Selectable,
-            DespawnOnExit(GameState::InGame),
+            ChildOf(*level_root),
         ))
         .with_child((
             WorldAssetRoot(asset_server.load("rig.glb#Scene0")),

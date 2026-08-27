@@ -1,5 +1,5 @@
 use crate::{
-    fps_controller::FpsCamera, game_state::GameState, player_character::PlayerCharacter,
+    fps_controller::FpsCamera, loading::LevelRoot, player_character::PlayerCharacter,
     targeting::Selectable,
 };
 use bevy::prelude::*;
@@ -41,11 +41,12 @@ fn request_spawn_cube(
 fn on_cube_spawned(
     spawned: On<CubeSpawned>,
     asset_server: Res<AssetServer>,
+    level_root: Single<Entity, With<LevelRoot>>,
     mut commands: Commands,
 ) {
     commands.entity(spawned.entity).insert((
         Selectable,
         WorldAssetRoot(asset_server.load("Cube.glb#Scene0")),
-        DespawnOnExit(GameState::InGame),
+        ChildOf(*level_root),
     ));
 }

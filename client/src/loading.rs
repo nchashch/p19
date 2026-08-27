@@ -67,23 +67,39 @@ fn load_level(
     next_state.set(GameState::Loading);
 }
 
-/// Spawns the level's `WorldAssetRoot` entity. Deliberately deferred to `OnEnter(GameState::Loading)`
-/// rather than done straight from `load_level`: `load_level` typically runs *while still in
-/// `GameState::InGame`* (e.g. reloading a level via the console), and `OnExit(GameState::InGame)`'s
-/// `DespawnOnExit` sweep doesn't run until the next `StateTransition` pass — after `load_level`
-/// returns. Spawning the new entity immediately in `load_level` meant it existed in time to get
-/// caught by that same sweep (it's tagged `DespawnOnExit(GameState::InGame)` too, for later reloads),
-/// killing it — and its `WorldInstanceReady` observer — before the scene ever finished loading,
-/// which left the game stuck in `Loading` forever. Waiting for `OnEnter(Loading)` means the sweep
-/// has already completed by the time this runs.
-fn spawn_level(
-    pending: Res<PendingLevel>,
-    asset_server: Res<AssetServer>,
-    mut commands: Commands,
-) {
+/// Marks the current level's root entity. Everything that belongs to the level — its own geometry,
+/// and anything spawned into it afterward (cubes, NPCs — see `cube_spawner.rs`/`npc_spawner.rs`) —
+/// is parented under this one entity via `ChildOf`, so it all despawns together when the only
+/// `DespawnOnExit(GameState::InGame)` in the hierarchy (the one on this entity) fires, instead of
+/// every spawner needing to remember to tag its own entities.
+///
+/// Stays at `Transform::IDENTITY` for its whole lifetime — children (including physics bodies)
+/// interpret their own `Transform` relative to this one, so if it ever moved, everything parented
+/// under it would silently shift with it.
+#[derive(Component, Default)]
+pub struct LevelRoot;
+
+/// Spawns the level's root entity and its `WorldAssetRoot` child. Deliberately deferred to
+/// `OnEnter(GameState::Loading)` rather than done straight from `load_level`: `load_level`
+/// typically runs *while still in `GameState::InGame`* (e.g. reloading a level via the console),
+/// and `OnExit(GameState::InGame)`'s `DespawnOnExit` sweep doesn't run until the next
+/// `StateTransition` pass — after `load_level` returns. Spawning the new entity immediately in
+/// `load_level` meant it existed in time to get caught by that same sweep (it's tagged
+/// `DespawnOnExit(GameState::InGame)` too, for later reloads), killing it — and its
+/// `WorldInstanceReady` observer — before the scene ever finished loading, which left the game
+/// stuck in `Loading` forever. Waiting for `OnEnter(Loading)` means the sweep has already
+/// completed by the time this runs.
+fn spawn_level(pending: Res<PendingLevel>, asset_server: Res<AssetServer>, mut commands: Commands) {
     // let handle = asset_server.load(GltfAssetLabel::Scene(0).from_asset("Level.glb#Scene0"));
     let handle = asset_server.load(GltfAssetLabel::Scene(0).from_asset(pending.0.clone()));
     commands
-        .spawn((WorldAssetRoot(handle), DespawnOnExit(GameState::InGame)))
-        .observe(on_level_ready);
+        .spawn((
+            LevelRoot,
+            Transform::IDENTITY,
+            InheritedVisibility::default(),
+            DespawnOnExit(GameState::InGame),
+        ))
+        .with_children(|parent| {
+            parent.spawn(WorldAssetRoot(handle)).observe(on_level_ready);
+        });
 }

@@ -13,7 +13,6 @@ use game_state::{GameState, GameStatePlugin};
 use particles::ParticleEffectsPlugin;
 use player_character::PlayerCharacterPlugin;
 
-mod level;
 mod animation;
 mod camera;
 mod combat;
