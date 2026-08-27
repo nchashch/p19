@@ -1,9 +1,14 @@
 use avian3d::prelude::*;
+use bevy::asset::io::AssetSourceId;
 use bevy::dev_tools::fps_overlay::FpsOverlayPlugin;
+use bevy::platform::collections::HashSet;
 use bevy::{dev_tools::fps_overlay::FpsOverlayConfig, prelude::*};
 use chill_bevy_console::{ChillConsole, CommandArgs, ConsoleAppExt, ConsoleCommand};
+use futures_lite::StreamExt;
+use std::path::Path;
 
 use crate::animation::{Animations, PlayAnimationLooping};
+use crate::loading::LoadLevel;
 use crate::{player_character::RespawnPlayer, targeting::Selected};
 use shared::cube_spawner::Cube;
 use shared::npc_spawner::Npc;
@@ -42,6 +47,11 @@ impl Plugin for PConsolePlugin {
             "play_animation",
             "play_animation <clip_name> - play animation on selected entity",
             play_animation_cmd,
+        ))
+        .add_console_command(ConsoleCommand::new(
+            "load_level",
+            "load_level <id> - load level with asset id string",
+            load_level_cmd,
         ))
         .add_console_command(ConsoleCommand::new(
             "fps",
@@ -100,6 +110,36 @@ fn despawn_npcs_cmd(
         commands.entity(npc).despawn();
     }
     "npcs despawned".to_string()
+}
+
+fn load_level_cmd(
+    In(args): CommandArgs,
+    asset_server: Res<AssetServer>,
+    mut commands: Commands,
+) -> String {
+    let mut levels = HashSet::new();
+    let source = asset_server.get_source(AssetSourceId::Default).unwrap();
+    let mut stream =
+        futures_lite::future::block_on(source.reader().read_directory(Path::new("levels")))
+            .unwrap();
+    while let Some(path) = futures_lite::future::block_on(stream.next()) {
+        levels.insert(format!("{path:?}"));
+    }
+    let mut levels_list = "".to_string();
+    for level in &levels {
+        levels_list += &format!("{level}\n");
+    }
+    let Some(id) = args.get(0) else {
+        return format!("please provide level asset id, available levels:\n{levels_list}");
+    };
+    if levels.contains(&format!("\"levels/{}\"", id)) {
+        commands.trigger(LoadLevel {
+            id: format!("levels/{}#Scene0", id),
+        });
+        return format!("loading level \"{id}\"");
+    } else {
+        return format!("no such level, available levels:\n{levels_list}");
+    }
 }
 
 fn play_animation_cmd(

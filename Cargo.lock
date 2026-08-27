@@ -1881,6 +1881,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_simple_text_input"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27f19b26a6bbb516b3f8f63e7b810be2ac3f4b9884551d9d296abebda4cc49a7"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "bevy_skein"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2615,10 +2624,12 @@ dependencies = [
  "bevy_quinnet",
  "bevy_replicon_quinnet",
  "bevy_seedling",
+ "bevy_simple_text_input",
  "bevy_skein",
  "bevy_vello",
  "chill_bevy_console",
  "fluent",
+ "futures-lite",
  "noiz",
  "polyanya",
  "rerecast",

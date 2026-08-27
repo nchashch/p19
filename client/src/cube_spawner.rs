@@ -46,6 +46,6 @@ fn on_cube_spawned(
     commands.entity(spawned.entity).insert((
         Selectable,
         WorldAssetRoot(asset_server.load("Cube.glb#Scene0")),
-        DespawnOnEnter(GameState::MainMenu),
+        DespawnOnExit(GameState::InGame),
     ));
 }

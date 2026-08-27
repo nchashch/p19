@@ -1,13 +1,15 @@
 use crate::game_state::GameState;
-use crate::player_character::PlayerCharacter;
+use crate::loading::LoadLevel;
+use crate::player_character::{PlayerCharacter, PlayerName};
 use crate::targeting::{Hovered, SELECT_RANGE, Selected};
 use bevy::{
     color::palettes::css::{DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},
+    feathers::controls::{FeathersTextInput, FeathersTextInputContainer},
     prelude::*,
     reflect::TypePath,
     render::render_resource::*,
     shader::ShaderRef,
-    text::FontSourceTemplate,
+    text::{EditableText, FontSourceTemplate, TextEdit},
 };
 use shared::combat::{ATTACK_RANGE, DAMAGE, GCD_DURATION, Gcd, HitPoints};
 
@@ -20,6 +22,7 @@ impl Plugin for PrototypeUiPlugin {
         app.add_observer(show_tooltip);
         app.add_observer(hide_tooltip);
         app.add_observer(add_gcd_overlay);
+        app.add_observer(seed_player_name_input);
         app.add_systems(Update, (update_data_frame, update_gcd_overlay));
     }
 }
@@ -40,6 +43,21 @@ fn main_menu() -> impl Scene {
             panel(px(400), px(400))
             Children [
                 (
+                    @FeathersTextInputContainer
+                    Node {
+                        width: px(200),
+                    }
+                    Children [
+                        (
+                            @FeathersTextInput {
+                                @visible_width: 16f32,
+                                @max_characters: 24usize,
+                            }
+                            PlayerNameInput
+                        ),
+                    ]
+                ),
+                (
                     button(px(200), px(50), "play")
                     Tooltip("Start the game.")
                     on(play_button)
@@ -49,6 +67,25 @@ fn main_menu() -> impl Scene {
         WorldAssetRoot("MenuBackground.glb#Scene0")
         DespawnOnExit::<GameState>(GameState::MainMenu)
     }
+}
+
+/// Marks the main menu's name-entry `FeathersTextInput` so `play_button` can read it and
+/// `seed_player_name_input` can pre-fill it with the current `PlayerName`.
+#[derive(Component, Clone, Default)]
+struct PlayerNameInput;
+
+/// Pre-fills the name field with the current `PlayerName` as soon as it's spawned — `EditableText`
+/// has no plain "initial text" field to set inline in the `bsn!` scene, so this queues an edit
+/// instead (applied by `bevy_text`'s own `apply_text_edits` system).
+fn seed_player_name_input(
+    added: On<Add, PlayerNameInput>,
+    mut inputs: Query<&mut EditableText>,
+    player_name: Res<PlayerName>,
+) {
+    let Ok(mut editable_text) = inputs.get_mut(added.entity) else {
+        return;
+    };
+    editable_text.queue_edit(TextEdit::Insert(player_name.0.clone().into()));
 }
 
 pub fn in_game_scene() -> impl SceneList {
@@ -319,8 +356,22 @@ const BUTTON_HOVERED_COLOR: Srgba = SLATE_GRAY;
 const BUTTON_TEXT_COLOR: Srgba = WHITE;
 const BUTTON_TEXT_FONT_SIZE: f32 = 33.0;
 
-fn play_button(_event: On<Pointer<Press>>, mut commands: Commands) {
-    commands.set_state(GameState::Loading);
+fn play_button(
+    _event: On<Pointer<Press>>,
+    name_input: Query<&EditableText, With<PlayerNameInput>>,
+    mut player_name: ResMut<PlayerName>,
+    mut commands: Commands,
+) {
+    if let Ok(editable_text) = name_input.single() {
+        let entered = editable_text.value().to_string();
+        let trimmed = entered.trim();
+        if !trimmed.is_empty() {
+            player_name.0 = trimmed.to_string();
+        }
+    }
+    commands.trigger(LoadLevel {
+        id: "levels/Level.glb#Scene0".to_string(),
+    });
 }
 
 fn hover_button(event: On<Pointer<Over>>, mut commands: Commands) {

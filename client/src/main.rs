@@ -1,4 +1,5 @@
 use avian3d::prelude::*;
+use bevy::feathers::{dark_theme::create_dark_theme, theme::UiTheme};
 use bevy::prelude::*;
 use bevy_seedling::prelude::*;
 use bevy_skein::SkeinPlugin;
@@ -12,9 +13,12 @@ use game_state::{GameState, GameStatePlugin};
 use particles::ParticleEffectsPlugin;
 use player_character::PlayerCharacterPlugin;
 
+mod level;
 mod animation;
+mod camera;
 mod combat;
 mod console;
+mod controls;
 mod cube_spawner;
 mod fps_controller;
 mod game_state;
@@ -51,6 +55,7 @@ impl Plugin for Prototype19 {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             DefaultPlugins,
+            bevy::feathers::FeathersPlugins,
             PAnimationPlugin,
             PConsolePlugin,
             LoadingPlugin,
@@ -70,6 +75,7 @@ impl Plugin for Prototype19 {
                 ui::PrototypeUiPlugin,
             ),
         ))
+        .insert_resource(UiTheme(create_dark_theme()))
         .insert_resource(GlobalAmbientLight {
             color: Color::WHITE,
             brightness: 100.,

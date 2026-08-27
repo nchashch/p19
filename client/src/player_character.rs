@@ -1,26 +1,15 @@
 use crate::{
-    add_observers_run_if,
-    combat::{AttackAction, CombatPlugin, KillAction},
-    cube_spawner::SpawnCube,
-    fps_controller::{FpsCamera, FpsCameraRotation},
+    camera::{Cubemap, PlayerCameraPlugin, player_camera},
+    combat::CombatPlugin,
+    controls::{self, PlayerControlsPlugin},
+    fps_controller::FpsCamera,
     game_state::GameState,
-    npc_spawner::SpawnNpc,
-    targeting::{Deselect, Select, TargetingPlugin},
 };
 use avian3d::prelude::*;
-use bevy::{
-    anti_alias::taa::TemporalAntiAliasing,
-    light::Skybox,
-    pbr::ScreenSpaceAmbientOcclusion,
-    prelude::*,
-    render::render_resource::{TextureViewDescriptor, TextureViewDimension},
-    window::{CursorGrabMode, CursorOptions},
-};
-use bevy_enhanced_input::prelude::{Press, *};
-use chill_bevy_console::console_closed;
+use bevy::prelude::*;
 use shared::character_controller::{
     Character, CharacterCollisions, CharacterController, CharacterControllerPlugin,
-    CharacterMovementSettings, DesiredMotion, GroundDetection, Idle, JumpInput, MovementInput,
+    CharacterMovementSettings, DesiredMotion, GroundDetection, Idle,
 };
 use shared::combat::{Gcd, HitPoints};
 use shared::cube_spawner::CubeSpawner;
@@ -30,43 +19,37 @@ pub struct PlayerCharacterPlugin;
 
 impl Plugin for PlayerCharacterPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Cubemap {
-            is_loaded: false,
-            image_handle: None,
-        });
-        app.add_plugins((CharacterControllerPlugin, TargetingPlugin, CombatPlugin));
-        app.add_systems(OnEnter(GameState::MainMenu), unlock_cursor);
-        app.add_systems(OnEnter(GameState::InGame), (lock_cursor, initial_respawn));
+        app.init_resource::<PlayerName>();
+
+        app.add_plugins((
+            CharacterControllerPlugin,
+            CombatPlugin,
+            PlayerControlsPlugin,
+            PlayerCameraPlugin,
+        ));
+        app.add_systems(OnEnter(GameState::InGame), initial_respawn);
 
         app.add_observer(respawn_player);
-        app.add_observer(on_movement_stop);
-
-        add_observers_run_if!(
-            app,
-            console_closed,
-            main_menu,
-            shoot,
-            spawn_npc,
-            on_jump,
-            on_movement,
-        );
-
-        app.add_plugins(EnhancedInputPlugin)
-            .add_input_context::<PlayerCharacter>();
-        app.add_systems(Update, asset_loaded);
     }
 }
 
 #[derive(Event)]
 pub struct RespawnPlayer;
 
-#[derive(Component, Reflect, Default)]
-#[reflect(Component)]
-pub struct PlayerCharacterSpawner;
+/// The name entered in the main menu's text field, used for the player's `Name` component.
+/// Defaults to "Player" so a fresh app (or skipping the field) behaves as before.
+#[derive(Resource)]
+pub struct PlayerName(pub String);
+
+impl Default for PlayerName {
+    fn default() -> Self {
+        Self("Player".to_string())
+    }
+}
 
 #[derive(Component, Reflect, Default)]
 #[reflect(Component)]
-pub struct PlayerCharacter;
+pub struct PlayerCharacterSpawner;
 
 #[derive(Component, Reflect, Default)]
 #[reflect(Component)]
@@ -82,13 +65,18 @@ const PLAYER_JUMP_IMPULSE: f32 = 10.0;
 const PLAYER_GRAVITY: Vec3 = Vec3::new(0.0, -20.0, 0.0);
 const PLAYER_TERMINAL_VELOCITY: f32 = 300.0;
 
+#[derive(Component, Reflect, Default)]
+#[reflect(Component)]
+pub struct PlayerCharacter;
+
 pub fn respawn_player(
     _event: On<RespawnPlayer>,
     mut commands: Commands,
     player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
     player_character: Query<Entity, With<PlayerCharacter>>,
     asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    player_name: Res<PlayerName>,
+    mut cubemap: ResMut<Cubemap>,
 ) {
     if let Ok(player_character) = player_character.single() {
         commands.entity(player_character).despawn();
@@ -103,7 +91,6 @@ pub fn respawn_player(
         gravity: PLAYER_GRAVITY,
         terminal_velocity: PLAYER_TERMINAL_VELOCITY,
     };
-    let skybox_handle = asset_server.load("Ryfjallet_cubemap.png");
     commands
         .spawn((
             (
@@ -111,7 +98,7 @@ pub fn respawn_player(
                 Character,
                 Idle,
                 CharacterController,
-                Name::new("Player"),
+                Name::new(player_name.0.clone()),
                 HitPoints {
                     hit_points: 100,
                     max_hit_points: 100,
@@ -127,71 +114,13 @@ pub fn respawn_player(
                 ..default()
             },
             Collider::capsule(0.4, 1.0),
-            MeshMaterial3d(materials.add(Color::srgb(0.8, 0.2, 0.2))),
             DesiredMotion::default(),
             RigidBody::Kinematic,
             Transform::from_translation(spawner_transform.translation),
-            Actions::<PlayerCharacter>::spawn(SpawnWith(|context: &mut ActionSpawner<_>| {
-                context.spawn((
-                    Action::<Movement>::new(),
-                    Bindings::spawn((Cardinal::wasd_keys(),)),
-                ));
-                context.spawn((
-                    Action::<Movement>::new(),
-                    DeadZone {
-                        kind: DeadZoneKind::Radial, // circular; correct for a stick
-                        lower_threshold: 0.15,      // below this magnitude → zero
-                        upper_threshold: 1.0,       // above this → clamped to 1, rescaled between
-                    },
-                    Bindings::spawn(Axial::left_stick()),
-                ));
-                context.spawn((
-                    Action::<Jump>::new(),
-                    Press::new(1.0),
-                    bindings![KeyCode::Space, GamepadButton::South],
-                ));
-                context.spawn((Action::<KillAction>::new(), bindings![KeyCode::KeyT]));
-
-                context.spawn((Action::<AttackAction>::new(), bindings![KeyCode::KeyF]));
-
-                // context.spawn((Action::<Shoot>::new(), bindings![MouseButton::Left]));
-                context.spawn((
-                    Action::<Shoot>::new(),
-                    bindings![KeyCode::KeyE, GamepadButton::West],
-                ));
-                context.spawn((
-                    Action::<SpawnNpcAction>::new(),
-                    bindings![KeyCode::KeyR, GamepadButton::East],
-                ));
-                context.spawn((Action::<Deselect>::new(), bindings![KeyCode::Escape]));
-                context.spawn((Action::<Select>::new(), bindings![MouseButton::Left]));
-                // context.spawn((Action::<Interact>::new(), bindings![MouseButton::Right]));
-
-                context.spawn((Action::<MainMenu>::new(), bindings![KeyCode::F1]));
-                context.spawn((
-                    Action::<FpsCameraRotation>::new(),
-                    bindings![Binding::mouse_motion()],
-                ));
-                context.spawn((
-                    Action::<FpsCameraRotation>::new(),
-                    DeadZone {
-                        kind: DeadZoneKind::Radial, // circular; correct for a stick
-                        lower_threshold: 0.15,      // below this magnitude → zero
-                        upper_threshold: 1.0,       // above this → clamped to 1, rescaled between
-                    },
-                    Bindings::spawn(Axial::right_stick()),
-                ));
-            })),
-            DespawnOnEnter(GameState::MainMenu),
+            DespawnOnExit(GameState::InGame),
         ))
         .with_children(|parent| {
-            /*
-                        parent.spawn((
-                            PlayerModel,
-                            WorldAssetRoot(asset_server.load("rig.glb#Scene0")),
-                            Transform::from_translation(Vec3::new(0.0, -0.9, 0.0)),
-                        ));
-            */
+            parent.spawn(controls::player_controls());
             parent
                 .spawn((Transform::from_xyz(0., 0.5, 0.),))
                 .with_children(|parent| {
@@ -200,21 +129,7 @@ pub fn respawn_player(
                         .with_children(|parent| {
                             parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), CubeSpawner));
                             parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), NpcSpawner));
-                            parent.spawn((
-                                // Transform::from_xyz(0.0, 0.0, 3.0),
-                                Camera3d::default(),
-                                IsDefaultUiCamera,
-                                Msaa::Off,
-                                TemporalAntiAliasing::default(),
-                                ScreenSpaceAmbientOcclusion::default(),
-                                /*
-                                                                Skybox {
-                                                                    image: Some(skybox_handle.clone()),
-                                                                    brightness: 1000.0,
-                                                                    ..default()
-                                                                },
-                                */
-                            ));
+                            parent.spawn(player_camera(&asset_server, &mut cubemap));
                         });
                 });
         });
@@ -226,146 +141,5 @@ pub fn respawn_player(
         color: Color::srgb_u8(210, 220, 240),
         brightness: 400.0,
         ..default()
-    });
-
-    commands.insert_resource(Cubemap {
-        is_loaded: false,
-        image_handle: Some(skybox_handle),
-    });
-}
-
-#[derive(InputAction)]
-#[action_output(Vec2)]
-pub struct Movement;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-pub struct Jump;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-pub struct MainMenu;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-pub struct Shoot;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-pub struct SpawnNpcAction;
-
-fn unlock_cursor(mut cursor_options: Single<&mut CursorOptions>) {
-    cursor_options.visible = true;
-    cursor_options.grab_mode = CursorGrabMode::None;
-}
-
-fn lock_cursor(mut cursor_options: Single<&mut CursorOptions>) {
-    cursor_options.visible = false;
-    cursor_options.grab_mode = CursorGrabMode::Locked;
-}
-
-fn shoot(_: On<Start<Shoot>>, mut commands: Commands) {
-    commands.trigger(SpawnCube);
-}
-
-fn spawn_npc(_: On<Start<SpawnNpcAction>>, mut commands: Commands) {
-    commands.trigger(SpawnNpc);
-}
-
-fn main_menu(_: On<Start<MainMenu>>, mut commands: Commands) {
-    commands.set_state(GameState::MainMenu);
-}
-
-fn asset_loaded(
-    asset_server: Res<AssetServer>,
-    mut images: ResMut<Assets<Image>>,
-    mut cubemap: ResMut<Cubemap>,
-    mut skyboxes: Query<&mut Skybox>,
-) {
-    if cubemap.image_handle.is_none() {
-        return;
-    }
-    if !cubemap.is_loaded
-        && asset_server
-            .load_state(&cubemap.image_handle.clone().unwrap())
-            .is_loaded()
-    {
-        let mut image = images
-            .get_mut(&cubemap.image_handle.clone().unwrap())
-            .unwrap();
-        // NOTE: PNGs do not have any metadata that could indicate they contain a cubemap texture,
-        // so they appear as one texture. The following code reconfigures the texture as necessary.
-        if image.texture_descriptor.array_layer_count() == 1 {
-            let layers = image.height() / image.width();
-            image
-                .reinterpret_stacked_2d_as_array(layers)
-                .expect("asset should be 2d texture and height will always be evenly divisible with the given layers");
-            image.texture_view_descriptor = Some(TextureViewDescriptor {
-                dimension: Some(TextureViewDimension::Cube),
-                ..default()
-            });
-        }
-
-        for mut skybox in &mut skyboxes {
-            skybox.image = cubemap.image_handle.clone();
-        }
-
-        cubemap.is_loaded = true;
-    }
-}
-
-#[derive(Resource)]
-struct Cubemap {
-    is_loaded: bool,
-    image_handle: Option<Handle<Image>>,
-}
-
-/// Translates the `bevy_enhanced_input` jump action into the input-library-agnostic
-/// `shared::character_controller::JumpInput` the controller actually runs on.
-fn on_jump(
-    _: On<Fire<Jump>>,
-    player: Query<Entity, With<PlayerCharacter>>,
-    mut commands: Commands,
-) {
-    let Ok(player) = player.single() else {
-        return;
-    };
-    commands.trigger(JumpInput { entity: player });
-}
-
-fn on_movement_stop(
-    _: On<Complete<Movement>>,
-    player: Query<Entity, With<PlayerCharacter>>,
-    mut commands: Commands,
-) {
-    let Ok(player) = player.single() else {
-        return;
-    };
-    commands.trigger(MovementInput {
-        entity: player,
-        direction: Vec3::ZERO,
-    });
-}
-
-/// Translates the `bevy_enhanced_input` movement action (plus the camera's yaw — a client-only
-/// concept the controller itself knows nothing about) into a world-space
-/// `shared::character_controller::MovementInput`.
-fn on_movement(
-    movement_event: On<Fire<Movement>>,
-    fps_camera: Query<&FpsCamera>,
-    player: Query<Entity, With<PlayerCharacter>>,
-    mut commands: Commands,
-) {
-    let Ok(fps_camera) = fps_camera.single() else {
-        return;
-    };
-    let Ok(player) = player.single() else {
-        return;
-    };
-    let rotation = Rot2::radians(fps_camera.yaw);
-    let rotated = rotation * movement_event.value;
-    commands.trigger(MovementInput {
-        entity: player,
-        direction: Vec3::new(-rotated.x, 0.0, rotated.y),
     });
 }

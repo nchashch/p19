@@ -1,6 +1,4 @@
-use crate::{
-    game_state::GameState, player_character::PlayerCharacter, targeting::Selectable,
-};
+use crate::{game_state::GameState, player_character::PlayerCharacter, targeting::Selectable};
 use bevy::prelude::*;
 use shared::npc_spawner::{NpcSpawned, SpawnNpcRequest};
 
@@ -34,7 +32,7 @@ fn on_npc_spawned(spawned: On<NpcSpawned>, asset_server: Res<AssetServer>, mut c
         .insert((
             InheritedVisibility::default(),
             Selectable,
-            DespawnOnEnter(GameState::MainMenu),
+            DespawnOnExit(GameState::InGame),
         ))
         .with_child((
             WorldAssetRoot(asset_server.load("rig.glb#Scene0")),

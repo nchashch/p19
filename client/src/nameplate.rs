@@ -1,7 +1,7 @@
 use crate::game_state::GameState;
-use shared::combat::HitPoints;
 use bevy::color::palettes::css::{DARK_SLATE_GRAY, GREEN};
 use bevy::prelude::*;
+use shared::combat::HitPoints;
 
 pub struct NameplatePlugin;
 
@@ -47,7 +47,7 @@ fn spawn_nameplates(add: On<Add, HitPoints>, mut commands: Commands, names: Quer
                 ..default()
             },
             Pickable::IGNORE,
-            DespawnOnEnter(GameState::MainMenu),
+            DespawnOnExit(GameState::InGame),
         ))
         .with_children(|parent| {
             parent.spawn((Text::new(name.as_str()), Pickable::IGNORE));

@@ -67,4 +67,3 @@ fn apply_fps_camera_rotation(
         camera_transform.look_at(fps_camera.direction, Vec3::Y);
     }
 }
-

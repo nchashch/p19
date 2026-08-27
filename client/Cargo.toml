@@ -22,3 +22,5 @@ bevy_seedling.workspace = true
 audionimbus.workspace = true
 chill_bevy_console.workspace = true
 shared = { path = "../shared" }
+bevy_simple_text_input = "0.15.0"
+futures-lite = "2.6.1"
