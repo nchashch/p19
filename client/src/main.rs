@@ -21,6 +21,7 @@ mod controls;
 mod cube_spawner;
 mod fps_controller;
 mod game_state;
+mod hud;
 mod loading;
 mod nameplate;
 mod npc_spawner;
@@ -28,6 +29,7 @@ mod particles;
 mod player_character;
 mod targeting;
 mod ui;
+mod widgets;
 
 /// Registers each `$observer` with `$app`, gated behind `$condition` (e.g.
 /// `chill_bevy_console::console_closed`, to suppress gameplay observers while the

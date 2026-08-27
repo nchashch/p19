@@ -13,7 +13,11 @@ impl Plugin for TargetingPlugin {
         app.add_plugins(OutlinePlugin::JUMP_FLOOD);
         app.add_systems(
             Update,
-            (raycast_from_center, update_outline_hovered_selected),
+            (
+                raycast_from_center,
+                update_outline_hovered_selected,
+                deselect_when_out_of_range,
+            ),
         );
         app.add_observer(add_outline_component);
         app.insert_resource(Hovered(None));
@@ -103,6 +107,24 @@ fn select(
 
 fn deselect(_event: On<Fire<Deselect>>, mut selected: ResMut<Selected>) {
     selected.0 = None;
+}
+
+fn deselect_when_out_of_range(
+    player_transform: Single<&GlobalTransform, With<PlayerCharacter>>,
+    selected_transform: Query<&GlobalTransform>,
+    mut selected: ResMut<Selected>,
+) {
+    if let Some(selected_entity) = selected.0 {
+        let Ok(selected_transform) = selected_transform.get(selected_entity) else {
+            return;
+        };
+        let distance = player_transform
+            .translation()
+            .distance(selected_transform.translation());
+        if distance > SELECT_RANGE {
+            selected.0 = None;
+        }
+    }
 }
 
 #[derive(Component)]

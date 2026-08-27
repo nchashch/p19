@@ -9,7 +9,7 @@ impl Plugin for LoadingPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             OnEnter(GameState::Loading),
-            (crate::ui::in_game_scene.spawn(), spawn_level),
+            (crate::hud::in_game_scene.spawn(), spawn_level),
         );
         app.add_systems(OnEnter(GameState::InGame), initial_respawn);
         app.add_observer(load_level);
