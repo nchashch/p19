@@ -1,10 +1,8 @@
-use crate::{add_observers_run_if, player_character::PlayerCharacter};
+use crate::player_character::PlayerCharacter;
 use avian3d::prelude::*;
 use bevy::color::palettes::css::{DARK_SLATE_GRAY, GRAY, WHITE};
 use bevy::prelude::*;
-use bevy_enhanced_input::prelude::*;
 use bevy_mod_outline::{AsyncWorldInheritOutline, OutlinePlugin, OutlineVolume};
-use chill_bevy_console::console_closed;
 
 pub struct TargetingPlugin;
 

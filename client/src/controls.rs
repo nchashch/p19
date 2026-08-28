@@ -12,7 +12,6 @@ use shared::character_controller::{JumpInput, MovementInput};
 use std::f32::consts::PI;
 
 use crate::actions::*;
-use crate::events::*;
 use shared::events::{AttackAttempt, KillAttempt};
 
 pub struct PlayerControlsPlugin;
