@@ -6,4 +6,6 @@
 pub mod character_controller;
 pub mod combat;
 pub mod cube_spawner;
+pub mod events;
 pub mod npc_spawner;
+pub mod replication;

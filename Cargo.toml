@@ -19,18 +19,28 @@ edition = "2024"
 fluent = "0.17.0"
 noiz = "0.5.0"
 bevy = { version = "0.19.0", default-features = true, features = [
+	"serialize",
 	"basis-universal",
 	"ktx2",
 	"bevy_dev_tools",
 	"bevy_feathers",
 ] }
-avian3d = { version = "0.7.0", features = ["simd"] }
+avian3d = { version = "0.7.0", features = ["simd", "serialize"] }
 bevy_skein = "0.6.0"
 bevy_enhanced_input = "0.26.0"
 bevy_asset_loader = "0.27.0"
 bevy_hanabi = "0.19.0"
+bevy_replicon = "0.41.1"
 bevy_replicon_quinnet = "0.20.0"
-bevy_quinnet = "0.21.0"
+# `recv_channels` (a default feature) adds an alternate auto-dispatch receive path that
+# `bevy_replicon_quinnet` doesn't use (it dequeues messages itself) — left off since nothing
+# else in this workspace needs it either.
+bevy_quinnet = { version = "0.21.0", default-features = false, features = [
+	"client",
+	"server",
+	"shared-client-id",
+] }
+serde = { version = "1.0.228", features = ["derive"] }
 
 polyanya = { path = "../polyanya" }
 rerecast = { path = "../rerecast/crates/rerecast" }

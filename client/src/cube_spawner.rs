@@ -3,7 +3,9 @@ use crate::{
     targeting::Selectable,
 };
 use bevy::prelude::*;
-use shared::cube_spawner::{CubeSpawned, SpawnCubeRequest};
+use shared::events::{CubeSpawned, SpawnCubeRequest};
+
+use crate::events::SpawnCube;
 
 pub struct CubeSpawnerPlugin;
 
@@ -13,11 +15,6 @@ impl Plugin for CubeSpawnerPlugin {
         app.add_observer(on_cube_spawned);
     }
 }
-
-/// Client-local trigger (bound to input) — translated into a `SpawnCubeRequest` carrying the
-/// player's current aim direction, since `shared` has no `FpsCamera` of its own.
-#[derive(Event)]
-pub struct SpawnCube;
 
 fn request_spawn_cube(
     _event: On<SpawnCube>,

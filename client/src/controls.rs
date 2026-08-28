@@ -1,16 +1,19 @@
 use crate::add_observers_run_if;
-use crate::combat::{AttackAction, KillAction};
-use crate::cube_spawner::SpawnCube;
-use crate::fps_controller::{FpsCamera, FpsCameraRotation};
+use crate::events::{SpawnCube, SpawnNpc};
+use crate::fps_controller::FpsCamera;
 use crate::game_state::GameState;
-use crate::npc_spawner::SpawnNpc;
 use crate::player_character::PlayerCharacter;
-use crate::targeting::{Deselect, Select, TargetingPlugin};
+use crate::targeting::{Hovered, SELECT_RANGE, Selectable, Selected, TargetingPlugin};
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions};
 use bevy_enhanced_input::prelude::{Press, *};
 use chill_bevy_console::console_closed;
 use shared::character_controller::{JumpInput, MovementInput};
+use std::f32::consts::PI;
+
+use crate::actions::*;
+use crate::events::*;
+use shared::events::{AttackAttempt, KillAttempt};
 
 pub struct PlayerControlsPlugin;
 
@@ -31,7 +34,12 @@ impl Plugin for PlayerControlsPlugin {
         add_observers_run_if!(
             app,
             console_closed,
+            attack,
+            kill,
+            apply_fps_camera_rotation,
             main_menu,
+            select,
+            deselect,
             shoot,
             spawn_npc,
             on_jump,
@@ -39,78 +47,6 @@ impl Plugin for PlayerControlsPlugin {
         );
     }
 }
-
-pub fn player_controls() -> impl Bundle {
-    (
-        PlayerControls,
-        Actions::<PlayerControls>::spawn(SpawnWith(|context: &mut ActionSpawner<_>| {
-            context.spawn((
-                Action::<Movement>::new(),
-                Bindings::spawn((Cardinal::wasd_keys(),)),
-            ));
-            context.spawn((
-                Action::<Movement>::new(),
-                DeadZone {
-                    kind: DeadZoneKind::Radial, // circular; correct for a stick
-                    lower_threshold: 0.15,      // below this magnitude → zero
-                    upper_threshold: 1.0,       // above this → clamped to 1, rescaled between
-                },
-                Bindings::spawn(Axial::left_stick()),
-            ));
-            context.spawn((
-                Action::<Jump>::new(),
-                Press::new(1.0),
-                bindings![KeyCode::Space, GamepadButton::South],
-            ));
-            context.spawn((Action::<KillAction>::new(), bindings![KeyCode::KeyT]));
-            context.spawn((Action::<AttackAction>::new(), bindings![KeyCode::KeyF]));
-            context.spawn((
-                Action::<Shoot>::new(),
-                bindings![KeyCode::KeyE, GamepadButton::West],
-            ));
-            context.spawn((
-                Action::<SpawnNpcAction>::new(),
-                bindings![KeyCode::KeyR, GamepadButton::East],
-            ));
-            context.spawn((Action::<Deselect>::new(), bindings![KeyCode::Escape]));
-            context.spawn((Action::<Select>::new(), bindings![MouseButton::Left]));
-            context.spawn((Action::<MainMenu>::new(), bindings![KeyCode::F1]));
-            context.spawn((
-                Action::<FpsCameraRotation>::new(),
-                bindings![Binding::mouse_motion()],
-            ));
-            context.spawn((
-                Action::<FpsCameraRotation>::new(),
-                DeadZone {
-                    kind: DeadZoneKind::Radial, // circular; correct for a stick
-                    lower_threshold: 0.15,      // below this magnitude → zero
-                    upper_threshold: 1.0,       // above this → clamped to 1, rescaled between
-                },
-                Bindings::spawn(Axial::right_stick()),
-            ));
-        })),
-    )
-}
-
-#[derive(InputAction)]
-#[action_output(Vec2)]
-pub struct Movement;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-pub struct Jump;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-pub struct MainMenu;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-pub struct Shoot;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-pub struct SpawnNpcAction;
 
 fn unlock_cursor(mut cursor_options: Single<&mut CursorOptions>) {
     cursor_options.visible = true;
@@ -182,4 +118,128 @@ fn on_jump(
         return;
     };
     commands.trigger(JumpInput { entity: player });
+}
+
+fn apply_fps_camera_rotation(
+    rotation: On<Fire<FpsCameraRotation>>,
+    mut fps_camera: Query<(&mut FpsCamera, &mut Transform)>,
+) {
+    if let Ok((mut fps_camera, mut camera_transform)) = fps_camera.single_mut() {
+        let delta_pitch = rotation.value.y * fps_camera.sensitivity;
+        let delta_yaw = -rotation.value.x * fps_camera.sensitivity;
+        fps_camera.pitch =
+            (fps_camera.pitch + delta_pitch).clamp(-PI / 2. + 0.0001, PI / 2. - 0.0001);
+        fps_camera.yaw = fps_camera.yaw + delta_yaw;
+        let d = Vec3::Z.rotate_x(fps_camera.pitch);
+        let d = d.rotate_y(fps_camera.yaw);
+        let d = d.normalize_or_zero();
+        fps_camera.direction = d;
+        camera_transform.look_at(fps_camera.direction, Vec3::Y);
+    }
+}
+
+fn select(
+    _event: On<Fire<Select>>,
+    hovered: Res<Hovered>,
+    mut selected: ResMut<Selected>,
+    query: Query<Entity, With<Selectable>>,
+) {
+    if let Some((entity, distance)) = hovered.0 {
+        if query.get(entity).is_ok() {
+            if distance < SELECT_RANGE {
+                selected.0 = Some(entity);
+            }
+        }
+    }
+}
+
+fn deselect(_event: On<Fire<Deselect>>, mut selected: ResMut<Selected>) {
+    selected.0 = None;
+}
+
+/// Input handling only — decides *who* the player wants to attack, not whether it lands.
+/// `shared::combat::resolve_attack` does the range check and applies damage.
+fn attack(
+    _: On<Start<AttackAction>>,
+    selected: Res<Selected>,
+    player: Query<Entity, With<PlayerCharacter>>,
+    mut commands: Commands,
+) {
+    let Ok(attacker) = player.single() else {
+        return;
+    };
+    let Some(entity) = selected.0 else {
+        return;
+    };
+    commands.trigger(AttackAttempt { entity, attacker });
+}
+
+/// Input handling only — decides *who* the player wants to kill, not whether it lands.
+/// `shared::combat::resolve_kill` does the range check and zeroes `HitPoints`. Structurally
+/// identical to `attack`, just targeting `KillAttempt` instead of `AttackAttempt`.
+fn kill(
+    _: On<Start<KillAction>>,
+    selected: Res<Selected>,
+    player: Query<Entity, With<PlayerCharacter>>,
+    mut commands: Commands,
+) {
+    let Ok(killer) = player.single() else {
+        return;
+    };
+    let Some(entity) = selected.0 else {
+        return;
+    };
+    commands.trigger(KillAttempt { entity, killer });
+}
+
+pub fn player_controls() -> impl Bundle {
+    (
+        PlayerControls,
+        Actions::<PlayerControls>::spawn(SpawnWith(|context: &mut ActionSpawner<_>| {
+            context.spawn((
+                Action::<Movement>::new(),
+                Bindings::spawn((Cardinal::wasd_keys(),)),
+            ));
+            context.spawn((
+                Action::<Movement>::new(),
+                DeadZone {
+                    kind: DeadZoneKind::Radial, // circular; correct for a stick
+                    lower_threshold: 0.15,      // below this magnitude → zero
+                    upper_threshold: 1.0,       // above this → clamped to 1, rescaled between
+                },
+                Bindings::spawn(Axial::left_stick()),
+            ));
+            context.spawn((
+                Action::<Jump>::new(),
+                Press::new(1.0),
+                bindings![KeyCode::Space, GamepadButton::South],
+            ));
+            context.spawn((Action::<KillAction>::new(), bindings![KeyCode::KeyT]));
+            context.spawn((Action::<AttackAction>::new(), bindings![KeyCode::KeyF]));
+            context.spawn((
+                Action::<Shoot>::new(),
+                bindings![KeyCode::KeyE, GamepadButton::West],
+            ));
+            context.spawn((
+                Action::<SpawnNpcAction>::new(),
+                bindings![KeyCode::KeyR, GamepadButton::East],
+            ));
+            context.spawn((Action::<Deselect>::new(), bindings![KeyCode::Escape]));
+            context.spawn((Action::<Select>::new(), bindings![MouseButton::Left]));
+            context.spawn((Action::<MainMenu>::new(), bindings![KeyCode::F1]));
+            context.spawn((
+                Action::<FpsCameraRotation>::new(),
+                bindings![Binding::mouse_motion()],
+            ));
+            context.spawn((
+                Action::<FpsCameraRotation>::new(),
+                DeadZone {
+                    kind: DeadZoneKind::Radial, // circular; correct for a stick
+                    lower_threshold: 0.15,      // below this magnitude → zero
+                    upper_threshold: 1.0,       // above this → clamped to 1, rescaled between
+                },
+                Bindings::spawn(Axial::right_stick()),
+            ));
+        })),
+    )
 }

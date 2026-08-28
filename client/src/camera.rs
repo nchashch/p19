@@ -28,11 +28,13 @@ pub fn player_camera(asset_server: &Res<AssetServer>, cubemap: &mut Cubemap) -> 
         Msaa::Off,
         TemporalAntiAliasing::default(),
         ScreenSpaceAmbientOcclusion::default(),
-        Skybox {
-            image: Some(skybox_handle.clone()),
-            brightness: 1000.0,
-            ..default()
-        },
+        /*
+                Skybox {
+                    image: Some(skybox_handle.clone()),
+                    brightness: 1000.0,
+                    ..default()
+                },
+        */
     )
 }
 

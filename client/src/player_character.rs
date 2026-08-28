@@ -15,6 +15,8 @@ use shared::combat::{Gcd, HitPoints};
 use shared::cube_spawner::CubeSpawner;
 use shared::npc_spawner::NpcSpawner;
 
+use crate::events::RespawnPlayer;
+
 pub struct PlayerCharacterPlugin;
 
 impl Plugin for PlayerCharacterPlugin {
@@ -32,9 +34,6 @@ impl Plugin for PlayerCharacterPlugin {
         app.add_observer(respawn_player);
     }
 }
-
-#[derive(Event)]
-pub struct RespawnPlayer;
 
 /// The name entered in the main menu's text field, used for the player's `Name` component.
 /// Defaults to "Player" so a fresh app (or skipping the field) behaves as before.

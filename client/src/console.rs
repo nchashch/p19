@@ -7,9 +7,9 @@ use chill_bevy_console::{ChillConsole, CommandArgs, ConsoleAppExt, ConsoleComman
 use futures_lite::StreamExt;
 use std::path::Path;
 
-use crate::animation::{Animations, PlayAnimationLooping};
-use crate::loading::LoadLevel;
-use crate::{player_character::RespawnPlayer, targeting::Selected};
+use crate::animation::Animations;
+use crate::events::{LoadLevel, PlayAnimationLooping};
+use crate::{events::RespawnPlayer, targeting::Selected};
 use shared::cube_spawner::Cube;
 use shared::npc_spawner::Npc;
 

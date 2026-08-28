@@ -14,6 +14,7 @@ use noiz::{
 
 use crate::character_controller::{Character, Idle};
 use crate::combat::{Gcd, HitPoints};
+use crate::events::{NpcSpawned, SpawnNpcRequest};
 
 pub struct SharedNpcSpawnerPlugin;
 
@@ -28,23 +29,6 @@ pub struct Npc;
 
 #[derive(Component)]
 pub struct NpcSpawner;
-
-/// A request to spawn an NPC at each `NpcSpawner` — not yet confirmed (a spawner currently
-/// overlapping geometry rejects it, or `caster` may still be on its global cooldown). Fired by
-/// client input today; a future server would fire it from a received network message instead.
-#[derive(Event)]
-pub struct SpawnNpcRequest {
-    pub caster: Entity,
-}
-
-/// Fired once an NPC has actually been spawned — the fact client-side presentation (model,
-/// selectability, despawn-on-menu) reacts to. `facing_yaw` is the spawn-time random rotation,
-/// purely cosmetic (applied to the visual model only, not the authoritative `Transform`).
-#[derive(EntityEvent)]
-pub struct NpcSpawned {
-    pub entity: Entity,
-    pub facing_yaw: f32,
-}
 
 fn spawn_npc(
     request: On<SpawnNpcRequest>,

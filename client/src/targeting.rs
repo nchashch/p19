@@ -22,17 +22,8 @@ impl Plugin for TargetingPlugin {
         app.add_observer(add_outline_component);
         app.insert_resource(Hovered(None));
         app.insert_resource(Selected(None));
-        add_observers_run_if!(app, console_closed, select, deselect);
     }
 }
-
-#[derive(InputAction)]
-#[action_output(bool)]
-pub(crate) struct Select;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-pub(crate) struct Deselect;
 
 #[derive(Resource)]
 pub struct Hovered(pub Option<(Entity, f32)>);
@@ -88,25 +79,6 @@ fn raycast_from_center(
     } else {
         hovered.0 = None;
     }
-}
-
-fn select(
-    _event: On<Fire<Select>>,
-    hovered: Res<Hovered>,
-    mut selected: ResMut<Selected>,
-    query: Query<Entity, With<Selectable>>,
-) {
-    if let Some((entity, distance)) = hovered.0 {
-        if query.get(entity).is_ok() {
-            if distance < SELECT_RANGE {
-                selected.0 = Some(entity);
-            }
-        }
-    }
-}
-
-fn deselect(_event: On<Fire<Deselect>>, mut selected: ResMut<Selected>) {
-    selected.0 = None;
 }
 
 fn deselect_when_out_of_range(

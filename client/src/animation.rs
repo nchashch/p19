@@ -5,7 +5,9 @@ use bevy::world_serialization::WorldInstanceReady;
 use std::time::Duration;
 
 use shared::character_controller::{Character, Grounded, Idle};
-use shared::combat::Attack;
+use shared::events::Attack;
+
+use crate::events::{AnimationFinished, PlayAnimationLooping, PlayAnimationOnce};
 
 pub struct PAnimationPlugin;
 
@@ -77,10 +79,14 @@ fn build_graph_when_loaded(
 fn bind_animation_player(
     ready: On<WorldInstanceReady>,
     mut commands: Commands,
-    animations: Res<Animations>,
+    animations: Option<Res<Animations>>,
     children: Query<&Children>,
     mut players: Query<&mut AnimationPlayer>,
 ) {
+    let Some(animations) = animations else {
+        info!("Animations resource doesn't exist");
+        return;
+    };
     for child in children.iter_descendants(ready.entity) {
         let Ok(mut player) = players.get_mut(child) else {
             continue;
@@ -103,25 +109,17 @@ fn bind_animation_player(
     }
 }
 
-#[derive(EntityEvent)]
-pub struct PlayAnimationLooping {
-    pub entity: Entity,
-    pub name: String,
-}
-
-#[derive(EntityEvent)]
-pub struct PlayAnimationOnce {
-    pub entity: Entity,
-    pub name: String,
-}
-
 fn on_play_animation_looping(
     event: On<PlayAnimationLooping>,
     children: Query<&Children>,
     roots: Query<&AnimationRoot>,
-    animations: Res<Animations>,
+    animations: Option<Res<Animations>>,
     mut targets: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
 ) {
+    let Some(animations) = animations else {
+        info!("Animations resource doesn't exist");
+        return;
+    };
     for root in std::iter::once(event.entity).chain(children.iter_descendants(event.entity)) {
         let Some(&node) = animations.nodes.get(&event.name) else {
             return;
@@ -145,9 +143,13 @@ fn on_play_animation_once(
     event: On<PlayAnimationOnce>,
     children: Query<&Children>,
     roots: Query<&AnimationRoot>,
-    animations: Res<Animations>,
+    animations: Option<Res<Animations>>,
     mut targets: Query<(&mut AnimationPlayer, &mut AnimationTransitions)>,
 ) {
+    let Some(animations) = animations else {
+        info!("Animations resource doesn't exist");
+        return;
+    };
     for root in std::iter::once(event.entity).chain(children.iter_descendants(event.entity)) {
         let Some(&node) = animations.nodes.get(&event.name) else {
             return;
@@ -160,11 +162,6 @@ fn on_play_animation_once(
         };
         transitions.play(&mut player, node, Duration::from_millis(250));
     }
-}
-
-#[derive(EntityEvent)]
-struct AnimationFinished {
-    entity: Entity,
 }
 
 /// Fires `AnimationFinished` when a one-off (non-looping) animation completes, with `entity` set

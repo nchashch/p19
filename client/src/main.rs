@@ -1,10 +1,12 @@
 use avian3d::prelude::*;
 use bevy::feathers::{dark_theme::create_dark_theme, theme::UiTheme};
 use bevy::prelude::*;
+use bevy_replicon_quinnet::RepliconQuinnetPlugins;
 use bevy_seedling::prelude::*;
 use bevy_skein::SkeinPlugin;
 use shared::cube_spawner::SharedCubeSpawnerPlugin;
 use shared::npc_spawner::SharedNpcSpawnerPlugin;
+use shared::replication::SharedReplicationPlugin;
 
 use console::PConsolePlugin;
 use cube_spawner::CubeSpawnerPlugin;
@@ -13,17 +15,20 @@ use game_state::{GameState, GameStatePlugin};
 use particles::ParticleEffectsPlugin;
 use player_character::PlayerCharacterPlugin;
 
+mod actions;
 mod animation;
 mod camera;
 mod combat;
 mod console;
 mod controls;
 mod cube_spawner;
+mod events;
 mod fps_controller;
 mod game_state;
 mod hud;
 mod loading;
 mod nameplate;
+mod networking;
 mod npc_spawner;
 mod particles;
 mod player_character;
@@ -64,6 +69,9 @@ impl Plugin for Prototype19 {
             ParticleEffectsPlugin,
             SkeinPlugin::default(),
             PhysicsPlugins::default(),
+            bevy_replicon::prelude::RepliconPlugins,
+            RepliconQuinnetPlugins,
+            SharedReplicationPlugin,
             (
                 SharedCubeSpawnerPlugin,
                 SharedNpcSpawnerPlugin,
@@ -74,6 +82,7 @@ impl Plugin for Prototype19 {
                 GameStatePlugin,
                 NameplatePlugin,
                 ui::PrototypeUiPlugin,
+                networking::NetworkingPlugin,
             ),
         ))
         .insert_resource(UiTheme(create_dark_theme()))

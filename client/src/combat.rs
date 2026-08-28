@@ -2,16 +2,12 @@
 //! The actual range check, damage application, and death detection live in `shared::combat` —
 //! this module only reacts to the events that logic fires, it doesn't decide anything itself.
 
-use crate::{
-    add_observers_run_if, particles::CubeParticleEffect, player_character::PlayerCharacter,
-    targeting::Selected,
-};
+use crate::{particles::CubeParticleEffect, targeting::Selected};
 use bevy::prelude::*;
-use bevy_enhanced_input::prelude::*;
 use bevy_hanabi::prelude::*;
 use bevy_seedling::prelude::*;
-use chill_bevy_console::console_closed;
-use shared::combat::{Attack, AttackAttempt, EntityDied, Kill, KillAttempt, SharedCombatPlugin};
+use shared::combat::SharedCombatPlugin;
+use shared::events::{Attack, EntityDied, Kill};
 
 pub struct CombatPlugin;
 
@@ -22,55 +18,11 @@ impl Plugin for CombatPlugin {
         app.add_observer(on_attack);
         app.add_observer(on_kill);
         app.add_observer(on_entity_died);
-        add_observers_run_if!(app, console_closed, attack, kill);
     }
 }
 
-#[derive(InputAction)]
-#[action_output(bool)]
-pub(crate) struct AttackAction;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-pub(crate) struct KillAction;
-
 #[derive(Component)]
 struct Lifetime(Timer);
-
-/// Input handling only — decides *who* the player wants to attack, not whether it lands.
-/// `shared::combat::resolve_attack` does the range check and applies damage.
-fn attack(
-    _: On<Start<AttackAction>>,
-    selected: Res<Selected>,
-    player: Query<Entity, With<PlayerCharacter>>,
-    mut commands: Commands,
-) {
-    let Ok(attacker) = player.single() else {
-        return;
-    };
-    let Some(entity) = selected.0 else {
-        return;
-    };
-    commands.trigger(AttackAttempt { entity, attacker });
-}
-
-/// Input handling only — decides *who* the player wants to kill, not whether it lands.
-/// `shared::combat::resolve_kill` does the range check and zeroes `HitPoints`. Structurally
-/// identical to `attack`, just targeting `KillAttempt` instead of `AttackAttempt`.
-fn kill(
-    _: On<Start<KillAction>>,
-    selected: Res<Selected>,
-    player: Query<Entity, With<PlayerCharacter>>,
-    mut commands: Commands,
-) {
-    let Ok(killer) = player.single() else {
-        return;
-    };
-    let Some(entity) = selected.0 else {
-        return;
-    };
-    commands.trigger(KillAttempt { entity, killer });
-}
 
 /// Reacts to a confirmed hit — sound only. Animation (attacker's "attack"/"hurt" one-offs) reacts
 /// to the same `Attack` event independently in `animation.rs`.

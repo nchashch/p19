@@ -29,7 +29,7 @@ pub fn in_game_scene() -> impl SceneList {
     bsn_list![data_frame(), hotbar(), crosshair(),]
 }
 
-const CROSSHAIR_SIZE: f32 = 4.0;
+const CROSSHAIR_SIZE: f32 = 8.0;
 
 fn crosshair() -> impl Scene {
     bsn! {

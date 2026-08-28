@@ -7,6 +7,8 @@ use std::time::Duration;
 
 use bevy::prelude::*;
 
+use crate::events::{Attack, AttackAttempt, EntityDied, Kill, KillAttempt};
+
 pub struct SharedCombatPlugin;
 
 impl Plugin for SharedCombatPlugin {
@@ -26,49 +28,6 @@ pub struct HitPoints {
 
 pub const DAMAGE: i32 = 49;
 pub const ATTACK_RANGE: f32 = 10.0;
-
-/// A request to attack `entity` (the target), from `attacker` — not yet confirmed to land.
-/// Fired by client input today; a future server would fire it from a received network message
-/// instead.
-#[derive(EntityEvent)]
-pub struct AttackAttempt {
-    pub entity: Entity,
-    pub attacker: Entity,
-}
-
-/// Fired once an `AttackAttempt` is confirmed in range and damage has been applied — this is the
-/// fact client-side presentation (animation, sound) reacts to, not `AttackAttempt` itself.
-#[derive(EntityEvent)]
-pub struct Attack {
-    pub entity: Entity,
-    pub attacker: Entity,
-}
-
-/// A request to instantly kill `entity` (the target), from `killer` — not yet confirmed to land.
-/// Mirrors `AttackAttempt` exactly (same range check, same target-exists checks) except it sets
-/// `HitPoints` straight to zero instead of subtracting `DAMAGE`.
-#[derive(EntityEvent)]
-pub struct KillAttempt {
-    pub entity: Entity,
-    pub killer: Entity,
-}
-
-/// Fired once a `KillAttempt` is confirmed in range — the fact client-side presentation reacts to,
-/// not `KillAttempt` itself.
-#[derive(EntityEvent)]
-pub struct Kill {
-    pub entity: Entity,
-    pub killer: Entity,
-}
-
-/// Fired when an entity's `HitPoints` drop to zero or below, right before it's despawned —
-/// carries its last `Transform` since client-side presentation (particles) needs a spawn
-/// position after the entity itself is already gone.
-#[derive(EntityEvent)]
-pub struct EntityDied {
-    pub entity: Entity,
-    pub transform: Transform,
-}
 
 fn resolve_attack(
     attempt: On<AttackAttempt>,

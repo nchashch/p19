@@ -1,6 +1,6 @@
+use crate::events::LoadLevel;
 use crate::game_state::GameState;
 use crate::hud::HudPlugin;
-use crate::loading::LoadLevel;
 use crate::player_character::PlayerName;
 use crate::widgets::{Tooltip, WidgetsPlugin, button, panel};
 use bevy::{

@@ -1,6 +1,8 @@
 use crate::{loading::LevelRoot, player_character::PlayerCharacter, targeting::Selectable};
 use bevy::prelude::*;
-use shared::npc_spawner::{NpcSpawned, SpawnNpcRequest};
+use shared::events::{NpcSpawned, SpawnNpcRequest};
+
+use crate::events::SpawnNpc;
 
 pub struct NpcSpawnerPlugin;
 
@@ -10,10 +12,6 @@ impl Plugin for NpcSpawnerPlugin {
         app.add_observer(on_npc_spawned);
     }
 }
-
-/// Client-local trigger (bound to input) — translated into a `SpawnNpcRequest`.
-#[derive(Event)]
-pub struct SpawnNpc;
 
 fn request_spawn_npc(
     _event: On<SpawnNpc>,

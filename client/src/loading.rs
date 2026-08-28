@@ -1,7 +1,9 @@
-use crate::{game_state::GameState, player_character::RespawnPlayer};
+use crate::{events::RespawnPlayer, game_state::GameState};
 use bevy::asset::AssetPath;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
+
+use crate::events::LoadLevel;
 
 pub struct LoadingPlugin;
 
@@ -30,11 +32,6 @@ fn on_level_ready(
 
 pub fn initial_respawn(mut commands: Commands) {
     commands.trigger(RespawnPlayer);
-}
-
-#[derive(Event)]
-pub struct LoadLevel {
-    pub id: String,
 }
 
 /// The level asset id requested by the most recent `LoadLevel`, consumed by `spawn_level` once

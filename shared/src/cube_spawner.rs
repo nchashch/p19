@@ -8,6 +8,7 @@ use bevy::prelude::*;
 use noiz::rng::{AnyValueFromBits, NoiseRng, SNorm};
 
 use crate::combat::{Gcd, HitPoints};
+use crate::events::{CubeSpawned, SpawnCubeRequest};
 
 pub struct SharedCubeSpawnerPlugin;
 
@@ -27,24 +28,6 @@ pub struct CubeSpawner;
 
 /// World-space speed a spawned cube launches at along its `aim_direction`.
 pub const CUBE_LAUNCH_SPEED: f32 = 100.0;
-
-/// A request to spawn a cube at each `CubeSpawner`, launched along `aim_direction` — not yet
-/// confirmed (a spawner currently overlapping geometry may reject it, or `caster` may still be on
-/// its global cooldown). Fired by client input today; a future server would fire it from a
-/// received network message instead. `aim_direction` is supplied by the caller since `shared` has
-/// no camera/look-direction concept of its own.
-#[derive(Event)]
-pub struct SpawnCubeRequest {
-    pub caster: Entity,
-    pub aim_direction: Vec3,
-}
-
-/// Fired once a cube has actually been spawned — the fact client-side presentation (model,
-/// selectability, despawn-on-menu) reacts to.
-#[derive(EntityEvent)]
-pub struct CubeSpawned {
-    pub entity: Entity,
-}
 
 /// Samples an `SNorm` value (f32 in (-1, 1)) from `rng` for the given `input`, scaled to (-10, 10).
 fn random_angular_component(rng: &NoiseRng, input: u32) -> f32 {
