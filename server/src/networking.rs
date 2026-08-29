@@ -1,8 +1,7 @@
 //! Opens the authoritative QUIC (`bevy_quinnet`) endpoint clients connect to, and drives the
 //! scaffold's one demo entity so there's something server-authoritative to observe replicating.
 
-use std::net::Ipv4Addr;
-
+use avian3d::prelude::*;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
 use bevy_quinnet::server::{
@@ -11,13 +10,23 @@ use bevy_quinnet::server::{
 };
 use bevy_replicon::prelude::*;
 use bevy_replicon_quinnet::ChannelsConfigurationExt;
+use noiz::{
+    prelude::*,
+    rng::{AnyValueFromBits, NoiseRng},
+};
 use shared::{
     character_controller::{JumpInput, MovementInput},
-    client_events::{Jump, LoadLevelRequest, Movement},
+    client_events::{
+        AttackAttempt, Jump, KillAttempt, LoadLevelRequest, Movement, SpawnNpcRequest,
+    },
+    combat::{ATTACK_RANGE, DAMAGE, Gcd, HitPoints},
     level::LevelRoot,
+    npc_spawner::{NpcSpawner, npc},
     player::{PlayerCharacterSpawner, player},
-    server_events::{LoadLevel, PlayerSpawned},
+    server_events::{Attack, Kill, LoadLevel, NpcSpawned, PlayerSpawned},
 };
+use std::f32::consts::TAU;
+use std::net::Ipv4Addr;
 
 use crate::level_state::LevelState;
 

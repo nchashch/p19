@@ -15,25 +15,10 @@ pub struct Attack {
     pub attacker: Entity,
 }
 
-/// Fired once a `KillAttempt` is confirmed in range — the fact client-side presentation reacts to,
-/// not `KillAttempt` itself.
-#[derive(EntityEvent, Serialize, Deserialize, MapEntities)]
+#[derive(Event, Serialize, Deserialize, MapEntities)]
 pub struct Kill {
     #[entities]
-    pub entity: Entity,
-    #[entities]
     pub killer: Entity,
-}
-
-/// Fired when an entity's `HitPoints` drop to zero or below, right before it's despawned —
-/// carries its last `Transform` since client-side presentation (particles) needs a spawn
-/// position after the entity itself is already gone. Only `entity` is `#[entities]`-mapped;
-/// `transform` is plain data, not an id.
-#[derive(EntityEvent, Serialize, Deserialize, MapEntities)]
-pub struct EntityDied {
-    #[entities]
-    pub entity: Entity,
-    pub transform: Transform,
 }
 
 /// Fires once a player entity is spawned.

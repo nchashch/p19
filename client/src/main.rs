@@ -4,8 +4,6 @@ use bevy::prelude::*;
 use bevy_replicon_quinnet::RepliconQuinnetPlugins;
 use bevy_seedling::prelude::*;
 use bevy_skein::SkeinPlugin;
-use shared::cube_spawner::SharedCubeSpawnerPlugin;
-use shared::npc_spawner::SharedNpcSpawnerPlugin;
 use shared::replication::SharedReplicationPlugin;
 
 use console::PConsolePlugin;
@@ -73,8 +71,6 @@ impl Plugin for Prototype19 {
             RepliconQuinnetPlugins,
             SharedReplicationPlugin,
             (
-                SharedCubeSpawnerPlugin,
-                SharedNpcSpawnerPlugin,
                 CubeSpawnerPlugin,
                 NpcSpawnerPlugin,
                 PlayerCharacterPlugin,

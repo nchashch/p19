@@ -4,15 +4,16 @@ use bevy::state::app::StatesPlugin;
 use bevy_replicon::prelude::*;
 use bevy_replicon_quinnet::RepliconQuinnetPlugins;
 use shared::character_controller::CharacterControllerPlugin;
-use shared::combat::SharedCombatPlugin;
-use shared::cube_spawner::SharedCubeSpawnerPlugin;
-use shared::npc_spawner::SharedNpcSpawnerPlugin;
 use shared::replication::SharedReplicationPlugin;
 
+mod combat;
 mod level_state;
 mod networking;
+mod spawn;
 
+use combat::ServerCombatPlugin;
 use level_state::LevelStatePlugin;
+use spawn::ServerSpawnPlugin;
 
 fn main() {
     App::new()
@@ -35,10 +36,9 @@ fn main() {
             RepliconPlugins,
             RepliconQuinnetPlugins,
             SharedReplicationPlugin,
-            SharedCombatPlugin,
+            ServerCombatPlugin,
+            ServerSpawnPlugin,
             CharacterControllerPlugin,
-            SharedCubeSpawnerPlugin,
-            SharedNpcSpawnerPlugin,
             // Loads `.glb` level geometry headlessly: `GltfPlugin` parses the file,
             // `WorldSerializationPlugin` instantiates it as a `WorldAssetRoot`/reflected entity
             // graph (the same mechanism `WorldInstanceReady` etc. rely on client-side), and

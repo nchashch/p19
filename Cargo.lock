@@ -6820,6 +6820,7 @@ dependencies = [
  "bevy_replicon",
  "bevy_replicon_quinnet",
  "bevy_skein",
+ "noiz",
  "shared",
 ]
 

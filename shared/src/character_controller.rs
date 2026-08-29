@@ -89,7 +89,7 @@ pub struct Character;
 /// Moving or standing still — not performing any kind of action (attack, hurt, etc). Removed
 /// while a one-off animation/action plays and re-inserted once it finishes; systems that drive
 /// locomotion (walk/idle/jump) only act while this is present.
-#[derive(Component)]
+#[derive(Component, Serialize, Deserialize, Default, Clone)]
 #[component(storage = "SparseSet")]
 pub struct Idle;
 

@@ -1,10 +1,11 @@
 use bevy::prelude::*;
+use bevy_replicon::prelude::ClientTriggerExt;
 use shared::client_events::SpawnNpcRequest;
 use shared::level::LevelRoot;
-use shared::player::PlayerCharacter;
-use shared::player::Selectable;
+use shared::npc_spawner::{Npc, NpcSpawner};
 use shared::server_events::NpcSpawned;
 
+use crate::cube_spawner::Decorated;
 use crate::events::SpawnNpc;
 
 pub struct NpcSpawnerPlugin;
@@ -12,33 +13,34 @@ pub struct NpcSpawnerPlugin;
 impl Plugin for NpcSpawnerPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(request_spawn_npc);
-        app.add_observer(on_npc_spawned);
+        app.add_systems(Update, decorate_npcs);
     }
 }
 
 fn request_spawn_npc(
     _event: On<SpawnNpc>,
-    player: Query<Entity, With<PlayerCharacter>>,
+    npc_spawner: Single<&GlobalTransform, With<NpcSpawner>>,
     mut commands: Commands,
 ) {
-    let Ok(caster) = player.single() else {
-        return;
-    };
-    commands.trigger(SpawnNpcRequest { caster });
+    info!("requested npc spawn");
+    commands.client_trigger(SpawnNpcRequest {
+        transform: npc_spawner.compute_transform(),
+    });
 }
 
-fn on_npc_spawned(
-    spawned: On<NpcSpawned>,
-    asset_server: Res<AssetServer>,
+fn decorate_npcs(
+    cubes: Query<Entity, (With<Npc>, Without<Decorated>)>,
     level_root: Single<Entity, With<LevelRoot>>,
+    asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
-    commands
-        .entity(spawned.entity)
-        .insert((Visibility::default(), Selectable, ChildOf(*level_root)))
-        .with_child((
-            WorldAssetRoot(asset_server.load("rig.glb#Scene0")),
-            Transform::from_translation(Vec3::new(0.0, -0.9, 0.0))
-                .with_rotation(Quat::from_rotation_y(spawned.facing_yaw)),
-        ));
+    for cube in cubes {
+        commands
+            .entity(cube)
+            .insert((Visibility::default(), Decorated, ChildOf(*level_root)))
+            .with_child((
+                WorldAssetRoot(asset_server.load("rig.glb#Scene0")),
+                Transform::from_translation(Vec3::new(0.0, -0.9, 0.0)),
+            ));
+    }
 }

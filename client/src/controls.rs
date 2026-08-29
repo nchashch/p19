@@ -135,39 +135,18 @@ fn deselect(_event: On<Fire<Deselect>>, mut selected: ResMut<Selected>) {
     selected.0 = None;
 }
 
-/// Input handling only — decides *who* the player wants to attack, not whether it lands.
-/// `shared::combat::resolve_attack` does the range check and applies damage.
-fn attack(
-    _: On<Start<AttackAction>>,
-    selected: Res<Selected>,
-    player: Query<Entity, With<PlayerCharacter>>,
-    mut commands: Commands,
-) {
-    let Ok(attacker) = player.single() else {
-        return;
-    };
+fn attack(_: On<Start<AttackAction>>, selected: Res<Selected>, mut commands: Commands) {
     let Some(entity) = selected.0 else {
         return;
     };
-    commands.client_trigger(AttackAttempt { entity, attacker });
+    commands.client_trigger(AttackAttempt { entity });
 }
 
-/// Input handling only — decides *who* the player wants to kill, not whether it lands.
-/// `shared::combat::resolve_kill` does the range check and zeroes `HitPoints`. Structurally
-/// identical to `attack`, just targeting `KillAttempt` instead of `AttackAttempt`.
-fn kill(
-    _: On<Start<KillAction>>,
-    selected: Res<Selected>,
-    player: Query<Entity, With<PlayerCharacter>>,
-    mut commands: Commands,
-) {
-    let Ok(killer) = player.single() else {
-        return;
-    };
+fn kill(_: On<Start<KillAction>>, selected: Res<Selected>, mut commands: Commands) {
     let Some(entity) = selected.0 else {
         return;
     };
-    commands.trigger(KillAttempt { entity, killer });
+    commands.client_trigger(KillAttempt { entity });
 }
 
 pub fn player_controls() -> impl Bundle {

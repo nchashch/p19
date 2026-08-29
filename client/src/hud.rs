@@ -273,7 +273,7 @@ fn update_data_frame(
     };
 
     text.0 = format!(
-        "Press ~ for console\n\nHP: {}/{}\nDamage: {}\nAttack range: {}m\nSelect range: {}m\nGCD: {}s\nGrounded: {}\n\n",
+        "Press ` for console\n\nHP: {}/{}\nDamage: {}\nAttack range: {}m\nSelect range: {}m\nGCD: {}s\nGrounded: {}\n\n",
         player_hit_points.hit_points,
         player_hit_points.max_hit_points,
         DAMAGE,
