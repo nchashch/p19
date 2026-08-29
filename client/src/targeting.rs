@@ -83,12 +83,18 @@ fn raycast_from_center(
 }
 
 fn deselect_when_out_of_range(
-    player_transform: Single<&GlobalTransform, With<PlayerCharacter>>,
-    selected_transform: Query<&GlobalTransform>,
+    global_transform: Query<&GlobalTransform>,
+    local_player: Res<LocalPlayer>,
     mut selected: ResMut<Selected>,
 ) {
+    let Some(local_player) = local_player.0 else {
+        return;
+    };
     if let Some(selected_entity) = selected.0 {
-        let Ok(selected_transform) = selected_transform.get(selected_entity) else {
+        let Ok(player_transform) = global_transform.get(local_player) else {
+            return;
+        };
+        let Ok(selected_transform) = global_transform.get(selected_entity) else {
             return;
         };
         let distance = player_transform
