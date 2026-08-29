@@ -7,7 +7,7 @@ pub struct FpsControllerPlugin;
 
 impl Plugin for FpsControllerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, rotate_player_model);
+        // app.add_systems(Update, rotate_player_model);
     }
 }
 

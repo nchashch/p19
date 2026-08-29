@@ -6,11 +6,9 @@ use crate::{
     game_state::GameState,
 };
 use bevy::prelude::*;
-use shared::character_controller::CharacterControllerPlugin;
 use shared::npc_spawner::NpcSpawner;
+use shared::{character_controller::CharacterControllerPlugin, player::PlayerCharacter};
 use shared::{cube_spawner::CubeSpawner, server_events::PlayerSpawned};
-
-use crate::events::RespawnPlayer;
 
 pub struct PlayerCharacterPlugin;
 
@@ -24,9 +22,9 @@ impl Plugin for PlayerCharacterPlugin {
             PlayerControlsPlugin,
             PlayerCameraPlugin,
         ));
-        app.add_systems(OnEnter(GameState::InGame), initial_respawn);
 
         app.add_observer(on_player_spawned);
+        app.add_systems(Update, decorate_other_players);
     }
 }
 
@@ -45,8 +43,28 @@ impl Default for PlayerName {
 #[reflect(Component)]
 pub struct PlayerModel;
 
-pub fn initial_respawn(mut commands: Commands) {
-    commands.trigger(RespawnPlayer);
+#[derive(Component, Reflect, Default)]
+pub struct OtherPlayer;
+
+pub fn decorate_other_players(
+    players: Query<Entity, (With<PlayerCharacter>, Without<OtherPlayer>)>,
+    local_player: Res<LocalPlayer>,
+    asset_server: Res<AssetServer>,
+    mut commands: Commands,
+) {
+    let Some(local_player) = local_player.0 else {
+        return;
+    };
+    for entity in players {
+        if entity == local_player {
+            continue;
+        }
+        commands.entity(entity).insert(OtherPlayer).with_child((
+            WorldAssetRoot(asset_server.load("rig.glb#Scene0")),
+            Transform::from_translation(Vec3::new(0.0, -0.9, 0.0)),
+            PlayerModel,
+        ));
+    }
 }
 
 /// The player's own `PlayerCharacter` entity, as told to us by the server via `PlayerSpawned` —
