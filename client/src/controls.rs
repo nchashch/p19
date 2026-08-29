@@ -8,7 +8,7 @@ use bevy::window::{CursorGrabMode, CursorOptions};
 use bevy_enhanced_input::prelude::{Press, *};
 use bevy_replicon::prelude::ClientTriggerExt;
 use chill_bevy_console::console_closed;
-use shared::character_controller::{JumpInput, MovementInput};
+use shared::character_controller::JumpInput;
 use shared::player::PlayerCharacter;
 use std::f32::consts::PI;
 
@@ -70,39 +70,24 @@ fn main_menu(_: On<Start<MainMenu>>, mut commands: Commands) {
     commands.set_state(GameState::MainMenu);
 }
 
-/// Translates the `bevy_enhanced_input` movement action (plus the camera's yaw — a client-only
-/// concept the controller itself knows nothing about) into a world-space
-/// `shared::character_controller::MovementInput`.
 fn on_movement(
     movement_event: On<Fire<Movement>>,
     fps_camera: Query<&FpsCamera>,
-    player: Query<Entity, With<PlayerCharacter>>,
     mut commands: Commands,
 ) {
     let Ok(fps_camera) = fps_camera.single() else {
         return;
     };
-    let Ok(player) = player.single() else {
-        return;
-    };
     let rotation = Rot2::radians(fps_camera.yaw);
     let rotated = rotation * movement_event.value;
-    commands.trigger(MovementInput {
-        entity: player,
+
+    commands.client_trigger(shared::client_events::Movement {
         direction: Vec3::new(-rotated.x, 0.0, rotated.y),
     });
 }
 
-fn on_movement_stop(
-    _: On<Complete<Movement>>,
-    player: Query<Entity, With<PlayerCharacter>>,
-    mut commands: Commands,
-) {
-    let Ok(player) = player.single() else {
-        return;
-    };
-    commands.trigger(MovementInput {
-        entity: player,
+fn on_movement_stop(_: On<Complete<Movement>>, mut commands: Commands) {
+    commands.client_trigger(shared::client_events::Movement {
         direction: Vec3::ZERO,
     });
 }
@@ -117,7 +102,7 @@ fn on_jump(
     let Ok(player) = player.single() else {
         return;
     };
-    commands.trigger(JumpInput { entity: player });
+    commands.client_trigger(shared::client_events::Jump);
 }
 
 fn apply_fps_camera_rotation(

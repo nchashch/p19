@@ -1,5 +1,6 @@
 use avian3d::{math::*, prelude::*};
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 
 /// A plugin that implements a basic platformer kinematic character controller using move-and-slide,
 /// with support for ground detection and configurable movement settings.
@@ -45,10 +46,7 @@ pub struct JumpInput {
     pub entity: Entity,
 }
 
-fn on_movement_input(
-    input: On<MovementInput>,
-    mut controllers: Query<&mut DesiredMotion>,
-) {
+fn on_movement_input(input: On<MovementInput>, mut controllers: Query<&mut DesiredMotion>) {
     if let Ok(mut desired_motion) = controllers.get_mut(input.entity) {
         desired_motion.0 = input.direction;
     }
@@ -56,7 +54,11 @@ fn on_movement_input(
 
 fn on_jump_input(
     input: On<JumpInput>,
-    mut controllers: Query<(&CharacterMovementSettings, &mut LinearVelocity, Has<Grounded>)>,
+    mut controllers: Query<(
+        &CharacterMovementSettings,
+        &mut LinearVelocity,
+        Has<Grounded>,
+    )>,
 ) {
     if let Ok((movement, mut linear_velocity, is_grounded)) = controllers.get_mut(input.entity)
         && is_grounded
@@ -70,7 +72,7 @@ fn on_jump_input(
 /// This also requires the entity to have a `CustomPositionIntegration` component, which is used
 /// to prevent Avian from automatically applying the character's velocity to its position,
 /// since the character controller will handle movement manually using move-and-slide.
-#[derive(Component)]
+#[derive(Component, Reflect, Default, Serialize, Deserialize)]
 #[require(
     RigidBody::Kinematic,
     CustomPositionIntegration,
@@ -80,7 +82,7 @@ fn on_jump_input(
 pub struct CharacterController;
 
 /// Marks an entity as a character driven by this controller — the player and NPCs alike.
-#[derive(Component, Reflect, Default)]
+#[derive(Component, Reflect, Default, Serialize, Deserialize)]
 #[reflect(Component)]
 pub struct Character;
 
@@ -120,7 +122,7 @@ impl Default for CharacterMovementSettings {
 }
 
 /// Component for configuring ground detection for a character controller.
-#[derive(Component)]
+#[derive(Component, Clone, Debug, Serialize, Deserialize)]
 pub struct GroundDetection {
     /// The maximum angle (in radians) where a surface is considered ground/ceiling
     /// relative to the up-direction. Outside of this angle, surfaces are considered walls.
@@ -208,7 +210,7 @@ fn update_grounded(
     }
 }
 
-#[derive(Component, Default)]
+#[derive(Component, Clone, Default, Debug, Serialize, Deserialize)]
 pub struct DesiredMotion(pub Vec3);
 
 fn integrate_horizontal_linear_velocity(

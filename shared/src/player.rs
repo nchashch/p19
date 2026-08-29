@@ -1,5 +1,6 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use crate::character_controller::{
     Character, CharacterCollisions, CharacterController, CharacterMovementSettings, DesiredMotion,
@@ -13,11 +14,11 @@ const PLAYER_JUMP_IMPULSE: f32 = 10.0;
 const PLAYER_GRAVITY: Vec3 = Vec3::new(0.0, -20.0, 0.0);
 const PLAYER_TERMINAL_VELOCITY: f32 = 300.0;
 
-#[derive(Component, Reflect, Default)]
+#[derive(Component, Reflect, Default, Serialize, Deserialize)]
 #[reflect(Component)]
 pub struct PlayerCharacterSpawner;
 
-#[derive(Component, Reflect, Default)]
+#[derive(Component, Reflect, Default, Serialize, Deserialize)]
 #[reflect(Component)]
 pub struct PlayerCharacter;
 

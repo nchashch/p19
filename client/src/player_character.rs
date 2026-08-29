@@ -29,7 +29,7 @@ impl Plugin for PlayerCharacterPlugin {
         ));
         app.add_systems(OnEnter(GameState::InGame), initial_respawn);
 
-        app.add_observer(respawn_player);
+        app.add_observer(decorate_player);
     }
 }
 
@@ -52,26 +52,19 @@ pub fn initial_respawn(mut commands: Commands) {
     commands.trigger(RespawnPlayer);
 }
 
-pub fn respawn_player(
-    _event: On<RespawnPlayer>,
+pub fn decorate_player(
+    _: On<Add, PlayerCharacter>,
     mut commands: Commands,
-    player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
     player_character: Query<Entity, With<PlayerCharacter>>,
     asset_server: Res<AssetServer>,
-    player_name: Res<PlayerName>,
     mut cubemap: ResMut<Cubemap>,
 ) {
-    if let Ok(player_character) = player_character.single() {
-        commands.entity(player_character).despawn();
-    }
-    let Ok(spawner_transform) = player_spawner.single() else {
+    let Ok(player_character) = player_character.single() else {
         return;
     };
     commands
-        .spawn((
-            player(player_name.0.clone(), spawner_transform.translation),
-            DespawnOnExit(GameState::InGame),
-        ))
+        .entity(player_character)
+        .insert(DespawnOnExit(GameState::InGame))
         .with_children(|parent| {
             parent.spawn(controls::player_controls());
             parent
@@ -86,13 +79,4 @@ pub fn respawn_player(
                         });
                 });
         });
-
-    // ambient light
-    // NOTE: The ambient light is used to scale how bright the environment map is so with a bright
-    // environment map, use an appropriate color and brightness to match
-    commands.insert_resource(GlobalAmbientLight {
-        color: Color::srgb_u8(210, 220, 240),
-        brightness: 400.0,
-        ..default()
-    });
 }

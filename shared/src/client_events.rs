@@ -56,3 +56,11 @@ pub struct SpawnNpcRequest {
 pub struct LoadLevelRequest {
     pub id: AssetPath<'static>,
 }
+
+#[derive(Event, Serialize, Deserialize, Clone, MapEntities)]
+pub struct Movement {
+    pub direction: Vec3,
+}
+
+#[derive(Event, Serialize, Deserialize, Clone, MapEntities)]
+pub struct Jump;

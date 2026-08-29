@@ -10,7 +10,6 @@ use bevy_quinnet::client::{
 };
 use bevy_replicon::prelude::*;
 use bevy_replicon_quinnet::ChannelsConfigurationExt;
-use shared::replication::DemoPosition;
 
 const SERVER_PORT: u16 = 6000;
 
@@ -20,9 +19,7 @@ impl Plugin for NetworkingPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, connect_to_server)
             .add_systems(OnEnter(ClientState::Connected), on_connected)
-            .add_systems(OnEnter(ClientState::Disconnected), on_disconnected)
-            .add_systems(Update, log_demo_position_changes)
-            .add_observer(on_demo_entity_received);
+            .add_systems(OnEnter(ClientState::Disconnected), on_disconnected);
     }
 }
 
@@ -51,16 +48,4 @@ fn on_connected() {
 
 fn on_disconnected() {
     info!("disconnected from server");
-}
-
-fn on_demo_entity_received(add: On<Add, DemoPosition>) {
-    info!("received demo entity `{}` from server", add.entity);
-}
-
-fn log_demo_position_changes(demo: Query<&Transform, (Changed<Transform>, With<DemoPosition>)>) {
-    for transform in &demo {
-        let pos = transform.translation;
-        debug!("demo position updated: ({}, {}, {})", pos.x, pos.y, pos.z);
-        // info!("demo position updated: ({}, {}, {})", pos.x, pos.y, pos.z);
-    }
 }

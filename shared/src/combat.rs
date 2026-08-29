@@ -6,6 +6,7 @@
 use std::time::Duration;
 
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use crate::client_events::{AttackAttempt, KillAttempt};
 use crate::server_events::{Attack, EntityDied, Kill};
@@ -20,7 +21,7 @@ impl Plugin for SharedCombatPlugin {
     }
 }
 
-#[derive(Component, Clone, Default, Reflect, Debug)]
+#[derive(Component, Clone, Default, Reflect, Debug, Serialize, Deserialize)]
 #[reflect(Component)]
 pub struct HitPoints {
     pub hit_points: i32,
@@ -116,7 +117,7 @@ fn despawn_zero_hp(query: Query<(Entity, &HitPoints, &Transform)>, mut commands:
 
 /// Global cooldown shared by every ability (`Attack`, `Kill`, ...) — using any one of them starts
 /// it, and none of them can fire again until it finishes.
-#[derive(Component)]
+#[derive(Component, Serialize, Deserialize)]
 pub struct Gcd(pub Timer);
 
 pub const GCD_DURATION: f32 = 0.5;
