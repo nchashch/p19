@@ -2,7 +2,7 @@ use avian3d::prelude::*;
 use bevy::color::palettes::css::{DARK_SLATE_GRAY, GRAY, WHITE};
 use bevy::prelude::*;
 use bevy_mod_outline::{AsyncWorldInheritOutline, OutlinePlugin, OutlineVolume};
-use shared::player::{PlayerCharacter, Selectable};
+use shared::player::Selectable;
 
 use crate::player_character::LocalPlayer;
 

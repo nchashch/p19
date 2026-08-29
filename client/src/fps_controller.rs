@@ -1,16 +1,17 @@
 use bevy::prelude::*;
 use std::f32::consts::PI;
 
-use crate::player_character::PlayerModel;
+// use crate::player_character::PlayerModel;
 
 pub struct FpsControllerPlugin;
 
 impl Plugin for FpsControllerPlugin {
-    fn build(&self, app: &mut App) {
+    fn build(&self, _app: &mut App) {
         // app.add_systems(Update, rotate_player_model);
     }
 }
 
+// TODO: Move this to `shared` and replicate it, for animating other player models.
 #[derive(Component)]
 pub struct FpsCamera {
     pub direction: Vec3,
@@ -30,6 +31,7 @@ impl FpsCamera {
     }
 }
 
+/*
 fn rotate_player_model(
     fps_camera: Query<&FpsCamera>,
     mut player_model: Query<&mut Transform, With<PlayerModel>>,
@@ -42,3 +44,4 @@ fn rotate_player_model(
     };
     player_model.rotation = Quat::from_rotation_y(fps_camera.yaw);
 }
+*/
