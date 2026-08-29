@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy_replicon::prelude::*;
 use shared::{
     client_events::{AttackAttempt, KillAttempt},
-    combat::{ATTACK_RANGE, DAMAGE, GCD_DURATION, Gcd, HitPoints},
+    combat::{ATTACK_RANGE, DAMAGE, Gcd, HitPoints},
     server_events::{Attack, Kill},
 };
 
@@ -17,7 +17,7 @@ impl Plugin for ServerCombatPlugin {
 }
 
 fn despawn_zero_hp(query: Query<(Entity, &HitPoints, &Transform)>, mut commands: Commands) {
-    for (entity, hit_points, transform) in query {
+    for (entity, hit_points, _transform) in query {
         if hit_points.hit_points <= 0 {
             commands.entity(entity).despawn();
         }

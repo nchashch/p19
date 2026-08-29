@@ -8,7 +8,6 @@ use bevy::window::{CursorGrabMode, CursorOptions};
 use bevy_enhanced_input::prelude::{Press, *};
 use bevy_replicon::prelude::ClientTriggerExt;
 use chill_bevy_console::console_closed;
-use shared::player::PlayerCharacter;
 use shared::player::Selectable;
 use std::f32::consts::PI;
 

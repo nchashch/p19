@@ -3,7 +3,6 @@ use bevy_replicon::prelude::ClientTriggerExt;
 use shared::client_events::SpawnNpcRequest;
 use shared::level::LevelRoot;
 use shared::npc_spawner::{Npc, NpcSpawner};
-use shared::server_events::NpcSpawned;
 
 use crate::cube_spawner::Decorated;
 use crate::events::SpawnNpc;

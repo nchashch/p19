@@ -7,13 +7,13 @@ use noiz::{
 };
 use shared::{
     client_events::SpawnCubeRequest,
-    cube_spawner::{CubeSpawner, cube},
+    cube_spawner::cube,
     npc_spawner::npc,
     player::Selectable,
     server_events::CubeSpawned,
 };
 use shared::{
-    client_events::SpawnNpcRequest, combat::Gcd, npc_spawner::NpcSpawner, server_events::NpcSpawned,
+    client_events::SpawnNpcRequest, combat::Gcd, server_events::NpcSpawned,
 };
 
 pub struct ServerSpawnPlugin;

@@ -3,8 +3,6 @@ use bevy_replicon::prelude::ClientTriggerExt;
 use shared::client_events::SpawnCubeRequest;
 use shared::cube_spawner::{Cube, CubeSpawner};
 use shared::level::LevelRoot;
-use shared::player::Selectable;
-use shared::server_events::CubeSpawned;
 
 use crate::events::SpawnCube;
 use crate::fps_controller::FpsCamera;
