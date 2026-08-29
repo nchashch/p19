@@ -2,12 +2,15 @@ use avian3d::prelude::*;
 use bevy::color::palettes::css::{DARK_SLATE_GRAY, GRAY, WHITE};
 use bevy::prelude::*;
 use bevy_mod_outline::{AsyncWorldInheritOutline, OutlinePlugin, OutlineVolume};
-use shared::player::PlayerCharacter;
+use shared::player::{PlayerCharacter, Selectable};
+
+use crate::player_character::LocalPlayer;
 
 pub struct TargetingPlugin;
 
 impl Plugin for TargetingPlugin {
     fn build(&self, app: &mut App) {
+        app.insert_resource(LocalPlayer(None));
         app.add_plugins(OutlinePlugin::JUMP_FLOOD);
         app.add_systems(
             Update,
@@ -32,7 +35,7 @@ pub struct Selected(pub Option<Entity>);
 pub const SELECT_RANGE: f32 = 50.0;
 
 fn raycast_from_center(
-    player_collider_entity: Query<Entity, (With<PlayerCharacter>, With<Collider>)>,
+    local_player: Res<LocalPlayer>,
     spatial_query: SpatialQuery,
     camera_query: Query<(&Camera, &GlobalTransform)>,
     window_query: Query<&Window>,
@@ -42,9 +45,6 @@ fn raycast_from_center(
         return;
     };
     let Ok(window) = window_query.single() else {
-        return;
-    };
-    let Ok(player_collider_entity) = player_collider_entity.single() else {
         return;
     };
 
@@ -71,7 +71,10 @@ fn raycast_from_center(
         ray.direction, // already a Dir3
         f32::MAX,      // max distance
         true,          // treat shapes as solid (hit registers if origin is inside)
-        &SpatialQueryFilter::from_excluded_entities([player_collider_entity]),
+        &SpatialQueryFilter::from_excluded_entities(match local_player.0 {
+            Some(local_player) => vec![local_player],
+            None => vec![],
+        }),
     ) {
         hovered.0 = Some((hit.entity, hit.distance));
     } else {
@@ -96,9 +99,6 @@ fn deselect_when_out_of_range(
         }
     }
 }
-
-#[derive(Component)]
-pub struct Selectable;
 
 /// AsyncWorldInheritOutline only starts inheriting once the *same* entity's own WorldAssetRoot
 /// has finished loading (it checks WorldInstance on itself, not on an ancestor) — so this reacts

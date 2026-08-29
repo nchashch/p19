@@ -9,7 +9,10 @@ use shared::cube_spawner::SharedCubeSpawnerPlugin;
 use shared::npc_spawner::SharedNpcSpawnerPlugin;
 use shared::replication::SharedReplicationPlugin;
 
+mod level_state;
 mod networking;
+
+use level_state::LevelStatePlugin;
 
 fn main() {
     App::new()
@@ -47,6 +50,7 @@ fn main() {
                 bevy::gltf::GltfPlugin::default(),
                 bevy::world_serialization::WorldSerializationPlugin,
                 bevy_skein::SkeinPlugin::default(),
+                LevelStatePlugin,
             ),
             networking::NetworkingPlugin,
         ))

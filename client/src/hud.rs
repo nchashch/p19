@@ -1,4 +1,5 @@
 use crate::game_state::GameState;
+use crate::player_character::LocalPlayer;
 use crate::targeting::{Hovered, SELECT_RANGE, Selected};
 use crate::widgets::{PANEL_BORDER_COLOR, PANEL_COLOR, SERIF_FONT, Tooltip, TooltipAbove, panel};
 use bevy::{
@@ -9,8 +10,8 @@ use bevy::{
     shader::ShaderRef,
     text::FontSourceTemplate,
 };
+use shared::character_controller::Grounded;
 use shared::combat::{ATTACK_RANGE, DAMAGE, GCD_DURATION, Gcd, HitPoints};
-use shared::player::PlayerCharacter;
 
 /// The always-visible in-game HUD: the `DataFrame` debug panel, the ability hotbar (with its GCD
 /// cooldown-sweep overlay), and the crosshair.
@@ -220,11 +221,15 @@ fn add_gcd_overlay(
 }
 
 fn update_gcd_overlay(
-    player: Query<&Gcd, With<PlayerCharacter>>,
+    local_player: Res<LocalPlayer>,
+    player: Query<&Gcd>,
     handle: Res<GcdOverlayMaterialHandle>,
     mut materials: ResMut<Assets<GcdOverlayMaterial>>,
 ) {
-    let Ok(gcd) = player.single() else {
+    let Some(local_player) = local_player.0 else {
+        return;
+    };
+    let Ok(gcd) = player.get(local_player) else {
         return;
     };
     let Some(mut material) = materials.get_mut(&handle.0) else {
@@ -237,32 +242,45 @@ fn update_gcd_overlay(
 struct DataFrame;
 
 fn update_data_frame(
+    local_player: Res<LocalPlayer>,
     mut query: Query<&mut Text, With<DataFrame>>,
     hovered: Res<Hovered>,
     selected: Res<Selected>,
-    player: Query<(&HitPoints, &GlobalTransform), With<PlayerCharacter>>,
+    player: Query<(&HitPoints, &GlobalTransform, Has<Grounded>)>,
     global_transforms: Query<&GlobalTransform>,
     hit_points: Query<&HitPoints>,
     name: Query<&Name>,
+    mut last_grounded: Local<Option<bool>>,
 ) {
-    if !hovered.is_changed() && !selected.is_changed() {
+    let Some(local_player) = local_player.0 else {
+        return;
+    };
+    let Ok((player_hit_points, player_global_transform, is_grounded)) = player.get(local_player)
+    else {
+        return;
+    };
+
+    // `Grounded` is added/removed every jump/landing, not just when `Hovered`/`Selected` change —
+    // without tracking it here too, the displayed status would only refresh coincidentally.
+    let grounded_changed = *last_grounded != Some(is_grounded);
+    if !hovered.is_changed() && !selected.is_changed() && !grounded_changed {
         return;
     }
+    *last_grounded = Some(is_grounded);
+
     let Ok(mut text) = query.single_mut() else {
         return;
     };
 
-    let Ok((player_hit_points, player_global_transform)) = player.single() else {
-        return;
-    };
     text.0 = format!(
-        "Press ~ for console\n\nHP: {}/{}\nDamage: {}\nAttack range: {}m\nSelect range: {}m\nGCD: {}s\n\n",
+        "Press ~ for console\n\nHP: {}/{}\nDamage: {}\nAttack range: {}m\nSelect range: {}m\nGCD: {}s\nGrounded: {}\n\n",
         player_hit_points.hit_points,
         player_hit_points.max_hit_points,
         DAMAGE,
         ATTACK_RANGE,
         SELECT_RANGE,
         GCD_DURATION,
+        is_grounded,
     );
 
     if let Some((entity, distance)) = hovered.0 {

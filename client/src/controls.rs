@@ -2,14 +2,14 @@ use crate::add_observers_run_if;
 use crate::events::{SpawnCube, SpawnNpc};
 use crate::fps_controller::FpsCamera;
 use crate::game_state::GameState;
-use crate::targeting::{Hovered, SELECT_RANGE, Selectable, Selected, TargetingPlugin};
+use crate::targeting::{Hovered, SELECT_RANGE, Selected, TargetingPlugin};
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions};
 use bevy_enhanced_input::prelude::{Press, *};
 use bevy_replicon::prelude::ClientTriggerExt;
 use chill_bevy_console::console_closed;
-use shared::character_controller::JumpInput;
 use shared::player::PlayerCharacter;
+use shared::player::Selectable;
 use std::f32::consts::PI;
 
 use crate::actions::*;
@@ -94,14 +94,7 @@ fn on_movement_stop(_: On<Complete<Movement>>, mut commands: Commands) {
 
 /// Translates the `bevy_enhanced_input` jump action into the input-library-agnostic
 /// `shared::character_controller::JumpInput` the controller actually runs on.
-fn on_jump(
-    _: On<Fire<Jump>>,
-    player: Query<Entity, With<PlayerCharacter>>,
-    mut commands: Commands,
-) {
-    let Ok(player) = player.single() else {
-        return;
-    };
+fn on_jump(_: On<Fire<Jump>>, mut commands: Commands) {
     commands.client_trigger(shared::client_events::Jump);
 }
 

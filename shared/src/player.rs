@@ -22,6 +22,10 @@ pub struct PlayerCharacterSpawner;
 #[reflect(Component)]
 pub struct PlayerCharacter;
 
+#[derive(Component, Reflect, Default, Serialize, Deserialize)]
+#[reflect(Component)]
+pub struct Selectable;
+
 pub fn player(player_name: String, position: Vec3) -> impl Bundle {
     let character_movement_settings = CharacterMovementSettings {
         acceleration: PLAYER_ACCELERATION,
@@ -33,6 +37,7 @@ pub fn player(player_name: String, position: Vec3) -> impl Bundle {
     (
         (
             PlayerCharacter,
+            Selectable,
             Character,
             Idle,
             CharacterController,

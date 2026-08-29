@@ -65,7 +65,7 @@ fn load_level(
 }
 
 fn spawn_level(
-    add: On<Add, LevelRoot>,
+    _add: On<Add, LevelRoot>,
     level_root: Single<(Entity, &LevelRoot)>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,

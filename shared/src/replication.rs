@@ -1,4 +1,4 @@
-use avian3d::prelude::{Collider, RigidBody};
+use avian3d::prelude::{Collider, LinearVelocity, RigidBody};
 use bevy::prelude::*;
 use bevy_replicon::prelude::*;
 
@@ -8,8 +8,8 @@ use crate::client_events::{
 };
 use crate::combat::{Gcd, HitPoints};
 use crate::level::LevelRoot;
-use crate::player::PlayerCharacter;
-use crate::server_events::{Attack, CubeSpawned, EntityDied, Kill, LoadLevel, NpcSpawned};
+use crate::player::{PlayerCharacter, Selectable};
+use crate::server_events::{Attack, CubeSpawned, EntityDied, Kill, LoadLevel, NpcSpawned, PlayerSpawned};
 
 pub struct SharedReplicationPlugin;
 
@@ -27,6 +27,8 @@ impl Plugin for SharedReplicationPlugin {
         app.replicate::<Collider>();
         app.replicate::<DesiredMotion>();
         app.replicate::<RigidBody>();
+        app.replicate::<LinearVelocity>();
+        app.replicate::<Selectable>();
 
         // `_mapped_` variants: every event here carries at least one `Entity` field, and those
         // ids are only meaningful once remapped from the sender's world to the receiver's —
@@ -45,5 +47,6 @@ impl Plugin for SharedReplicationPlugin {
         app.add_mapped_server_event::<CubeSpawned>(Channel::Ordered);
         app.add_mapped_server_event::<NpcSpawned>(Channel::Ordered);
         app.add_mapped_server_event::<LoadLevel>(Channel::Ordered);
+        app.add_mapped_server_event::<PlayerSpawned>(Channel::Ordered);
     }
 }

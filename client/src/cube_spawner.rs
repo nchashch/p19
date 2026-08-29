@@ -1,8 +1,9 @@
-use crate::{fps_controller::FpsCamera, targeting::Selectable};
+use crate::fps_controller::FpsCamera;
 use bevy::prelude::*;
 use shared::client_events::SpawnCubeRequest;
 use shared::level::LevelRoot;
 use shared::player::PlayerCharacter;
+use shared::player::Selectable;
 use shared::server_events::CubeSpawned;
 
 use crate::events::SpawnCube;

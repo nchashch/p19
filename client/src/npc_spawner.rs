@@ -1,8 +1,8 @@
-use crate::targeting::Selectable;
 use bevy::prelude::*;
 use shared::client_events::SpawnNpcRequest;
 use shared::level::LevelRoot;
 use shared::player::PlayerCharacter;
+use shared::player::Selectable;
 use shared::server_events::NpcSpawned;
 
 use crate::events::SpawnNpc;

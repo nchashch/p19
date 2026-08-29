@@ -6,12 +6,9 @@ use crate::{
     game_state::GameState,
 };
 use bevy::prelude::*;
+use shared::character_controller::CharacterControllerPlugin;
 use shared::npc_spawner::NpcSpawner;
-use shared::{character_controller::CharacterControllerPlugin, player::player};
-use shared::{
-    cube_spawner::CubeSpawner,
-    player::{PlayerCharacter, PlayerCharacterSpawner},
-};
+use shared::{cube_spawner::CubeSpawner, server_events::PlayerSpawned};
 
 use crate::events::RespawnPlayer;
 
@@ -29,7 +26,7 @@ impl Plugin for PlayerCharacterPlugin {
         ));
         app.add_systems(OnEnter(GameState::InGame), initial_respawn);
 
-        app.add_observer(decorate_player);
+        app.add_observer(on_player_spawned);
     }
 }
 
@@ -52,18 +49,22 @@ pub fn initial_respawn(mut commands: Commands) {
     commands.trigger(RespawnPlayer);
 }
 
-pub fn decorate_player(
-    _: On<Add, PlayerCharacter>,
+/// The player's own `PlayerCharacter` entity, as told to us by the server via `PlayerSpawned` —
+/// not derived by querying `With<PlayerCharacter>`, since once other players are connected there
+/// can be several such entities replicated in and nothing about them locally distinguishes
+/// "mine" from "someone else's."
+#[derive(Resource, Deref, Clone, Copy)]
+pub struct LocalPlayer(pub Option<Entity>);
+
+pub fn on_player_spawned(
+    spawned: On<PlayerSpawned>,
     mut commands: Commands,
-    player_character: Query<Entity, With<PlayerCharacter>>,
     asset_server: Res<AssetServer>,
     mut cubemap: ResMut<Cubemap>,
 ) {
-    let Ok(player_character) = player_character.single() else {
-        return;
-    };
+    commands.insert_resource(LocalPlayer(Some(spawned.entity)));
     commands
-        .entity(player_character)
+        .entity(spawned.entity)
         .insert(DespawnOnExit(GameState::InGame))
         .with_children(|parent| {
             parent.spawn(controls::player_controls());
