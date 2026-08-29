@@ -5,7 +5,7 @@ use bevy::world_serialization::WorldInstanceReady;
 use std::time::Duration;
 
 use shared::character_controller::{Character, Grounded, Idle};
-use shared::events::Attack;
+use shared::server_events::Attack;
 
 use crate::events::{AnimationFinished, PlayAnimationLooping, PlayAnimationOnce};
 

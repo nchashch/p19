@@ -6819,6 +6819,7 @@ dependencies = [
  "bevy_quinnet",
  "bevy_replicon",
  "bevy_replicon_quinnet",
+ "bevy_skein",
  "shared",
 ]
 

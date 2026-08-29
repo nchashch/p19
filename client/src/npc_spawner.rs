@@ -1,6 +1,9 @@
-use crate::{loading::LevelRoot, player_character::PlayerCharacter, targeting::Selectable};
+use crate::targeting::Selectable;
 use bevy::prelude::*;
-use shared::events::{NpcSpawned, SpawnNpcRequest};
+use shared::client_events::SpawnNpcRequest;
+use shared::level::LevelRoot;
+use shared::player::PlayerCharacter;
+use shared::server_events::NpcSpawned;
 
 use crate::events::SpawnNpc;
 
@@ -32,11 +35,7 @@ fn on_npc_spawned(
 ) {
     commands
         .entity(spawned.entity)
-        .insert((
-            InheritedVisibility::default(),
-            Selectable,
-            ChildOf(*level_root),
-        ))
+        .insert((Visibility::default(), Selectable, ChildOf(*level_root)))
         .with_child((
             WorldAssetRoot(asset_server.load("rig.glb#Scene0")),
             Transform::from_translation(Vec3::new(0.0, -0.9, 0.0))

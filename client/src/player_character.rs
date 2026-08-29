@@ -5,15 +5,13 @@ use crate::{
     fps_controller::FpsCamera,
     game_state::GameState,
 };
-use avian3d::prelude::*;
 use bevy::prelude::*;
-use shared::character_controller::{
-    Character, CharacterCollisions, CharacterController, CharacterControllerPlugin,
-    CharacterMovementSettings, DesiredMotion, GroundDetection, Idle,
-};
-use shared::combat::{Gcd, HitPoints};
-use shared::cube_spawner::CubeSpawner;
 use shared::npc_spawner::NpcSpawner;
+use shared::{character_controller::CharacterControllerPlugin, player::player};
+use shared::{
+    cube_spawner::CubeSpawner,
+    player::{PlayerCharacter, PlayerCharacterSpawner},
+};
 
 use crate::events::RespawnPlayer;
 
@@ -48,25 +46,11 @@ impl Default for PlayerName {
 
 #[derive(Component, Reflect, Default)]
 #[reflect(Component)]
-pub struct PlayerCharacterSpawner;
-
-#[derive(Component, Reflect, Default)]
-#[reflect(Component)]
 pub struct PlayerModel;
 
 pub fn initial_respawn(mut commands: Commands) {
     commands.trigger(RespawnPlayer);
 }
-
-const PLAYER_ACCELERATION: f32 = 100.0;
-const PLAYER_DAMPING: f32 = 10.0;
-const PLAYER_JUMP_IMPULSE: f32 = 10.0;
-const PLAYER_GRAVITY: Vec3 = Vec3::new(0.0, -20.0, 0.0);
-const PLAYER_TERMINAL_VELOCITY: f32 = 300.0;
-
-#[derive(Component, Reflect, Default)]
-#[reflect(Component)]
-pub struct PlayerCharacter;
 
 pub fn respawn_player(
     _event: On<RespawnPlayer>,
@@ -83,39 +67,9 @@ pub fn respawn_player(
     let Ok(spawner_transform) = player_spawner.single() else {
         return;
     };
-    let character_movement_settings = CharacterMovementSettings {
-        acceleration: PLAYER_ACCELERATION,
-        damping: PLAYER_DAMPING,
-        jump_impulse: PLAYER_JUMP_IMPULSE,
-        gravity: PLAYER_GRAVITY,
-        terminal_velocity: PLAYER_TERMINAL_VELOCITY,
-    };
     commands
         .spawn((
-            (
-                PlayerCharacter,
-                Character,
-                Idle,
-                CharacterController,
-                Name::new(player_name.0.clone()),
-                HitPoints {
-                    hit_points: 100,
-                    max_hit_points: 100,
-                },
-                Gcd::default(),
-            ),
-            InheritedVisibility::default(),
-            character_movement_settings,
-            CharacterCollisions::default(),
-            GroundDetection {
-                // Use a slightly smaller capsule for shape casts used for ground detection
-                cast_shape: Some(Collider::capsule(0.399, 1.0)),
-                ..default()
-            },
-            Collider::capsule(0.4, 1.0),
-            DesiredMotion::default(),
-            RigidBody::Kinematic,
-            Transform::from_translation(spawner_transform.translation),
+            player(player_name.0.clone(), spawner_transform.translation),
             DespawnOnExit(GameState::InGame),
         ))
         .with_children(|parent| {

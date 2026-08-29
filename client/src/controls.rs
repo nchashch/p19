@@ -2,17 +2,18 @@ use crate::add_observers_run_if;
 use crate::events::{SpawnCube, SpawnNpc};
 use crate::fps_controller::FpsCamera;
 use crate::game_state::GameState;
-use crate::player_character::PlayerCharacter;
 use crate::targeting::{Hovered, SELECT_RANGE, Selectable, Selected, TargetingPlugin};
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions};
 use bevy_enhanced_input::prelude::{Press, *};
+use bevy_replicon::prelude::ClientTriggerExt;
 use chill_bevy_console::console_closed;
 use shared::character_controller::{JumpInput, MovementInput};
+use shared::player::PlayerCharacter;
 use std::f32::consts::PI;
 
 use crate::actions::*;
-use shared::events::{AttackAttempt, KillAttempt};
+use shared::client_events::{AttackAttempt, KillAttempt};
 
 pub struct PlayerControlsPlugin;
 
@@ -170,7 +171,7 @@ fn attack(
     let Some(entity) = selected.0 else {
         return;
     };
-    commands.trigger(AttackAttempt { entity, attacker });
+    commands.client_trigger(AttackAttempt { entity, attacker });
 }
 
 /// Input handling only — decides *who* the player wants to kill, not whether it lands.

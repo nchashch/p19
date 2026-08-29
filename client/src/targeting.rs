@@ -1,8 +1,8 @@
-use crate::player_character::PlayerCharacter;
 use avian3d::prelude::*;
 use bevy::color::palettes::css::{DARK_SLATE_GRAY, GRAY, WHITE};
 use bevy::prelude::*;
 use bevy_mod_outline::{AsyncWorldInheritOutline, OutlinePlugin, OutlineVolume};
+use shared::player::PlayerCharacter;
 
 pub struct TargetingPlugin;
 

@@ -4,8 +4,11 @@
 //! incrementally as that split happens, not all at once. `combat` is the first real occupant.
 
 pub mod character_controller;
+pub mod client_events;
 pub mod combat;
 pub mod cube_spawner;
-pub mod events;
+pub mod level;
 pub mod npc_spawner;
+pub mod player;
 pub mod replication;
+pub mod server_events;

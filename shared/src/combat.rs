@@ -7,7 +7,8 @@ use std::time::Duration;
 
 use bevy::prelude::*;
 
-use crate::events::{Attack, AttackAttempt, EntityDied, Kill, KillAttempt};
+use crate::client_events::{AttackAttempt, KillAttempt};
+use crate::server_events::{Attack, EntityDied, Kill};
 
 pub struct SharedCombatPlugin;
 

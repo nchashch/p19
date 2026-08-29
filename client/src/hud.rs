@@ -1,5 +1,4 @@
 use crate::game_state::GameState;
-use crate::player_character::PlayerCharacter;
 use crate::targeting::{Hovered, SELECT_RANGE, Selected};
 use crate::widgets::{PANEL_BORDER_COLOR, PANEL_COLOR, SERIF_FONT, Tooltip, TooltipAbove, panel};
 use bevy::{
@@ -11,6 +10,7 @@ use bevy::{
     text::FontSourceTemplate,
 };
 use shared::combat::{ATTACK_RANGE, DAMAGE, GCD_DURATION, Gcd, HitPoints};
+use shared::player::PlayerCharacter;
 
 /// The always-visible in-game HUD: the `DataFrame` debug panel, the ability hotbar (with its GCD
 /// cooldown-sweep overlay), and the crosshair.

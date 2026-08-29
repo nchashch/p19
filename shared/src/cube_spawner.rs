@@ -7,8 +7,9 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use noiz::rng::{AnyValueFromBits, NoiseRng, SNorm};
 
+use crate::client_events::SpawnCubeRequest;
 use crate::combat::{Gcd, HitPoints};
-use crate::events::{CubeSpawned, SpawnCubeRequest};
+use crate::server_events::CubeSpawned;
 
 pub struct SharedCubeSpawnerPlugin;
 

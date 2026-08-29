@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use bevy_hanabi::prelude::*;
 use bevy_seedling::prelude::*;
 use shared::combat::SharedCombatPlugin;
-use shared::events::{Attack, EntityDied, Kill};
+use shared::server_events::{Attack, EntityDied, Kill};
 
 pub struct CombatPlugin;
 

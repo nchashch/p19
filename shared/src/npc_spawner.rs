@@ -13,8 +13,9 @@ use noiz::{
 };
 
 use crate::character_controller::{Character, Idle};
+use crate::client_events::SpawnNpcRequest;
 use crate::combat::{Gcd, HitPoints};
-use crate::events::{NpcSpawned, SpawnNpcRequest};
+use crate::server_events::NpcSpawned;
 
 pub struct SharedNpcSpawnerPlugin;
 
