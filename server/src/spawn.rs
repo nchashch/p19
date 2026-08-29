@@ -6,15 +6,10 @@ use noiz::{
     rng::{AnyValueFromBits, NoiseRng},
 };
 use shared::{
-    client_events::SpawnCubeRequest,
-    cube_spawner::cube,
-    npc_spawner::npc,
-    player::Selectable,
+    client_events::SpawnCubeRequest, cube_spawner::cube, npc_spawner::npc, player::Selectable,
     server_events::CubeSpawned,
 };
-use shared::{
-    client_events::SpawnNpcRequest, combat::Gcd, server_events::NpcSpawned,
-};
+use shared::{client_events::SpawnNpcRequest, combat::Gcd, server_events::NpcSpawned};
 
 pub struct ServerSpawnPlugin;
 
