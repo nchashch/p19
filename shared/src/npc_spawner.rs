@@ -7,7 +7,7 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::character_controller::{Character, Idle};
+use crate::character_controller::{Character, GameLayer, Idle};
 use crate::combat::HitPoints;
 
 #[derive(Component, Serialize, Deserialize, Default, Clone)]
@@ -29,6 +29,7 @@ pub fn npc(shape: Collider, translation: Vec3) -> impl Bundle {
         Transform::from_translation(translation),
         RigidBody::Dynamic,
         shape,
+        CollisionLayers::new(GameLayer::Npc, LayerMask::ALL & !LayerMask::from(GameLayer::Player)),
         LockedAxes::new()
             .lock_rotation_x()
             .lock_rotation_y()

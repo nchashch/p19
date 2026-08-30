@@ -29,6 +29,7 @@ impl Plugin for SharedReplicationPlugin {
         app.replicate::<Gcd>();
         app.replicate::<GroundDetection>();
         app.replicate::<Collider>();
+        app.replicate::<CollisionLayers>();
         app.replicate::<DesiredMotion>();
         app.replicate::<RigidBody>();
         app.replicate::<LinearVelocity>();

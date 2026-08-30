@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::character_controller::{
     Character, CharacterCollisions, CharacterController, CharacterMovementSettings, DesiredMotion,
-    GroundDetection, Idle,
+    GameLayer, GroundDetection, Idle,
 };
 use crate::combat::{Gcd, HitPoints};
 
@@ -57,6 +57,7 @@ pub fn player(player_name: String, position: Vec3) -> impl Bundle {
             ..default()
         },
         Collider::capsule(0.4, 1.0),
+        CollisionLayers::new(GameLayer::Player, LayerMask::ALL & !LayerMask::from(GameLayer::Npc)),
         DesiredMotion::default(),
         RigidBody::Kinematic,
         Transform::from_translation(position),

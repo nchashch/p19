@@ -86,6 +86,18 @@ pub struct CharacterController;
 #[reflect(Component)]
 pub struct Character;
 
+/// Physics layers for [`CollisionLayers`], so the player capsule and NPC bodies can be told not
+/// to physically collide with each other while each still collides normally with level geometry
+/// and props (which stay on the implicit `Default` layer, since nothing else in this codebase
+/// uses `CollisionLayers` yet).
+#[derive(PhysicsLayer, Default, Clone, Copy, Debug)]
+pub enum GameLayer {
+    #[default]
+    Default,
+    Player,
+    Npc,
+}
+
 /// Moving or standing still — not performing any kind of action (attack, hurt, etc). Removed
 /// while a one-off animation/action plays and re-inserted once it finishes; systems that drive
 /// locomotion (walk/idle/jump) only act while this is present.
@@ -174,10 +186,15 @@ pub struct CharacterCollision {
 /// Updates the [`Grounded`] status for character controllers.
 fn update_grounded(
     mut commands: Commands,
-    mut query: Query<(Entity, &GroundDetection, &GlobalTransform)>,
+    mut query: Query<(
+        Entity,
+        &GroundDetection,
+        &GlobalTransform,
+        Option<&CollisionLayers>,
+    )>,
     spatial_query: SpatialQuery,
 ) {
-    for (entity, ground_detection, global_transform) in &mut query {
+    for (entity, ground_detection, global_transform, collision_layers) in &mut query {
         let Some(collider) = &ground_detection.cast_shape else {
             continue;
         };
@@ -185,14 +202,22 @@ fn update_grounded(
         let translation = global_transform.translation().adjust_precision();
         let rotation = global_transform.rotation().adjust_precision();
 
-        // Cast the shape downward to check for ground
+        // Cast the shape downward to check for ground. `mask` mirrors this entity's own
+        // `CollisionLayers.filters` (defaulting to `ALL`, matching Avian's own default for
+        // entities with no `CollisionLayers`) — without this, `from_excluded_entities` alone
+        // leaves `mask: LayerMask::ALL`, so the cast would detect ground/obstacle hits from
+        // colliders this entity's own layers say it shouldn't interact with at all.
+        let filter = SpatialQueryFilter {
+            mask: collision_layers.map_or(LayerMask::ALL, |layers| layers.filters),
+            ..SpatialQueryFilter::from_excluded_entities([entity])
+        };
         let hit = spatial_query.cast_shape(
             collider,
             translation,
             rotation,
             global_transform.down(),
             &ShapeCastConfig::from_max_distance(ground_detection.max_distance),
-            &SpatialQueryFilter::from_excluded_entities([entity]),
+            &filter,
         );
 
         // The character is grounded if we hit a surface that isn't too steep
@@ -286,14 +311,22 @@ fn move_and_slide(
             &mut Transform,
             &mut LinearVelocity,
             &Collider,
+            Option<&CollisionLayers>,
         ),
         With<CharacterController>,
     >,
     move_and_slide: MoveAndSlide,
     time: Res<Time>,
 ) {
-    for (entity, ground_detection, mut collisions, mut transform, mut lin_vel, collider) in
-        &mut query
+    for (
+        entity,
+        ground_detection,
+        mut collisions,
+        mut transform,
+        mut lin_vel,
+        collider,
+        collision_layers,
+    ) in &mut query
     {
         let mut hit_ground_or_ceiling = false;
 
@@ -303,6 +336,14 @@ fn move_and_slide(
         }
 
         let up = transform.up().adjust_precision();
+
+        // Same reasoning as `update_grounded`: without setting `mask` from this entity's own
+        // `CollisionLayers.filters`, `from_excluded_entities` alone would still slide against
+        // (i.e. treat as a solid obstacle) any collider this entity's layers say to ignore.
+        let filter = SpatialQueryFilter {
+            mask: collision_layers.map_or(LayerMask::ALL, |layers| layers.filters),
+            ..SpatialQueryFilter::from_excluded_entities([entity])
+        };
 
         // Perform move-and-slide
         let MoveAndSlideOutput {
@@ -315,7 +356,7 @@ fn move_and_slide(
             lin_vel.0.adjust_precision(),
             time.delta(),
             &MoveAndSlideConfig::default(),
-            &SpatialQueryFilter::from_excluded_entities([entity]),
+            &filter,
             |hit| {
                 // This callback is called for each surface we collide with during move-and-slide.
                 // In this example, we use it to customize collision behavior for ground surfaces,

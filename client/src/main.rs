@@ -1,6 +1,7 @@
 use avian3d::prelude::*;
 use bevy::feathers::{dark_theme::create_dark_theme, theme::UiTheme};
 use bevy::prelude::*;
+use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy_replicon_quinnet::RepliconQuinnetPlugins;
 use bevy_seedling::prelude::*;
 use bevy_skein::SkeinPlugin;
@@ -12,6 +13,9 @@ use fps_controller::FpsControllerPlugin;
 use game_state::{GameState, GameStatePlugin};
 use particles::ParticleEffectsPlugin;
 use player_character::PlayerCharacterPlugin;
+
+use bevy_mod_openxr::{add_xr_plugins, resources::OxrSessionConfig};
+use openxr::EnvironmentBlendMode;
 
 mod actions;
 mod animation;
@@ -32,6 +36,7 @@ mod particles;
 mod player_character;
 mod targeting;
 mod ui;
+mod vr_controllers;
 mod widgets;
 
 /// Registers each `$observer` with `$app`, gated behind `$condition` (e.g.
@@ -46,7 +51,7 @@ pub(crate) use add_observers_run_if;
 
 use crate::{
     animation::PAnimationPlugin, loading::LoadingPlugin, nameplate::NameplatePlugin,
-    npc_spawner::NpcSpawnerPlugin,
+    npc_spawner::NpcSpawnerPlugin, vr_controllers::VrControllersPlugin,
 };
 
 fn main() {
@@ -58,7 +63,7 @@ struct Prototype19;
 impl Plugin for Prototype19 {
     fn build(&self, app: &mut App) {
         app.add_plugins((
-            DefaultPlugins,
+            add_xr_plugins(DefaultPlugins.build()),
             bevy::feathers::FeathersPlugins,
             PAnimationPlugin,
             PConsolePlugin,
@@ -81,7 +86,16 @@ impl Plugin for Prototype19 {
                 networking::NetworkingPlugin,
             ),
         ))
+        .insert_resource(OxrSessionConfig {
+            blend_mode_preference: vec![EnvironmentBlendMode::OPAQUE],
+            ..default()
+        })
+        .add_plugins((
+            bevy_mod_xr::hand_debug_gizmos::HandGizmosPlugin,
+            VrControllersPlugin,
+        ))
         .insert_resource(UiTheme(create_dark_theme()))
+        .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.15)))
         .insert_resource(GlobalAmbientLight {
             color: Color::WHITE,
             brightness: 100.,
