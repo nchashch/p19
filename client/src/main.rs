@@ -29,6 +29,7 @@ mod fps_controller;
 mod game_state;
 mod hud;
 mod loading;
+mod localization;
 mod nameplate;
 mod networking;
 mod npc_spawner;
@@ -50,8 +51,8 @@ macro_rules! add_observers_run_if {
 pub(crate) use add_observers_run_if;
 
 use crate::{
-    animation::PAnimationPlugin, loading::LoadingPlugin, nameplate::NameplatePlugin,
-    npc_spawner::NpcSpawnerPlugin, vr_controllers::VrControllersPlugin,
+    animation::PAnimationPlugin, loading::LoadingPlugin, localization::LocalizationPlugin,
+    nameplate::NameplatePlugin, npc_spawner::NpcSpawnerPlugin, vr_controllers::VrControllersPlugin,
 };
 
 fn main() {
@@ -63,11 +64,12 @@ struct Prototype19;
 impl Plugin for Prototype19 {
     fn build(&self, app: &mut App) {
         app.add_plugins((
-            add_xr_plugins(DefaultPlugins.build()),
+            add_xr_plugins(DefaultPlugins.build().disable::<PipelinedRenderingPlugin>()),
             bevy::feathers::FeathersPlugins,
             PAnimationPlugin,
             PConsolePlugin,
             LoadingPlugin,
+            LocalizationPlugin,
             SeedlingPlugins,
             ParticleEffectsPlugin,
             SkeinPlugin::default(),

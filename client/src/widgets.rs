@@ -1,3 +1,4 @@
+use crate::localization::LocalizedText;
 use bevy::{
     color::palettes::css::{DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},
     prelude::*,
@@ -50,7 +51,10 @@ pub fn panel(width: Val, height: Val) -> impl Scene {
     }
 }
 
-pub fn button(width: Val, height: Val, label: &str) -> impl Scene {
+/// `label_key` is a Fluent message key (see `assets/locales/`), not display text — `LocalizedText`
+/// fills in the real label once localization is ready, using the key itself as the placeholder
+/// shown for the frame or two before that.
+pub fn button(width: Val, height: Val, label_key: &'static str) -> impl Scene {
     bsn! {
         Button
         Node {
@@ -66,7 +70,8 @@ pub fn button(width: Val, height: Val, label: &str) -> impl Scene {
         on(hover_button)
         on(out_button)
         Children [(
-            Text(label)
+            Text(label_key)
+            LocalizedText(label_key)
             TextFont {
                 font: FontSourceTemplate::Handle(SERIF_FONT),
                 font_size: px(BUTTON_TEXT_FONT_SIZE),

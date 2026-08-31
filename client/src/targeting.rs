@@ -37,7 +37,7 @@ pub const SELECT_RANGE: f32 = 50.0;
 fn raycast_from_center(
     local_player: Res<LocalPlayer>,
     spatial_query: SpatialQuery,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<IsDefaultUiCamera>>,
     window_query: Query<&Window>,
     mut hovered: ResMut<Hovered>,
 ) {

@@ -78,7 +78,11 @@ fn spawn_nameplates(add: On<Add, HitPoints>, mut commands: Commands, names: Quer
 
 fn track_nameplates(
     mut commands: Commands,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
+    // `With<IsDefaultUiCamera>` (not a bare `.single()`) — VR sessions add extra `Camera`
+    // entities for the per-eye XR views (see `bevy_mod_openxr`), so a plain `(&Camera,
+    // &GlobalTransform)` query stops matching exactly one camera once a headset is connected,
+    // which made `.single()` fail and nameplates freeze at their unset default position.
+    camera_query: Query<(&Camera, &GlobalTransform), With<IsDefaultUiCamera>>,
     targets: Query<(&GlobalTransform, &HitPoints)>,
     mut nameplates: Query<(Entity, &Nameplate, &mut Node, &mut Visibility)>,
     children: Query<&Children>,

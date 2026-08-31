@@ -31,3 +31,6 @@ bevy_xr_utils = { path = "../../bevy_oxr/crates/bevy_xr_utils" }
 bevy_vrm1 = "0.9.2"
 openxr = "0.21.1"
 bevy_mod_xr = { path = "../../bevy_oxr/crates/bevy_xr" }
+bevy_fluent.workspace = true
+fluent_content.workspace = true
+unic-langid.workspace = true
