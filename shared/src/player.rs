@@ -57,7 +57,10 @@ pub fn player(player_name: String, position: Vec3) -> impl Bundle {
             ..default()
         },
         Collider::capsule(0.4, 1.0),
-        CollisionLayers::new(GameLayer::Player, LayerMask::ALL & !LayerMask::from(GameLayer::Npc)),
+        CollisionLayers::new(
+            GameLayer::Player,
+            LayerMask::ALL & !LayerMask::from(GameLayer::Npc) & !LayerMask::from(GameLayer::Player),
+        ),
         DesiredMotion::default(),
         RigidBody::Kinematic,
         Transform::from_translation(position),
