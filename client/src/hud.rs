@@ -1,7 +1,10 @@
 use crate::game_state::GameState;
+use crate::localization::localized;
 use crate::player_character::LocalPlayer;
 use crate::targeting::{Hovered, SELECT_RANGE, Selected};
-use crate::widgets::{PANEL_BORDER_COLOR, PANEL_COLOR, SERIF_FONT, Tooltip, TooltipAbove, panel};
+use crate::widgets::{
+    PANEL_BORDER_COLOR, PANEL_COLOR, SERIF_FONT, Tooltip, TooltipAbove, TooltipArg, panel,
+};
 use bevy::{
     color::palettes::css::{WHITE, WHITE_SMOKE},
     prelude::*,
@@ -10,6 +13,8 @@ use bevy::{
     shader::ShaderRef,
     text::FontSourceTemplate,
 };
+use bevy_fluent::prelude::Localization;
+use fluent::FluentArgs;
 use shared::character_controller::Grounded;
 use shared::combat::{ATTACK_RANGE, DAMAGE, GCD_DURATION, Gcd, HitPoints};
 
@@ -84,12 +89,6 @@ const ABILITY_LETTER_FONT_SIZE: f32 = 28.0;
 const HOTKEY_LETTER_FONT_SIZE: f32 = 14.0;
 
 fn hotbar() -> impl Scene {
-    let attack_description = format!(
-        "Attack the selected target for {DAMAGE} damage (range {ATTACK_RANGE:.0}m). Shares the global cooldown."
-    );
-    let kill_description = format!(
-        "Instantly kill the selected target (range {ATTACK_RANGE:.0}m). Shares the global cooldown."
-    );
     bsn! {
         Node {
             width: percent(100),
@@ -101,16 +100,16 @@ fn hotbar() -> impl Scene {
             padding: UiRect::bottom(px(HOTBAR_BOTTOM_PADDING)),
         }
         Children [
-            ability_slot("A", "f", attack_description),
-            ability_slot("K", "t", kill_description),
             ability_slot(
-                "N", "r",
-                "Spawn an NPC at the spawn point. Shares the global cooldown.".to_string(),
+                "A", "f", "hud-attack-tooltip",
+                vec![("damage", DAMAGE.into()), ("range", ATTACK_RANGE.into())],
             ),
             ability_slot(
-                "C", "e",
-                "Spawn a cube, launched in the direction you're aiming. Shares the global cooldown.".to_string(),
+                "K", "t", "hud-kill-tooltip",
+                vec![("range", ATTACK_RANGE.into())],
             ),
+            ability_slot("N", "r", "hud-spawn-npc-tooltip", vec![]),
+            ability_slot("C", "e", "hud-spawn-cube-tooltip", vec![]),
             hotbar_slot(), hotbar_slot(), hotbar_slot(), hotbar_slot(),
         ]
         DespawnOnExit::<GameState>(GameState::InGame)
@@ -139,10 +138,15 @@ fn hotbar_slot() -> impl Scene {
 /// A hotbar slot with a big ability-name letter (centered) and a small hotkey letter (bottom-right
 /// corner) — currently just text standing in for real icons, since no icon/inventory asset system
 /// exists yet.
-fn ability_slot(ability_letter: &str, hotkey_letter: &str, description: String) -> impl Scene {
+fn ability_slot(
+    ability_letter: &str,
+    hotkey_letter: &str,
+    tooltip_key: &'static str,
+    tooltip_args: Vec<(&'static str, TooltipArg)>,
+) -> impl Scene {
     bsn! {
         hotbar_slot()
-        Tooltip(description)
+        Tooltip::with_args(tooltip_key, tooltip_args)
         TooltipAbove(HOTBAR_SLOT_SIZE)
         Children [
             (
@@ -243,6 +247,7 @@ struct DataFrame;
 
 fn update_data_frame(
     local_player: Res<LocalPlayer>,
+    localization: Option<Res<Localization>>,
     mut query: Query<&mut Text, With<DataFrame>>,
     hovered: Res<Hovered>,
     selected: Res<Selected>,
@@ -259,11 +264,21 @@ fn update_data_frame(
     else {
         return;
     };
+    // Localization loads asynchronously (see `localization.rs`) and isn't guaranteed ready by the
+    // time this first runs — skip until it is rather than showing raw `.ftl` keys.
+    let Some(localization) = localization else {
+        return;
+    };
 
     // `Grounded` is added/removed every jump/landing, not just when `Hovered`/`Selected` change —
     // without tracking it here too, the displayed status would only refresh coincidentally.
+    // `localization.is_changed()` covers the one frame it goes from not-ready to ready.
     let grounded_changed = *last_grounded != Some(is_grounded);
-    if !hovered.is_changed() && !selected.is_changed() && !grounded_changed {
+    if !hovered.is_changed()
+        && !selected.is_changed()
+        && !grounded_changed
+        && !localization.is_changed()
+    {
         return;
     }
     *last_grounded = Some(is_grounded);
@@ -272,49 +287,96 @@ fn update_data_frame(
         return;
     };
 
-    text.0 = format!(
-        "Press ` for console\n\nHP: {}/{}\nDamage: {}\nAttack range: {}m\nSelect range: {}m\nGCD: {}s\nGrounded: {}\n\n",
-        player_hit_points.hit_points,
-        player_hit_points.max_hit_points,
-        DAMAGE,
-        ATTACK_RANGE,
-        SELECT_RANGE,
-        GCD_DURATION,
-        is_grounded,
-    );
+    let mut value = localized(&localization, "hud-console-hint", &FluentArgs::new());
+    value += "\n\n";
 
-    if let Some((entity, distance)) = hovered.0 {
-        text.0 += &format!("Hovered: {:?}\nDistance: {:.2}\n\n", entity, distance);
-    } else {
-        text.0 += &format!("Hovered: n/a\nDistance: n/a\n\n");
+    let mut hp_args = FluentArgs::new();
+    hp_args.set("hp", player_hit_points.hit_points);
+    hp_args.set("max_hp", player_hit_points.max_hit_points);
+    value += &localized(&localization, "hud-hp", &hp_args);
+    value += "\n";
+
+    let mut damage_args = FluentArgs::new();
+    damage_args.set("damage", DAMAGE);
+    value += &localized(&localization, "hud-damage", &damage_args);
+    value += "\n";
+
+    let mut attack_range_args = FluentArgs::new();
+    attack_range_args.set("range", ATTACK_RANGE);
+    value += &localized(&localization, "hud-attack-range", &attack_range_args);
+    value += "\n";
+
+    let mut select_range_args = FluentArgs::new();
+    select_range_args.set("range", SELECT_RANGE);
+    value += &localized(&localization, "hud-select-range", &select_range_args);
+    value += "\n";
+
+    let mut gcd_args = FluentArgs::new();
+    gcd_args.set("seconds", GCD_DURATION);
+    value += &localized(&localization, "hud-gcd", &gcd_args);
+    value += "\n";
+
+    let mut grounded_args = FluentArgs::new();
+    grounded_args.set("grounded", if is_grounded { "true" } else { "false" });
+    value += &localized(&localization, "hud-grounded", &grounded_args);
+    value += "\n\n";
+
+    match hovered.0 {
+        Some((entity, distance)) => {
+            let mut entity_args = FluentArgs::new();
+            entity_args.set("entity", format!("{entity:?}"));
+            value += &localized(&localization, "hud-hovered", &entity_args);
+            value += "\n";
+
+            let mut distance_args = FluentArgs::new();
+            distance_args.set("distance", format!("{distance:.2}"));
+            value += &localized(&localization, "hud-distance", &distance_args);
+            value += "\n\n";
+        }
+        None => {
+            value += &localized(&localization, "hud-hovered-none", &FluentArgs::new());
+            value += "\n";
+            value += &localized(&localization, "hud-distance-none", &FluentArgs::new());
+            value += "\n\n";
+        }
     }
 
     if let Some(entity) = selected.0 {
-        let distance_to_selected = {
-            match global_transforms.get(entity) {
-                Ok(selected_global_transform) => Some(
-                    (selected_global_transform.compute_transform().translation
-                        - player_global_transform.compute_transform().translation)
-                        .length(),
-                ),
-                Err(_) => None,
-            }
-        };
-        text.0 += &format!("Selected: {:?}\n", entity);
+        let distance_to_selected = global_transforms.get(entity).ok().map(|selected_transform| {
+            (selected_transform.compute_transform().translation
+                - player_global_transform.compute_transform().translation)
+                .length()
+        });
+
+        let mut selected_args = FluentArgs::new();
+        selected_args.set("entity", format!("{entity:?}"));
+        value += &localized(&localization, "hud-selected", &selected_args);
+        value += "\n";
+
         match distance_to_selected {
             Some(distance_to_selected) => {
-                text.0 += &format!("Distance: {:.2}\n", distance_to_selected);
+                let mut distance_args = FluentArgs::new();
+                distance_args.set("distance", format!("{distance_to_selected:.2}"));
+                value += &localized(&localization, "hud-distance", &distance_args);
             }
-            None => text.0 += &format!("Distance: n/a\n"),
-        };
-        if let Some(name) = name.get(entity).ok() {
-            text.0 += &format!("Name: {name}\n");
+            None => value += &localized(&localization, "hud-distance-none", &FluentArgs::new()),
         }
-        if let Some(hit_points) = hit_points.get(entity).ok() {
-            text.0 += &format!(
-                "HP: {}/{}\n",
-                hit_points.hit_points, hit_points.max_hit_points
-            );
+        value += "\n";
+
+        if let Ok(name) = name.get(entity) {
+            let mut name_args = FluentArgs::new();
+            name_args.set("name", name.as_str());
+            value += &localized(&localization, "hud-name", &name_args);
+            value += "\n";
+        }
+        if let Ok(target_hit_points) = hit_points.get(entity) {
+            let mut hp_args = FluentArgs::new();
+            hp_args.set("hp", target_hit_points.hit_points);
+            hp_args.set("max_hp", target_hit_points.max_hit_points);
+            value += &localized(&localization, "hud-hp", &hp_args);
+            value += "\n";
         }
     }
+
+    text.0 = value;
 }

@@ -1,3 +1,4 @@
+use crate::actions::*;
 use crate::add_observers_run_if;
 use crate::events::{SpawnCube, SpawnNpc};
 use crate::fps_controller::FpsCamera;
@@ -8,11 +9,9 @@ use bevy::window::{CursorGrabMode, CursorOptions};
 use bevy_enhanced_input::prelude::{Press, *};
 use bevy_replicon::prelude::ClientTriggerExt;
 use chill_bevy_console::console_closed;
+use shared::client_events::{AttackAttempt, KillAttempt};
 use shared::player::Selectable;
 use std::f32::consts::PI;
-
-use crate::actions::*;
-use shared::client_events::{AttackAttempt, KillAttempt};
 
 pub struct PlayerControlsPlugin;
 
@@ -83,10 +82,16 @@ fn on_movement(
     commands.client_trigger(shared::client_events::Movement {
         direction: Vec3::new(-rotated.x, 0.0, rotated.y),
     });
+    commands.trigger(shared::client_events::Movement {
+        direction: Vec3::new(-rotated.x, 0.0, rotated.y),
+    });
 }
 
 fn on_movement_stop(_: On<Complete<Movement>>, mut commands: Commands) {
     commands.client_trigger(shared::client_events::Movement {
+        direction: Vec3::ZERO,
+    });
+    commands.trigger(shared::client_events::Movement {
         direction: Vec3::ZERO,
     });
 }
@@ -95,6 +100,7 @@ fn on_movement_stop(_: On<Complete<Movement>>, mut commands: Commands) {
 /// `shared::character_controller::JumpInput` the controller actually runs on.
 fn on_jump(_: On<Fire<Jump>>, mut commands: Commands) {
     commands.client_trigger(shared::client_events::Jump);
+    commands.trigger(shared::client_events::Jump);
 }
 
 fn apply_fps_camera_rotation(

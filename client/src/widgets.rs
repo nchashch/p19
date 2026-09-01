@@ -1,9 +1,11 @@
-use crate::localization::LocalizedText;
+use crate::localization::{LocalizedText, localized};
 use bevy::{
     color::palettes::css::{DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},
     prelude::*,
     text::FontSourceTemplate,
 };
+use bevy_fluent::prelude::Localization;
+use fluent::FluentArgs;
 
 /// Shared, screen-agnostic UI building blocks (`panel`, `button`, tooltips) used by both the main
 /// menu (`ui.rs`) and the in-game HUD (`hud.rs`) — kept dependency-free of either so it stays a
@@ -93,8 +95,59 @@ fn out_button(event: On<Pointer<Out>>, mut commands: Commands) {
         .insert(BackgroundColor(BUTTON_COLOR.into()));
 }
 
+/// A value substituted into a `Tooltip`'s `.ftl` message — see `fluent_bundle::FluentValue`, which
+/// this converts into at resolve time (`show_tooltip`). Kept as its own small enum instead of
+/// storing `fluent::FluentArgs` directly on the component so `Tooltip` stays plain owned data
+/// (`Default`/`Clone`, no borrowed lifetime) rather than something tied to a `FluentArgs<'a>`.
+#[derive(Clone)]
+pub enum TooltipArg {
+    Number(f64),
+    Text(String),
+}
+
+impl From<i32> for TooltipArg {
+    fn from(value: i32) -> Self {
+        Self::Number(value as f64)
+    }
+}
+
+impl From<f32> for TooltipArg {
+    fn from(value: f32) -> Self {
+        Self::Number(value as f64)
+    }
+}
+
+impl From<&str> for TooltipArg {
+    fn from(value: &str) -> Self {
+        Self::Text(value.to_string())
+    }
+}
+
+/// A tooltip shown on hover, resolved from a Fluent message key (see `assets/locales/`) rather than
+/// a raw string — resolution happens lazily in `show_tooltip`, at hover time, not at spawn time, so
+/// it never races localization still loading (unlike `LocalizedText`, which can spawn before the
+/// locale folder finishes loading — a tooltip can't be hovered before the game is already running).
 #[derive(Component, Clone, Default)]
-pub struct Tooltip(pub String);
+pub struct Tooltip {
+    key: &'static str,
+    args: Vec<(&'static str, TooltipArg)>,
+}
+
+impl Tooltip {
+    pub fn new(key: &'static str) -> Self {
+        Self {
+            key,
+            args: Vec::new(),
+        }
+    }
+
+    /// Builds a `Tooltip` from an already-assembled arg list in one call — for passing a tooltip
+    /// across a function boundary (e.g. into `hud.rs`'s `ability_slot`) and installing it as a
+    /// component inside a `bsn!` block, which needs a call expression there, not a bare variable.
+    pub fn with_args(key: &'static str, args: Vec<(&'static str, TooltipArg)>) -> Self {
+        Self { key, args }
+    }
+}
 
 /// Positions the tooltip above the hovered entity instead of the default side offset — for
 /// entities that sit at the bottom edge of the screen with no room below them (e.g. the HUD
@@ -113,6 +166,7 @@ fn show_tooltip(
     tips: Query<(&Tooltip, Option<&TooltipAbove>)>,
     panel: Query<Entity, With<Panel>>,
     asset_server: Res<AssetServer>,
+    localization: Option<Res<Localization>>,
     mut commands: Commands,
 ) {
     let Ok(_panel_entity) = panel.single() else {
@@ -121,6 +175,17 @@ fn show_tooltip(
     let Ok((tip, above)) = tips.get(over.entity) else {
         return;
     };
+    let Some(localization) = localization else {
+        return;
+    };
+    let mut fluent_args = FluentArgs::new();
+    for (name, arg) in &tip.args {
+        match arg {
+            TooltipArg::Number(value) => fluent_args.set(*name, *value),
+            TooltipArg::Text(value) => fluent_args.set(*name, value.clone()),
+        }
+    }
+    let text = localized(&localization, tip.key, &fluent_args);
     let font = asset_server.load(SERIF_FONT);
     let position = if let Some(above) = above {
         Node {
@@ -148,7 +213,7 @@ fn show_tooltip(
         GlobalZIndex(1000), // draw above all other UI
         BackgroundColor(TOOLTIP_BACKGROUND_COLOR.into()),
         children![(
-            Text::new(tip.0.clone()),
+            Text::new(text),
             TextColor(Color::WHITE),
             Pickable::IGNORE,
             TextFont {

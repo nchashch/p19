@@ -50,7 +50,7 @@ fn main_menu() -> impl Scene {
                 ),
                 (
                     button(px(200), px(50), "main-menu-play")
-                    Tooltip("Start the game.")
+                    Tooltip::new("main-menu-play-tooltip")
                     on(play_button)
                 ),
             ]

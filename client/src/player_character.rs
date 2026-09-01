@@ -17,7 +17,7 @@ impl Plugin for PlayerCharacterPlugin {
         app.init_resource::<PlayerName>();
 
         app.add_plugins((
-            CharacterControllerPlugin,
+            // CharacterControllerPlugin,
             CombatPlugin,
             PlayerControlsPlugin,
             PlayerCameraPlugin,

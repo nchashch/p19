@@ -1,7 +1,8 @@
 use bevy::asset::{LoadState, LoadedFolder};
 use bevy::prelude::*;
 use bevy_fluent::prelude::*;
-use fluent_content::Content;
+use fluent::FluentArgs;
+use fluent_content::{Content, Request};
 use unic_langid::langid;
 
 /// Loads `.ftl` locale assets under `assets/locales/` and exposes localized strings to the rest of
@@ -52,6 +53,16 @@ fn build_localization(
 /// ready, since asset loading is never instant even for these tiny `.ftl` files.
 #[derive(Component, Clone, Copy, Default)]
 pub struct LocalizedText(pub &'static str);
+
+/// Looks up `key`'s message in `localization`, formatted with `args` — falling back to the raw key
+/// itself (rather than panicking or showing nothing) if a key is ever missing from the `.ftl` files.
+/// Shared by every call site that needs an interpolated (not just static) localized string — see
+/// `hud.rs`'s `update_data_frame` and `widgets.rs`'s `show_tooltip`.
+pub fn localized(localization: &Localization, key: &'static str, args: &FluentArgs) -> String {
+    localization
+        .content(Request::new(key).args(args))
+        .unwrap_or_else(|| key.to_string())
+}
 
 fn sync_localized_text(
     localization: Option<Res<Localization>>,

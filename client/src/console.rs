@@ -3,16 +3,23 @@ use bevy::asset::io::AssetSourceId;
 use bevy::dev_tools::fps_overlay::FpsOverlayPlugin;
 use bevy::platform::collections::HashSet;
 use bevy::{dev_tools::fps_overlay::FpsOverlayConfig, prelude::*};
+use bevy_fluent::prelude::Localization;
 use chill_bevy_console::{ChillConsole, CommandArgs, ConsoleAppExt, ConsoleCommand};
+use fluent::FluentArgs;
 use futures_lite::StreamExt;
 use std::path::Path;
 
 use crate::animation::Animations;
 use crate::events::{LoadLevel, PlayAnimationLooping};
+use crate::localization::localized;
 use crate::{events::RespawnPlayer, targeting::Selected};
 use shared::cube_spawner::Cube;
 use shared::npc_spawner::Npc;
 
+/// The command name strings passed to `ConsoleCommand::new` (and its `help` usage line, a
+/// `&'static str` baked in at `build()` time, before `Localization` even exists as a resource) are
+/// deliberately left hardcoded — only what each command prints at runtime (well after localization
+/// has had time to load) is localized, via `localized_output` below.
 pub struct PConsolePlugin;
 
 impl Plugin for PConsolePlugin {
@@ -66,28 +73,36 @@ impl Plugin for PConsolePlugin {
     }
 }
 
-fn controls_cmd(In(_args): CommandArgs) -> String {
-    r#"
-    [WASD] move
-    [RMB] rotate camera
-    [LMB] select
-    [ESC] deselect
-    [E] spawn cube
-    [R] spawn NPC
-    [T] kill selected
-    [F] attack selected
-    [F1] main menu
-    "#
-    .to_string()
+/// Falls back to plain English rather than a `.ftl` key when `Localization` genuinely isn't loaded
+/// yet — the only realistic way to hit this is opening the console and running a command within
+/// the first fraction of a second of startup, before the (tiny) locale folder finishes loading.
+fn localized_output(
+    localization: &Option<Res<Localization>>,
+    key: &'static str,
+    args: &FluentArgs,
+) -> String {
+    match localization {
+        Some(localization) => localized(localization, key, args),
+        None => "loading localization...".to_string(),
+    }
 }
 
-fn respawn_cmd(In(_args): CommandArgs, mut commands: Commands) -> String {
+fn controls_cmd(In(_args): CommandArgs, localization: Option<Res<Localization>>) -> String {
+    localized_output(&localization, "console-controls", &FluentArgs::new())
+}
+
+fn respawn_cmd(
+    In(_args): CommandArgs,
+    localization: Option<Res<Localization>>,
+    mut commands: Commands,
+) -> String {
     commands.trigger(RespawnPlayer);
-    "respawned".to_string()
+    localized_output(&localization, "console-respawned", &FluentArgs::new())
 }
 
 fn despawn_cubes_cmd(
     In(_args): CommandArgs,
+    localization: Option<Res<Localization>>,
     mut commands: Commands,
     cubes: Query<Entity, With<Cube>>,
     mut selected: ResMut<Selected>,
@@ -96,11 +111,12 @@ fn despawn_cubes_cmd(
     for cube in cubes {
         commands.entity(cube).despawn();
     }
-    "cubes despawned".to_string()
+    localized_output(&localization, "console-cubes-despawned", &FluentArgs::new())
 }
 
 fn despawn_npcs_cmd(
     In(_args): CommandArgs,
+    localization: Option<Res<Localization>>,
     mut commands: Commands,
     npcs: Query<Entity, With<Npc>>,
     mut selected: ResMut<Selected>,
@@ -109,11 +125,12 @@ fn despawn_npcs_cmd(
     for npc in npcs {
         commands.entity(npc).despawn();
     }
-    "npcs despawned".to_string()
+    localized_output(&localization, "console-npcs-despawned", &FluentArgs::new())
 }
 
 fn load_level_cmd(
     In(args): CommandArgs,
+    localization: Option<Res<Localization>>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) -> String {
@@ -130,59 +147,85 @@ fn load_level_cmd(
         levels_list += &format!("{level}\n");
     }
     let Some(id) = args.get(0) else {
-        return format!("please provide level asset id, available levels:\n{levels_list}");
+        let mut args = FluentArgs::new();
+        args.set("levels", levels_list);
+        return localized_output(&localization, "console-load-level-missing-id", &args);
     };
     if levels.contains(&format!("\"levels/{}\"", id)) {
         commands.trigger(LoadLevel {
             id: format!("levels/{}#Scene0", id),
         });
-        return format!("loading level \"{id}\"");
+        let mut args = FluentArgs::new();
+        args.set("id", id);
+        localized_output(&localization, "console-load-level-loading", &args)
     } else {
-        return format!("no such level, available levels:\n{levels_list}");
+        let mut args = FluentArgs::new();
+        args.set("levels", levels_list);
+        localized_output(&localization, "console-load-level-not-found", &args)
     }
 }
 
 fn play_animation_cmd(
     In(args): CommandArgs,
+    localization: Option<Res<Localization>>,
     animations: Res<Animations>,
     selected: Res<Selected>,
     mut commands: Commands,
 ) -> String {
     let Some(selected) = selected.0 else {
-        return format!("nothing selected");
+        return localized_output(&localization, "console-nothing-selected", &FluentArgs::new());
     };
     let Some(clip_name) = args.get(0) else {
         let mut clip_names = "".to_string();
         for clip_name in animations.nodes.keys() {
             clip_names += &format!(" {clip_name}\n");
         }
-        return format!("available clips:\n{clip_names}");
+        let mut args = FluentArgs::new();
+        args.set("clips", clip_names);
+        return localized_output(&localization, "console-available-clips", &args);
     };
     if !animations.nodes.contains_key(clip_name) {
         let mut clip_names = "".to_string();
         for clip_name in animations.nodes.keys() {
             clip_names += &format!(" {clip_name}\n");
         }
-        return format!("clip {clip_name} doesn't exist, available clips:\n{clip_names}");
+        let mut args = FluentArgs::new();
+        args.set("clip", clip_name);
+        args.set("clips", clip_names);
+        return localized_output(&localization, "console-clip-not-found", &args);
     }
     commands.trigger(PlayAnimationLooping {
         entity: selected,
         name: clip_name.to_string(),
     });
-    format!("playing clip \"{clip_name}\"")
+    let mut args = FluentArgs::new();
+    args.set("clip", clip_name);
+    localized_output(&localization, "console-playing-clip", &args)
 }
 
-fn fps_cmd(In(_args): CommandArgs, mut fps_overlay_config: ResMut<FpsOverlayConfig>) -> String {
+fn fps_cmd(
+    In(_args): CommandArgs,
+    localization: Option<Res<Localization>>,
+    mut fps_overlay_config: ResMut<FpsOverlayConfig>,
+) -> String {
     fps_overlay_config.enabled = !fps_overlay_config.enabled;
     fps_overlay_config.frame_time_graph_config.enabled =
         !fps_overlay_config.frame_time_graph_config.enabled;
-    "fps overlay toggled".to_string()
+    localized_output(&localization, "console-fps-toggled", &FluentArgs::new())
 }
 
-fn physics_debug_cmd(In(_args): CommandArgs, mut gizmo_config: ResMut<GizmoConfigStore>) -> String {
+fn physics_debug_cmd(
+    In(_args): CommandArgs,
+    localization: Option<Res<Localization>>,
+    mut gizmo_config: ResMut<GizmoConfigStore>,
+) -> String {
     gizmo_config.config_mut::<PhysicsGizmos>().0.enabled =
         !gizmo_config.config_mut::<PhysicsGizmos>().0.enabled;
-    "physics debug gizmos toggled".to_string()
+    localized_output(
+        &localization,
+        "console-physics-debug-toggled",
+        &FluentArgs::new(),
+    )
 }
 
 fn disable_fps_overlay(mut fps_overlay_config: ResMut<FpsOverlayConfig>) {
