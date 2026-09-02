@@ -3,10 +3,12 @@ use crate::add_observers_run_if;
 use crate::events::{SpawnCube, SpawnNpc};
 use crate::fps_controller::FpsCamera;
 use crate::game_state::GameState;
+use crate::networking::PendingLevelId;
 use crate::targeting::{Hovered, SELECT_RANGE, Selected, TargetingPlugin};
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions};
 use bevy_enhanced_input::prelude::{Press, *};
+use bevy_quinnet::client::QuinnetClient;
 use bevy_replicon::prelude::ClientTriggerExt;
 use chill_bevy_console::console_closed;
 use shared::client_events::{AttackAttempt, KillAttempt};
@@ -69,7 +71,14 @@ fn spawn_npc(_: On<Start<SpawnNpcAction>>, mut commands: Commands) {
     commands.trigger(SpawnNpc);
 }
 
-fn main_menu(_: On<Start<MainMenu>>, mut commands: Commands) {
+fn main_menu(
+    _: On<Start<MainMenu>>,
+    mut commands: Commands,
+    mut client: ResMut<QuinnetClient>,
+    mut pending_level_id: ResMut<PendingLevelId>,
+) {
+    client.close_all_connections();
+    pending_level_id.0 = None;
     commands.set_state(GameState::MainMenu);
 }
 
