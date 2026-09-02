@@ -3,10 +3,23 @@ name = "client"
 version.workspace = true
 edition.workspace = true
 
+# `tracy` is opt-in, not part of `default`: `bevy/trace_tracy` makes `tracy-client` buffer every
+# instrumented span in memory, and that buffer only drains once an actual Tracy GUI connects and
+# pulls it out — with nothing connected it grows without bound (Bevy's own `bevy_log` warns about
+# exactly this: "Tracing with Tracy is active, memory consumption will grow until a client is
+# connected"). Compiling it in unconditionally meant *every* normal play session — not just
+# deliberate profiling ones — was one un-attached Tracy GUI away from a multi-GB/s runaway; a real
+# incident this caused: `cargo run -p client --release` without Tracy open ran the RSS from ~9GiB
+# to 40+GiB in under 4 minutes and kept climbing at ~150MB/s until the process was killed. Build
+# with `--features tracy` specifically when you intend to actually attach Tracy and keep it
+# attached; a normal `cargo run -p client` build no longer has this instrumentation at all.
+[features]
+tracy = ["bevy/trace_tracy"]
+
 [dependencies]
 fluent.workspace = true
 noiz.workspace = true
-bevy = { workspace = true, features = ["trace_tracy"] }
+bevy.workspace = true
 avian3d.workspace = true
 bevy_skein.workspace = true
 bevy_enhanced_input.workspace = true
