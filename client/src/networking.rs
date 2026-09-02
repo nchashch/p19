@@ -3,6 +3,7 @@
 
 use std::net::{IpAddr, Ipv4Addr};
 
+use bevy::asset::AssetPath;
 use bevy::prelude::*;
 use bevy_quinnet::client::{
     ClientConnectionConfiguration, ClientConnectionConfigurationDefaultables, QuinnetClient,
@@ -10,6 +11,7 @@ use bevy_quinnet::client::{
 };
 use bevy_replicon::prelude::*;
 use bevy_replicon_quinnet::ChannelsConfigurationExt;
+use shared::client_events::LoadLevelRequest;
 
 const SERVER_PORT: u16 = 6000;
 
@@ -17,15 +19,34 @@ pub struct NetworkingPlugin;
 
 impl Plugin for NetworkingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, connect_to_server)
-            .add_systems(OnEnter(ClientState::Connected), on_connected)
+        app.init_resource::<PendingLevelId>();
+        app.add_systems(OnEnter(ClientState::Connected), on_connected)
             .add_systems(OnEnter(ClientState::Disconnected), on_disconnected);
     }
 }
 
-/// Connects to a server on localhost. Skips certificate verification since the server
-/// generates a self-signed cert — fine for this dev scaffold, not for a real deployment.
-fn connect_to_server(channels: Res<RepliconChannels>, mut client: ResMut<QuinnetClient>) {
+/// Set by `loading.rs`'s `load_level` once it's validated the requested level id exists locally
+/// and opened the connection (via `connect_to_server`, below) — consumed by `on_connected` once
+/// `ClientState::Connected` actually fires, so `LoadLevelRequest` is only ever sent once the
+/// connection is real, not queued into a connection that may still be establishing.
+///
+/// The connection is deliberately *not* opened at `Startup` any more: a client that connects
+/// eagerly to a server that already has a level loaded gets that `LevelRoot` replicated to it
+/// immediately, and `loading.rs`'s `spawn_level`/`on_level_ready` react to a replicated
+/// `LevelRoot` unconditionally (not gated on `GameState`) — so an eager connection used to skip
+/// the main menu entirely and drop the client straight into `InGame` before `Play` was ever
+/// pressed. Connecting only once `Play` is pressed (see `load_level`) makes that impossible.
+#[derive(Resource, Default)]
+pub struct PendingLevelId(pub Option<AssetPath<'static>>);
+
+/// Opens the connection to the server on localhost, unless one is already open or opening —
+/// safe to call every time `Play` is pressed, including a second press before the first
+/// connection attempt has resolved. Skips certificate verification since the server generates a
+/// self-signed cert — fine for this dev scaffold, not for a real deployment.
+pub fn connect_to_server(channels: &RepliconChannels, client: &mut QuinnetClient) {
+    if client.is_connected() || client.is_connecting() {
+        return;
+    }
     client
         .open_connection(ClientConnectionConfiguration {
             addr_config: ClientAddrConfiguration::from_ips(
@@ -42,8 +63,11 @@ fn connect_to_server(channels: Res<RepliconChannels>, mut client: ResMut<Quinnet
         .expect("client connection should open");
 }
 
-fn on_connected() {
+fn on_connected(mut pending: ResMut<PendingLevelId>, mut commands: Commands) {
     info!("connected to server");
+    if let Some(id) = pending.0.take() {
+        commands.client_trigger(LoadLevelRequest { id });
+    }
 }
 
 fn on_disconnected() {

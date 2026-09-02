@@ -220,7 +220,10 @@ pub fn player_controls() -> impl Bundle {
                 Action::<Select>::new(),
                 bindings![MouseButton::Left, GamepadButton::RightThumb],
             ));
-            context.spawn((Action::<MainMenu>::new(), bindings![KeyCode::F1]));
+            context.spawn((
+                Action::<MainMenu>::new(),
+                bindings![KeyCode::F1, GamepadButton::Start],
+            ));
             context.spawn((
                 Action::<FpsCameraRotation>::new(),
                 bindings![Binding::mouse_motion()],

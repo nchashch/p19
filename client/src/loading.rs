@@ -1,8 +1,10 @@
+use crate::networking::{PendingLevelId, connect_to_server};
 use crate::{events::RespawnPlayer, game_state::GameState};
 use bevy::asset::AssetPath;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
-use bevy_replicon::prelude::ClientTriggerExt;
+use bevy_quinnet::client::QuinnetClient;
+use bevy_replicon::prelude::{ClientTriggerExt, RepliconChannels};
 use shared::client_events::LoadLevelRequest;
 use shared::level::LevelRoot;
 
@@ -41,6 +43,9 @@ pub fn initial_respawn(mut commands: Commands) {
 fn load_level(
     event: On<LoadLevel>,
     asset_server: Res<AssetServer>,
+    channels: Res<RepliconChannels>,
+    mut client: ResMut<QuinnetClient>,
+    mut pending_level_id: ResMut<PendingLevelId>,
     mut commands: Commands,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
@@ -58,9 +63,19 @@ fn load_level(
         warn!("load_level: {:?} not found ({err})", event.id);
         return;
     }
-    commands.client_trigger(LoadLevelRequest {
-        id: asset_path.into_owned(),
-    });
+    let id = asset_path.into_owned();
+    // The client only ever connects here, on `Play` — not eagerly at `Startup` — so the
+    // connection may still need to be opened, in which case the actual `LoadLevelRequest` has to
+    // wait for `ClientState::Connected` (see `networking.rs`'s `on_connected`) rather than being
+    // sent immediately. If already connected (e.g. a second `Play` press), send it right away —
+    // waiting on `OnEnter(ClientState::Connected)` again would hang forever, since that
+    // transition already happened and won't refire.
+    if client.is_connected() {
+        commands.client_trigger(LoadLevelRequest { id });
+    } else {
+        pending_level_id.0 = Some(id);
+        connect_to_server(&channels, &mut client);
+    }
     next_state.set(GameState::Loading);
 }
 
