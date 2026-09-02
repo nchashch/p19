@@ -52,3 +52,19 @@ pub struct LoadLevel {
     #[entities]
     pub entity: Entity,
 }
+
+/// Fired once a character's `HitPoints` actually reach zero in combat, right before the server
+/// despawns it — the fact client-side presentation (death sound, particle effect) reacts to,
+/// distinct from that entity's `HitPoints`/whole self simply being removed for some *other*
+/// reason (returning to the main menu despawns every `InGame`-scoped entity via
+/// `DespawnOnExit`, a respawn replacing one character entity with another, etc.). `position` is
+/// captured server-side and sent directly rather than looked up from the entity client-side,
+/// since by the time this arrives the entity may already be gone via its own despawn replicating
+/// through — `entity` itself is still `#[entities]`-mapped, but only used for the best-effort
+/// "clear `Selected` if it pointed at whatever just died" check, not for placing the effect.
+#[derive(EntityEvent, Serialize, Deserialize, MapEntities)]
+pub struct EntityDied {
+    #[entities]
+    pub entity: Entity,
+    pub position: Vec3,
+}

@@ -26,3 +26,15 @@ impl Default for Gcd {
         Self(timer)
     }
 }
+
+pub const DEAD_DURATION: f32 = 1.0;
+
+#[derive(Component, Serialize, Deserialize)]
+pub struct Dead(pub Timer);
+
+impl Default for Dead {
+    fn default() -> Self {
+        let timer = Timer::new(Duration::from_secs_f32(DEAD_DURATION), TimerMode::Once);
+        Self(timer)
+    }
+}

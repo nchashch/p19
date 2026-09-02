@@ -6,8 +6,8 @@ use bevy::prelude::*;
 use bevy_hanabi::prelude::*;
 use bevy_seedling::prelude::*;
 use shared::{
-    combat::HitPoints,
-    server_events::{Attack, Kill},
+    combat::Dead,
+    server_events::{Attack, EntityDied, Kill},
 };
 
 use crate::{particles::CubeParticleEffect, targeting::Selected};
@@ -20,6 +20,7 @@ impl Plugin for CombatPlugin {
         app.add_observer(on_attack);
         app.add_observer(on_kill);
         app.add_observer(on_entity_died);
+        app.add_systems(Update, hide_dead);
     }
 }
 
@@ -39,26 +40,31 @@ fn on_kill(_: On<Kill>, mut commands: Commands, asset_server: Res<AssetServer>) 
 }
 
 /// Reacts to an authoritative death — sound, particle effect, and clearing `Selected` if it
-/// pointed at whatever just died. The despawn itself already happened in `shared`.
+/// pointed at whatever just died. The despawn itself is a separate, server-driven replication
+/// event that arrives independently of this one — see `EntityDied`'s doc comment for why this
+/// reacts to that explicit signal rather than inferring "died" from `HitPoints` disappearing.
 fn on_entity_died(
-    died: On<Remove, HitPoints>,
-    transform: Query<&Transform>,
+    died: On<EntityDied>,
     effect: Res<CubeParticleEffect>,
     asset_server: Res<AssetServer>,
     mut selected: ResMut<Selected>,
     mut commands: Commands,
 ) {
-    let Ok(transform) = transform.get(died.entity) else {
-        return;
-    };
+    info!("position: {:?}", died.position);
     commands.spawn(SamplePlayer::new(asset_server.load("crunch.wav")));
     commands.spawn((
         ParticleEffect::new(effect.0.clone()),
-        *transform,
+        Transform::from_translation(died.position),
         Lifetime(Timer::from_seconds(2.0, TimerMode::Once)),
     ));
     if selected.0 == Some(died.entity) {
         selected.0 = None;
+    }
+}
+
+fn hide_dead(query: Query<Entity, With<Dead>>, mut commands: Commands) {
+    for dead in query {
+        commands.entity(dead).insert(Visibility::Hidden);
     }
 }
 

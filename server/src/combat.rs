@@ -1,9 +1,11 @@
+use avian3d::prelude::{Collider, RigidBody};
 use bevy::prelude::*;
 use bevy_replicon::prelude::*;
 use shared::{
     client_events::{AttackAttempt, KillAttempt},
-    combat::{ATTACK_RANGE, DAMAGE, Gcd, HitPoints},
-    server_events::{Attack, Kill},
+    combat::{ATTACK_RANGE, DAMAGE, Dead, Gcd, HitPoints},
+    player::Selectable,
+    server_events::{Attack, EntityDied, Kill},
 };
 
 pub struct ServerCombatPlugin;
@@ -12,15 +14,50 @@ impl Plugin for ServerCombatPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(resolve_attack);
         app.add_observer(resolve_kill);
-        app.add_systems(Update, (despawn_zero_hp, tick_gcd));
+        app.add_systems(Update, (kill_zero_hp, despawn_dead, tick_gcd, tick_dead));
     }
 }
 
-fn despawn_zero_hp(query: Query<(Entity, &HitPoints, &Transform)>, mut commands: Commands) {
-    for (entity, hit_points, _transform) in query {
+// TODO: Handle player death properly, currently it is broken. A player can't move but can still
+// look around and attack / kill other entities while dead, before being despawned.
+fn kill_zero_hp(
+    query: Query<(Entity, &HitPoints, &Transform), Without<Dead>>,
+    mut commands: Commands,
+) {
+    for (entity, hit_points, transform) in query {
         if hit_points.hit_points <= 0 {
+            // Sent before the despawn below, not after — client presentation (`client::combat`'s
+            // `on_entity_died`) needs this as the unambiguous "actually died in combat" signal,
+            // distinct from `HitPoints` merely being removed for some other reason (returning to
+            // the main menu despawns every `InGame`-scoped entity at once via `DespawnOnExit`).
+            commands.server_trigger(ToClients {
+                targets: SendTargets::All,
+                message: EntityDied {
+                    entity,
+                    position: transform.translation,
+                },
+            });
+            commands
+                .entity(entity)
+                .insert(Dead::default())
+                .remove::<Selectable>()
+                .remove::<RigidBody>()
+                .remove::<Collider>();
+        }
+    }
+}
+
+fn despawn_dead(query: Query<(Entity, &Dead)>, mut commands: Commands) {
+    for (entity, dead) in query {
+        if dead.0.is_finished() {
             commands.entity(entity).despawn();
         }
+    }
+}
+
+fn tick_dead(time: Res<Time>, mut query: Query<&mut Dead>) {
+    for mut dead in &mut query {
+        dead.0.tick(time.delta());
     }
 }
 

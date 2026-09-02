@@ -8,12 +8,14 @@ use crate::character_controller::{
 use crate::client_events::{
     AttackAttempt, Jump, KillAttempt, LoadLevelRequest, Movement, SpawnCubeRequest, SpawnNpcRequest,
 };
-use crate::combat::{Gcd, HitPoints};
+use crate::combat::{Dead, Gcd, HitPoints};
 use crate::cube_spawner::Cube;
 use crate::level::LevelRoot;
 use crate::npc_spawner::Npc;
 use crate::player::{PlayerCharacter, Selectable};
-use crate::server_events::{Attack, CubeSpawned, Kill, LoadLevel, NpcSpawned, PlayerSpawned};
+use crate::server_events::{
+    Attack, CubeSpawned, EntityDied, Kill, LoadLevel, NpcSpawned, PlayerSpawned,
+};
 
 pub struct SharedReplicationPlugin;
 
@@ -41,6 +43,7 @@ impl Plugin for SharedReplicationPlugin {
         app.replicate::<LockedAxes>();
         app.replicate::<LockedAxes>();
         app.replicate::<Cube>();
+        app.replicate::<Dead>();
 
         // `_mapped_` variants: every event here carries at least one `Entity` field, and those
         // ids are only meaningful once remapped from the sender's world to the receiver's —
@@ -60,5 +63,6 @@ impl Plugin for SharedReplicationPlugin {
         app.add_mapped_server_event::<NpcSpawned>(Channel::Ordered);
         app.add_mapped_server_event::<LoadLevel>(Channel::Ordered);
         app.add_mapped_server_event::<PlayerSpawned>(Channel::Ordered);
+        app.add_mapped_server_event::<EntityDied>(Channel::Ordered);
     }
 }

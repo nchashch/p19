@@ -8,8 +8,10 @@ use crate::targeting::{Hovered, SELECT_RANGE, Selected, TargetingPlugin};
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions};
 use bevy_enhanced_input::prelude::{Press, *};
+use bevy_hanabi::ParticleEffect;
 use bevy_quinnet::client::QuinnetClient;
 use bevy_replicon::prelude::ClientTriggerExt;
+use bevy_seedling::sample::SamplePlayer;
 use chill_bevy_console::console_closed;
 use shared::client_events::{AttackAttempt, KillAttempt};
 use shared::player::Selectable;
@@ -76,7 +78,15 @@ fn main_menu(
     mut commands: Commands,
     mut client: ResMut<QuinnetClient>,
     mut pending_level_id: ResMut<PendingLevelId>,
+    particle_effects: Query<Entity, With<ParticleEffect>>,
+    sample_players: Query<Entity, With<SamplePlayer>>,
 ) {
+    for particle_effect in particle_effects {
+        commands.entity(particle_effect).despawn();
+    }
+    for sample_player in sample_players {
+        commands.entity(sample_player).despawn();
+    }
     client.close_all_connections();
     pending_level_id.0 = None;
     commands.set_state(GameState::MainMenu);

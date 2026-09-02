@@ -83,7 +83,7 @@ fn track_nameplates(
     // &GlobalTransform)` query stops matching exactly one camera once a headset is connected,
     // which made `.single()` fail and nameplates freeze at their unset default position.
     camera_query: Query<(&Camera, &GlobalTransform), With<IsDefaultUiCamera>>,
-    targets: Query<(&GlobalTransform, &HitPoints)>,
+    targets: Query<(&GlobalTransform, &HitPoints, Option<&InheritedVisibility>)>,
     mut nameplates: Query<(Entity, &Nameplate, &mut Node, &mut Visibility)>,
     children: Query<&Children>,
     mut fills: Query<&mut Node, (With<HealthFill>, Without<Nameplate>)>,
@@ -95,11 +95,24 @@ fn track_nameplates(
     };
 
     for (nameplate_entity, nameplate, mut node, mut visibility) in &mut nameplates {
-        let Ok((target_transform, hit_points)) = targets.get(nameplate.target) else {
+        let Ok((target_transform, hit_points, target_visibility)) = targets.get(nameplate.target)
+        else {
             // Target despawned (killed, or otherwise removed) — clean up after it.
             commands.entity(nameplate_entity).despawn();
             continue;
         };
+
+        // Nameplates aren't parented to their target (see the module doc) so they don't get
+        // `InheritedVisibility` propagation through `ChildOf` for free — mirror it manually, so
+        // e.g. a dead-but-not-yet-despawned target hidden via `Visibility::Hidden` doesn't leave
+        // its nameplate floating and tracking a corpse nobody can see. A target with no
+        // `InheritedVisibility` at all (most character root entities — see the doc above) never
+        // opted into the visibility system in the first place, so treat that as visible, not
+        // hidden, rather than failing this query and despawning a perfectly live nameplate.
+        if target_visibility.is_some_and(|visible| !visible.get()) {
+            *visibility = Visibility::Hidden;
+            continue;
+        }
 
         let world_pos = target_transform.translation() + nameplate.offset;
         let distance = camera_transform.translation().distance(world_pos);

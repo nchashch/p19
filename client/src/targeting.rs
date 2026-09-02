@@ -39,6 +39,7 @@ fn raycast_from_center(
     spatial_query: SpatialQuery,
     camera_query: Query<(&Camera, &GlobalTransform), With<IsDefaultUiCamera>>,
     window_query: Query<&Window>,
+    selectables: Query<(), With<Selectable>>,
     mut hovered: ResMut<Hovered>,
 ) {
     let Ok((camera, camera_transform)) = camera_query.single() else {
@@ -76,7 +77,11 @@ fn raycast_from_center(
             None => vec![],
         }),
     ) {
-        hovered.0 = Some((hit.entity, hit.distance));
+        if selectables.contains(hit.entity) {
+            hovered.0 = Some((hit.entity, hit.distance));
+        } else {
+            hovered.0 = None;
+        }
     } else {
         hovered.0 = None;
     }
