@@ -233,7 +233,7 @@ pub fn player_controls() -> impl Bundle {
             ));
             context.spawn((
                 Action::<Deselect>::new(),
-                bindings![KeyCode::Escape, GamepadButton::LeftThumb],
+                bindings![MouseButton::Right, GamepadButton::LeftThumb],
             ));
             context.spawn((
                 Action::<Select>::new(),
@@ -241,7 +241,7 @@ pub fn player_controls() -> impl Bundle {
             ));
             context.spawn((
                 Action::<MainMenu>::new(),
-                bindings![KeyCode::F1, GamepadButton::Start],
+                bindings![KeyCode::Escape, GamepadButton::Start],
             ));
             context.spawn((
                 Action::<FpsCameraRotation>::new(),

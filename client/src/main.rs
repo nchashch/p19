@@ -28,6 +28,7 @@ mod events;
 mod fps_controller;
 mod game_state;
 mod hud;
+mod input_icons;
 mod loading;
 mod localization;
 mod nameplate;

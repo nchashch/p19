@@ -11,7 +11,9 @@ use std::path::Path;
 
 use crate::animation::Animations;
 use crate::events::{LoadLevel, PlayAnimationLooping};
+use crate::hud::HudVisible;
 use crate::localization::localized;
+use crate::nameplate::NameplatesVisible;
 use crate::{events::RespawnPlayer, targeting::Selected};
 use shared::cube_spawner::Cube;
 use shared::npc_spawner::Npc;
@@ -69,6 +71,16 @@ impl Plugin for PConsolePlugin {
             "physics_debug",
             "physics_debug - toggle physics debug gizmos",
             physics_debug_cmd,
+        ))
+        .add_console_command(ConsoleCommand::new(
+            "nameplates",
+            "nameplates - toggle nameplate visibility",
+            nameplates_cmd,
+        ))
+        .add_console_command(ConsoleCommand::new(
+            "hud",
+            "hud - toggle HUD visibility",
+            hud_cmd,
         ));
     }
 }
@@ -173,7 +185,11 @@ fn play_animation_cmd(
     mut commands: Commands,
 ) -> String {
     let Some(selected) = selected.0 else {
-        return localized_output(&localization, "console-nothing-selected", &FluentArgs::new());
+        return localized_output(
+            &localization,
+            "console-nothing-selected",
+            &FluentArgs::new(),
+        );
     };
     let Some(clip_name) = args.get(0) else {
         let mut clip_names = "".to_string();
@@ -226,6 +242,28 @@ fn physics_debug_cmd(
         "console-physics-debug-toggled",
         &FluentArgs::new(),
     )
+}
+
+fn nameplates_cmd(
+    In(_args): CommandArgs,
+    localization: Option<Res<Localization>>,
+    mut nameplates_visible: ResMut<NameplatesVisible>,
+) -> String {
+    nameplates_visible.0 = !nameplates_visible.0;
+    localized_output(
+        &localization,
+        "console-nameplates-toggled",
+        &FluentArgs::new(),
+    )
+}
+
+fn hud_cmd(
+    In(_args): CommandArgs,
+    localization: Option<Res<Localization>>,
+    mut hud_visible: ResMut<HudVisible>,
+) -> String {
+    hud_visible.0 = !hud_visible.0;
+    localized_output(&localization, "console-hud-toggled", &FluentArgs::new())
 }
 
 fn disable_fps_overlay(mut fps_overlay_config: ResMut<FpsOverlayConfig>) {

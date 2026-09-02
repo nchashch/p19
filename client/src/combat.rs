@@ -30,13 +30,13 @@ struct Lifetime(Timer);
 /// Reacts to a confirmed hit — sound only. Animation (attacker's "attack"/"hurt" one-offs) reacts
 /// to the same `Attack` event independently in `animation.rs`.
 fn on_attack(_: On<Attack>, mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn(SamplePlayer::new(asset_server.load("explosion.wav")));
+    commands.spawn(SamplePlayer::new(asset_server.load("audio/explosion.wav")));
 }
 
 /// Reacts to a confirmed kill — sound only, mirroring `on_attack`.
 fn on_kill(_: On<Kill>, mut commands: Commands, asset_server: Res<AssetServer>) {
     info!("kill triggered");
-    commands.spawn(SamplePlayer::new(asset_server.load("explosion.wav")));
+    commands.spawn(SamplePlayer::new(asset_server.load("audio/explosion.wav")));
 }
 
 /// Reacts to an authoritative death — sound, particle effect, and clearing `Selected` if it
@@ -51,7 +51,7 @@ fn on_entity_died(
     mut commands: Commands,
 ) {
     info!("position: {:?}", died.position);
-    commands.spawn(SamplePlayer::new(asset_server.load("crunch.wav")));
+    commands.spawn(SamplePlayer::new(asset_server.load("audio/crunch.wav")));
     commands.spawn((
         ParticleEffect::new(effect.0.clone()),
         Transform::from_translation(died.position),

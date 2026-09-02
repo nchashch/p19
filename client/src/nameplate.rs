@@ -7,10 +7,17 @@ pub struct NameplatePlugin;
 
 impl Plugin for NameplatePlugin {
     fn build(&self, app: &mut App) {
+        app.insert_resource(NameplatesVisible(true));
         app.add_systems(Update, track_nameplates);
         app.add_observer(spawn_nameplates);
     }
 }
+
+/// Toggled by the console's `nameplates` command (`console.rs`) — a plain resource rather than
+/// gating `spawn_nameplates`/despawning existing ones, so hiding/showing is instant and doesn't
+/// lose/rebuild per-target state (name, current health-bar fill) while toggled off.
+#[derive(Resource)]
+pub struct NameplatesVisible(pub bool);
 
 #[derive(Component)]
 struct Nameplate {
@@ -78,6 +85,7 @@ fn spawn_nameplates(add: On<Add, HitPoints>, mut commands: Commands, names: Quer
 
 fn track_nameplates(
     mut commands: Commands,
+    nameplates_visible: Res<NameplatesVisible>,
     // `With<IsDefaultUiCamera>` (not a bare `.single()`) — VR sessions add extra `Camera`
     // entities for the per-eye XR views (see `bevy_mod_openxr`), so a plain `(&Camera,
     // &GlobalTransform)` query stops matching exactly one camera once a headset is connected,
@@ -101,6 +109,11 @@ fn track_nameplates(
             commands.entity(nameplate_entity).despawn();
             continue;
         };
+
+        if !nameplates_visible.0 {
+            *visibility = Visibility::Hidden;
+            continue;
+        }
 
         // Nameplates aren't parented to their target (see the module doc) so they don't get
         // `InheritedVisibility` propagation through `ChildOf` for free — mirror it manually, so

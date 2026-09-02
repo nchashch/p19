@@ -1,5 +1,6 @@
 use crate::game_state::GameState;
-use crate::localization::localized;
+use crate::input_icons::{MOUSE_MOVE_ICON_PNG, key_code_icon_png, mouse_button_icon_png};
+use crate::localization::{LocalizedText, localized};
 use crate::player_character::LocalPlayer;
 use crate::targeting::{Hovered, SELECT_RANGE, Selected};
 use crate::widgets::{
@@ -24,15 +25,164 @@ pub struct HudPlugin;
 
 impl Plugin for HudPlugin {
     fn build(&self, app: &mut App) {
+        app.insert_resource(HudVisible(true));
         app.add_plugins(UiMaterialPlugin::<GcdOverlayMaterial>::default());
         app.add_systems(Startup, setup_gcd_overlay_material);
         app.add_observer(add_gcd_overlay);
-        app.add_systems(Update, (update_data_frame, update_gcd_overlay));
+        app.add_systems(
+            Update,
+            (update_data_frame, update_gcd_overlay, update_hud_visibility),
+        );
+    }
+}
+
+/// Toggled by the console's `hud` command (`console.rs`) — sets `Visibility` on every top-level
+/// `HudElement` root, which (being ordinary UI `Node` hierarchies, unlike `nameplate.rs`'s
+/// non-child-parented nameplates) hides every descendant for free via `InheritedVisibility`
+/// propagation. Doesn't cover `nameplate.rs`'s `NameplatesVisible` — that's a separate toggle for
+/// a separate, non-HUD UI surface.
+#[derive(Resource)]
+pub struct HudVisible(pub bool);
+
+/// Marks each of `in_game_scene`'s top-level roots (`data_frame`/`hotbar`/`crosshair`/
+/// `controls_tips`) so `update_hud_visibility` can find and toggle all of them without needing a
+/// single common parent — they're independent root entities (see `in_game_scene`'s `bsn_list!`),
+/// not siblings under one `Node`.
+#[derive(Component, Clone, Default)]
+struct HudElement;
+
+/// Deliberately unconditional (no `is_changed()` guard) — a `HudElement` can spawn *after* the
+/// last toggle (e.g. reloading the level respawns `in_game_scene`'s roots while `HudVisible` is
+/// still `false` from an earlier toggle), and that new entity's default `Visibility::Inherited`
+/// would never get corrected to match if this only reacted to `HudVisible` changing. The element
+/// count here is tiny (four roots), so running every frame is cheap.
+fn update_hud_visibility(
+    hud_visible: Res<HudVisible>,
+    mut elements: Query<&mut Visibility, With<HudElement>>,
+) {
+    let visibility = if hud_visible.0 {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
+    for mut element_visibility in &mut elements {
+        *element_visibility = visibility;
     }
 }
 
 pub fn in_game_scene() -> impl SceneList {
-    bsn_list![data_frame(), hotbar(), crosshair(),]
+    bsn_list![data_frame(), hotbar(), crosshair(), controls_tips(),]
+}
+
+const CONTROLS_TIPS_ICON_SIZE: f32 = 40.0;
+const CONTROLS_TIPS_ICON_GAP: f32 = 4.0;
+const CONTROLS_TIPS_LABEL_FONT_SIZE: f32 = 16.0;
+
+/// Top-left panel listing every keyboard/mouse binding `controls.rs`'s `player_controls()` sets up
+/// — kept in sync with that list by hand, same as `console.ftl`'s `console-controls` text hint is;
+/// there's no single source of truth `bevy_enhanced_input` bindings could be introspected from
+/// automatically. Using the actual `KeyCode`s here (via `control_tip_keys`/`input_icons`) at least
+/// makes *that* part self-documenting — a row visibly says `KeyCode::Escape`, not an opaque asset
+/// path with nothing connecting it back to which key it's supposed to be. Mouse buttons/motion
+/// aren't `KeyCode`, so `hud-controls-look`/`hud-controls-select` go through `control_tip_icons`
+/// directly with a PNG path from `input_icons::mouse_button_icon_png`/`MOUSE_MOVE_ICON_PNG`
+/// instead of a `key_code_icon_png` lookup. `mouse_move` (for `FpsCameraRotation`'s mouse-motion
+/// binding) is included since it's a real, always-on control, even though it isn't a discrete
+/// key/button press. See `input_icons`'s module doc comment for why this renders each icon as its
+/// own PNG (`ImageNode`) rather than packing glyphs into a `Text` run with an icon font.
+fn controls_tips() -> impl Scene {
+    bsn! {
+        HudElement
+        Node {
+            width: percent(100),
+            height: percent(100),
+            align_items: AlignItems::Start,
+            justify_content: JustifyContent::Start,
+        }
+        Children[
+            panel(px(300), px(600))
+            Children [
+                control_tip_keys(
+                    &[KeyCode::KeyW, KeyCode::KeyA, KeyCode::KeyS, KeyCode::KeyD],
+                    "hud-controls-move",
+                ),
+                control_tip_icons(vec![MOUSE_MOVE_ICON_PNG], "hud-controls-look"),
+                control_tip_keys(&[KeyCode::Space], "hud-controls-jump"),
+                control_tip_mouse_button(MouseButton::Left, "hud-controls-select"),
+                control_tip_mouse_button(MouseButton::Right, "hud-controls-deselect"),
+                control_tip_keys(&[KeyCode::KeyF], "hud-controls-attack"),
+                control_tip_keys(&[KeyCode::KeyT], "hud-controls-kill"),
+                control_tip_keys(&[KeyCode::KeyE], "hud-controls-spawn-cube"),
+                control_tip_keys(&[KeyCode::KeyR], "hud-controls-spawn-npc"),
+                control_tip_keys(&[KeyCode::Escape], "hud-controls-main-menu"),
+            ]
+        ]
+        DespawnOnExit::<GameState>(GameState::InGame)
+    }
+}
+
+/// Builds a `control_tip_icons` row directly from the `KeyCode`s a binding actually uses, via
+/// `input_icons::key_code_icon_png` — any key the pack doesn't cover is silently skipped rather
+/// than showing a broken image or panicking, so an unmapped key just quietly narrows the icon set
+/// for that row instead of breaking it.
+fn control_tip_keys(keys: &[KeyCode], label_key: &'static str) -> impl Scene {
+    let icons: Vec<&'static str> = keys
+        .iter()
+        .filter_map(|&key| key_code_icon_png(key))
+        .collect();
+    control_tip_icons(icons, label_key)
+}
+
+/// Same idea as `control_tip_keys`, for the one mouse-button tip (`Select`) — not a `KeyCode`, so
+/// it goes through `input_icons::mouse_button_icon_png` instead.
+fn control_tip_mouse_button(button: MouseButton, label_key: &'static str) -> impl Scene {
+    let icons: Vec<&'static str> = mouse_button_icon_png(button).into_iter().collect();
+    control_tip_icons(icons, label_key)
+}
+
+/// One row: zero or more icon images side by side (e.g. `W A S D` as four separate `ImageNode`s,
+/// left to right) followed by a localized label. `icons` is a `Vec` rather than a fixed-size slice
+/// since a binding can use any number of keys, including zero if none of them mapped to an icon —
+/// the row then just shows the label on its own instead of disappearing entirely, so a gap in
+/// icon coverage stays visible/debuggable rather than silently dropping the whole tip.
+fn control_tip_icons(icons: Vec<&'static str>, label_key: &'static str) -> impl Scene {
+    let icons: Vec<_> = icons.into_iter().map(control_tip_icon).collect();
+    bsn! {
+        Node {
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            column_gap: px(8),
+        }
+        Pickable::IGNORE
+        Children [
+            {icons},
+            (
+                Text(label_key)
+                LocalizedText(label_key)
+                TextFont {
+                    font: FontSourceTemplate::Handle(SERIF_FONT),
+                    font_size: px(CONTROLS_TIPS_LABEL_FONT_SIZE),
+                }
+                TextColor(WHITE)
+                Pickable::IGNORE
+            ),
+        ]
+    }
+}
+
+/// A single icon image at the panel's fixed icon size — one `ImageNode` per key/button, laid out
+/// in a row by `control_tip_icons`'s parent `Node` rather than packed into one `Text` the way the
+/// font-glyph version did.
+fn control_tip_icon(path: &'static str) -> impl Scene {
+    bsn! {
+        ImageNode { image: path }
+        Node {
+            width: px(CONTROLS_TIPS_ICON_SIZE),
+            height: px(CONTROLS_TIPS_ICON_SIZE),
+            margin: UiRect::right(px(CONTROLS_TIPS_ICON_GAP)),
+        }
+        Pickable::IGNORE
+    }
 }
 
 const CROSSHAIR_SIZE: f32 = 8.0;
@@ -63,6 +213,7 @@ fn crosshair() -> impl Scene {
 
 fn data_frame() -> impl Scene {
     bsn! {
+        HudElement
         Node {
             width: percent(100),
             height: percent(100),
@@ -90,6 +241,7 @@ const HOTKEY_LETTER_FONT_SIZE: f32 = 14.0;
 
 fn hotbar() -> impl Scene {
     bsn! {
+        HudElement
         Node {
             width: percent(100),
             height: percent(100),
@@ -342,11 +494,14 @@ fn update_data_frame(
     }
 
     if let Some(entity) = selected.0 {
-        let distance_to_selected = global_transforms.get(entity).ok().map(|selected_transform| {
-            (selected_transform.compute_transform().translation
-                - player_global_transform.compute_transform().translation)
-                .length()
-        });
+        let distance_to_selected = global_transforms
+            .get(entity)
+            .ok()
+            .map(|selected_transform| {
+                (selected_transform.compute_transform().translation
+                    - player_global_transform.compute_transform().translation)
+                    .length()
+            });
 
         let mut selected_args = FluentArgs::new();
         selected_args.set("entity", format!("{entity:?}"));
