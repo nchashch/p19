@@ -1,4 +1,4 @@
-use crate::networking::{PendingLevelId, connect_to_server};
+use crate::networking::{PendingLevelId, ServerAddress, connect_to_server};
 use crate::{events::RespawnPlayer, game_state::GameState};
 use bevy::asset::AssetPath;
 use bevy::prelude::*;
@@ -7,6 +7,7 @@ use bevy_quinnet::client::QuinnetClient;
 use bevy_replicon::prelude::{ClientTriggerExt, RepliconChannels};
 use shared::client_events::LoadLevelRequest;
 use shared::level::LevelRoot;
+use std::net::IpAddr;
 
 use crate::events::LoadLevel;
 
@@ -44,6 +45,7 @@ fn load_level(
     event: On<LoadLevel>,
     asset_server: Res<AssetServer>,
     channels: Res<RepliconChannels>,
+    server_address: Res<ServerAddress>,
     mut client: ResMut<QuinnetClient>,
     mut pending_level_id: ResMut<PendingLevelId>,
     mut commands: Commands,
@@ -73,8 +75,18 @@ fn load_level(
     if client.is_connected() {
         commands.client_trigger(LoadLevelRequest { id });
     } else {
+        // Same "validate right before committing" shape as the asset-id check above — a bad
+        // address fails here, synchronously, rather than opening `GameState::Loading` with a
+        // connection attempt that's never going to succeed.
+        let Ok(addr) = server_address.0.trim().parse::<IpAddr>() else {
+            warn!(
+                "load_level: {:?} is not a valid IP address",
+                server_address.0
+            );
+            return;
+        };
         pending_level_id.0 = Some(id);
-        connect_to_server(&channels, &mut client);
+        connect_to_server(&channels, &mut client, addr);
     }
     next_state.set(GameState::Loading);
 }

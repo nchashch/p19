@@ -25,6 +25,8 @@ chill_bevy_console.workspace = true
 shared = { path = "../shared" }
 bevy_simple_text_input = "0.15.0"
 futures-lite = "2.6.1"
+serde.workspace = true
+toml = "0.9"
 
 bevy_mod_openxr = { path = "../../bevy_oxr/crates/bevy_openxr" }
 bevy_xr_utils = { path = "../../bevy_oxr/crates/bevy_xr_utils" }

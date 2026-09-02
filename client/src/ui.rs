@@ -3,13 +3,11 @@ use crate::add_observers_run_if;
 use crate::events::LoadLevel;
 use crate::game_state::GameState;
 use crate::hud::HudPlugin;
-use crate::player_character::PlayerName;
+use crate::networking::DefaultLevel;
 use crate::widgets::{Activate, Tooltip, WidgetsPlugin, button, panel};
 use bevy::{
-    feathers::controls::{FeathersTextInput, FeathersTextInputContainer},
     input_focus::{AutoFocus, InputFocus, directional_navigation::DirectionalNavigationPlugin},
     prelude::*,
-    text::{EditableText, TextEdit},
     ui::auto_directional_navigation::AutoDirectionalNavigator,
 };
 use bevy_enhanced_input::prelude::{Press, *};
@@ -22,7 +20,6 @@ impl Plugin for PrototypeUiPlugin {
         app.add_plugins((WidgetsPlugin, HudPlugin, DirectionalNavigationPlugin));
         app.add_input_context::<MenuControls>();
         app.add_systems(OnEnter(GameState::MainMenu), spawn_menu_controls);
-        app.add_observer(seed_player_name_input);
         add_observers_run_if!(app, console_closed, on_ui_navigate, on_ui_confirm);
     }
 }
@@ -101,21 +98,6 @@ fn main_menu() -> impl Scene {
             panel(px(400), px(400))
             Children [
                 (
-                    @FeathersTextInputContainer
-                    Node {
-                        width: px(200),
-                    }
-                    Children [
-                        (
-                            @FeathersTextInput {
-                                @visible_width: 16f32,
-                                @max_characters: 24usize,
-                            }
-                            PlayerNameInput
-                        ),
-                    ]
-                ),
-                (
                     button(px(200), px(50), "main-menu-play")
                     Tooltip::new("main-menu-play-tooltip")
                     AutoFocus
@@ -143,40 +125,9 @@ fn main_menu() -> impl Scene {
     }
 }
 
-/// Marks the main menu's name-entry `FeathersTextInput` so `play_button` can read it and
-/// `seed_player_name_input` can pre-fill it with the current `PlayerName`.
-#[derive(Component, Clone, Default)]
-struct PlayerNameInput;
-
-/// Pre-fills the name field with the current `PlayerName` as soon as it's spawned — `EditableText`
-/// has no plain "initial text" field to set inline in the `bsn!` scene, so this queues an edit
-/// instead (applied by `bevy_text`'s own `apply_text_edits` system).
-fn seed_player_name_input(
-    added: On<Add, PlayerNameInput>,
-    mut inputs: Query<&mut EditableText>,
-    player_name: Res<PlayerName>,
-) {
-    let Ok(mut editable_text) = inputs.get_mut(added.entity) else {
-        return;
-    };
-    editable_text.queue_edit(TextEdit::Insert(player_name.0.clone().into()));
-}
-
-fn play_button(
-    _event: On<Activate>,
-    name_input: Query<&EditableText, With<PlayerNameInput>>,
-    mut player_name: ResMut<PlayerName>,
-    mut commands: Commands,
-) {
-    if let Ok(editable_text) = name_input.single() {
-        let entered = editable_text.value().to_string();
-        let trimmed = entered.trim();
-        if !trimmed.is_empty() {
-            player_name.0 = trimmed.to_string();
-        }
-    }
+fn play_button(_event: On<Activate>, default_level: Res<DefaultLevel>, mut commands: Commands) {
     commands.trigger(LoadLevel {
-        id: "levels/Level.glb#Scene0".to_string(),
+        id: format!("levels/{}#Scene0", default_level.0),
     });
 }
 

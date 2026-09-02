@@ -14,23 +14,10 @@ pub struct PlayerCharacterPlugin;
 
 impl Plugin for PlayerCharacterPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PlayerName>();
-
         app.add_plugins((CombatPlugin, PlayerControlsPlugin, PlayerCameraPlugin));
 
         app.add_observer(on_player_spawned);
         app.add_systems(Update, decorate_other_players);
-    }
-}
-
-/// The name entered in the main menu's text field, used for the player's `Name` component.
-/// Defaults to "Player" so a fresh app (or skipping the field) behaves as before.
-#[derive(Resource)]
-pub struct PlayerName(pub String);
-
-impl Default for PlayerName {
-    fn default() -> Self {
-        Self("Player".to_string())
     }
 }
 
