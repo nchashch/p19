@@ -7,7 +7,7 @@ use crate::{
 };
 use bevy::prelude::*;
 use shared::npc_spawner::NpcSpawner;
-use shared::{character_controller::CharacterControllerPlugin, player::PlayerCharacter};
+use shared::player::PlayerCharacter;
 use shared::{cube_spawner::CubeSpawner, server_events::PlayerSpawned};
 
 pub struct PlayerCharacterPlugin;
@@ -16,12 +16,7 @@ impl Plugin for PlayerCharacterPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PlayerName>();
 
-        app.add_plugins((
-            // CharacterControllerPlugin,
-            CombatPlugin,
-            PlayerControlsPlugin,
-            PlayerCameraPlugin,
-        ));
+        app.add_plugins((CombatPlugin, PlayerControlsPlugin, PlayerCameraPlugin));
 
         app.add_observer(on_player_spawned);
         app.add_systems(Update, decorate_other_players);

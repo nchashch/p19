@@ -248,7 +248,7 @@ fn integrate_horizontal_linear_velocity(
 ) {
     let delta_secs = time.delta_secs_f64().adjust_precision();
     for (movement, mut linear_velocity, desired_motion) in &mut controllers {
-        let acceleration = desired_motion.0.normalize_or_zero() * movement.acceleration;
+        let acceleration = desired_motion.0 * movement.acceleration;
         linear_velocity.0 += acceleration * delta_secs;
     }
 }

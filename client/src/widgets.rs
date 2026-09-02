@@ -1,8 +1,10 @@
 use crate::localization::{LocalizedText, localized};
 use bevy::{
     color::palettes::css::{DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},
+    input_focus::InputFocus,
     prelude::*,
     text::FontSourceTemplate,
+    ui::auto_directional_navigation::AutoDirectionalNavigation,
 };
 use bevy_fluent::prelude::Localization;
 use fluent::FluentArgs;
@@ -16,6 +18,8 @@ impl Plugin for WidgetsPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(show_tooltip);
         app.add_observer(hide_tooltip);
+        app.add_observer(activate_on_press);
+        app.add_systems(Update, update_button_focus);
     }
 }
 
@@ -59,6 +63,10 @@ pub fn panel(width: Val, height: Val) -> impl Scene {
 pub fn button(width: Val, height: Val, label_key: &'static str) -> impl Scene {
     bsn! {
         Button
+        // Makes the button a candidate for gamepad/keyboard directional navigation (see
+        // `ui.rs`'s `MenuControls`) — edges are computed automatically from screen position,
+        // no manual graph to maintain.
+        AutoDirectionalNavigation
         Node {
             width,
             height,
@@ -71,6 +79,7 @@ pub fn button(width: Val, height: Val, label_key: &'static str) -> impl Scene {
         BackgroundColor(BUTTON_COLOR)
         on(hover_button)
         on(out_button)
+        on(activate_on_press)
         Children [(
             Text(label_key)
             LocalizedText(label_key)
@@ -93,6 +102,41 @@ fn out_button(event: On<Pointer<Out>>, mut commands: Commands) {
     commands
         .entity(event.entity)
         .insert(BackgroundColor(BUTTON_COLOR.into()));
+}
+
+/// Fired on a `Button` when it's activated — a real pointer press, or gamepad/keyboard "confirm"
+/// while it holds `InputFocus` (see `ui.rs`'s `on_ui_confirm`). Call sites observe this instead
+/// of `Pointer<Press>` directly so both activation paths share one handler.
+#[derive(EntityEvent, Clone)]
+pub struct Activate {
+    pub entity: Entity,
+}
+
+fn activate_on_press(press: On<Pointer<Press>>, mut commands: Commands) {
+    commands.trigger(Activate {
+        entity: press.entity,
+    });
+}
+
+/// Highlights whichever `Button` currently holds `InputFocus` the same way `hover_button` does,
+/// so gamepad/keyboard navigation has a visible cursor — reacts only to focus *changes*, so it
+/// doesn't fight `hover_button`/`out_button` on every frame.
+fn update_button_focus(
+    focus: Res<InputFocus>,
+    buttons: Query<Entity, With<Button>>,
+    mut commands: Commands,
+) {
+    if !focus.is_changed() {
+        return;
+    }
+    for entity in &buttons {
+        let color = if focus.get() == Some(entity) {
+            BUTTON_HOVERED_COLOR
+        } else {
+            BUTTON_COLOR
+        };
+        commands.entity(entity).insert(BackgroundColor(color.into()));
+    }
 }
 
 /// A value substituted into a `Tooltip`'s `.ftl` message — see `fluent_bundle::FluentValue`, which

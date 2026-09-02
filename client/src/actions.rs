@@ -40,3 +40,15 @@ pub struct Shoot;
 #[derive(InputAction)]
 #[action_output(bool)]
 pub struct SpawnNpcAction;
+
+/// Directional input for menu navigation (gamepad d-pad/left stick, or arrow keys) — see
+/// `ui.rs`'s `MenuControls`. Distinct from `Movement`: this drives `InputFocus` via
+/// `bevy::input_focus::directional_navigation`, not a character.
+#[derive(InputAction)]
+#[action_output(Vec2)]
+pub struct UiNavigate;
+
+/// "Activate the focused UI element" (gamepad South/A, or Enter) — see `ui.rs`'s `MenuControls`.
+#[derive(InputAction)]
+#[action_output(bool)]
+pub struct UiConfirm;
