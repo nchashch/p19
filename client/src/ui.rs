@@ -116,7 +116,7 @@ fn main_menu() -> impl Scene {
                 (
                     button(px(200), px(50), "main-menu-quit")
                     Tooltip::new("main-menu-quit-tooltip")
-                    on(stub_button)
+                    on(quit_button)
                 ),
             ]
         ]
@@ -131,7 +131,11 @@ fn play_button(_event: On<Activate>, default_level: Res<DefaultLevel>, mut comma
     });
 }
 
-/// "Options"/"Credits"/"Quit" — stub buttons that exist to be navigable, not functional yet.
+/// "Options"/"Credits" — stub buttons that exist to be navigable, not functional yet.
 fn stub_button(_event: On<Activate>) {
     info!("not implemented yet");
+}
+
+fn quit_button(_event: On<Activate>, mut commands: Commands) {
+    commands.write_message(AppExit::Success);
 }
