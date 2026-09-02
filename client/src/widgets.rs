@@ -18,7 +18,6 @@ impl Plugin for WidgetsPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(show_tooltip);
         app.add_observer(hide_tooltip);
-        app.add_observer(activate_on_press);
         app.add_systems(Update, update_button_focus);
     }
 }
@@ -135,7 +134,9 @@ fn update_button_focus(
         } else {
             BUTTON_COLOR
         };
-        commands.entity(entity).insert(BackgroundColor(color.into()));
+        commands
+            .entity(entity)
+            .insert(BackgroundColor(color.into()));
     }
 }
 

@@ -11,9 +11,7 @@ use bevy_replicon::prelude::*;
 use bevy_replicon_quinnet::ChannelsConfigurationExt;
 use shared::{
     character_controller::{JumpInput, MovementInput},
-    client_events::{
-        Jump, LoadLevelRequest, Movement,
-    },
+    client_events::{Jump, LoadLevelRequest, Movement},
     level::LevelRoot,
     player::{PlayerCharacterSpawner, player},
     server_events::{LoadLevel, PlayerSpawned},
@@ -59,9 +57,31 @@ fn on_jump(request: On<FromClient<Jump>>, mut commands: Commands) {
 fn on_load_level_request(
     request: On<FromClient<LoadLevelRequest>>,
     asset_server: Res<AssetServer>,
-    mut commands: Commands, /* ... */
+    mut level_state: ResMut<LevelState>,
+    mut commands: Commands,
 ) {
+    // A level is already loading or loaded — ignore. Without this gate, a client sending
+    // `LoadLevelRequest` twice (a double-fired UI button, a retried packet, or a malicious
+    // client) would spawn a second `LevelRoot`/`WorldAssetRoot` into the same ECS world:
+    // duplicate colliders, duplicate `PlayerCharacterSpawner`s, duplicate everything. Switching
+    // to a genuinely different level isn't supported yet either way — the server doesn't despawn
+    // a previous level's geometry on reload — so any request beyond the first is rejected
+    // regardless of id until that's addressed.
+    //
+    // `LevelState` is a plain resource specifically so this check-and-set is atomic within this
+    // one observer call — `bevy_replicon` can (and does) trigger this observer twice in the same
+    // frame when two `LoadLevelRequest`s arrive in the same network batch, and a `States`/
+    // `NextState`-based version wouldn't see the first call's transition applied until next
+    // frame, letting the second call straight through.
+    if !matches!(*level_state, LevelState::Idle) {
+        warn!(
+            "ignoring LoadLevelRequest for `{}` — a level is already loading or loaded",
+            request.id
+        );
+        return;
+    }
     let id = request.id.clone();
+    *level_state = LevelState::Loading(id.clone());
     let handle = asset_server.load(GltfAssetLabel::Scene(0).from_asset(&id));
     // `Transform`/`Visibility` come from `LevelRoot`'s `#[require(...)]` now, but `Transform`
     // is spelled out explicitly anyway to enforce the "must stay at IDENTITY" invariant at the
@@ -83,23 +103,28 @@ fn on_load_level_request(
 fn on_level_ready(
     ready: On<WorldInstanceReady>,
     parents: Query<&ChildOf>,
+    level_roots: Query<&LevelRoot>,
     player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
     connected_clients: Query<Entity, With<AuthorizedClient>>,
-    mut next_level_state: ResMut<NextState<LevelState>>,
+    mut level_state: ResMut<LevelState>,
     mut commands: Commands,
 ) {
-    let Ok(level_root) = parents.get(ready.entity) else {
+    let Ok(level_root_child_of) = parents.get(ready.entity) else {
+        return;
+    };
+    let level_root_entity = level_root_child_of.parent();
+    let Ok(level_root) = level_roots.get(level_root_entity) else {
         return;
     };
     info!(
         "level ready, broadcasting LoadLevel for `{}`",
-        level_root.parent()
+        level_root_entity
     );
-    next_level_state.set(LevelState::LevelLoaded);
+    *level_state = LevelState::LevelLoaded(level_root.id.clone());
     commands.server_trigger(ToClients {
         targets: SendTargets::All,
         message: LoadLevel {
-            entity: level_root.parent(),
+            entity: level_root_entity,
         },
     });
     // The client's own connection entity *is* its player character (see `on_movement`/`on_jump`
@@ -153,18 +178,18 @@ fn start_endpoint(channels: Res<RepliconChannels>, mut server: ResMut<QuinnetSer
 
 fn on_authorized_client_connected(
     add: On<Add, AuthorizedClient>,
-    level_state: Res<State<LevelState>>,
+    level_state: Res<LevelState>,
     player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
     mut commands: Commands,
 ) {
-    if *level_state.get() == LevelState::LevelLoaded {
-        if let Ok(player_spawner_transform) = player_spawner.single() {
-            spawn_player_for_client(
-                add.entity,
-                player_spawner_transform.translation,
-                &mut commands,
-            );
-        }
+    if matches!(*level_state, LevelState::LevelLoaded(_))
+        && let Ok(player_spawner_transform) = player_spawner.single()
+    {
+        spawn_player_for_client(
+            add.entity,
+            player_spawner_transform.translation,
+            &mut commands,
+        );
     }
     info!("authorized client `{}` connected", add.entity);
 }
