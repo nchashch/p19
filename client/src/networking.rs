@@ -2,6 +2,7 @@
 //! state — a scaffold, not yet wired into any real gameplay presentation.
 
 use std::net::{IpAddr, Ipv4Addr};
+use std::path::PathBuf;
 
 use bevy::asset::AssetPath;
 use bevy::prelude::*;
@@ -63,11 +64,46 @@ impl Default for DefaultLevel {
     }
 }
 
-/// The subset of `assets/config.toml` this binary cares about.
+/// The subset of `assets/config.toml` this binary cares about. `vr` defaults to `false` via
+/// `#[serde(default)]` rather than being required like the other two fields, so a `config.toml`
+/// predating this field (or one that just doesn't care to set it) doesn't fail to parse at all —
+/// unlike `server_ip`/`level`, where a mistake means *neither* value gets applied (see
+/// `load_client_config`'s doc comment), a missing `vr` shouldn't hold those hostage too.
 #[derive(Deserialize)]
 struct ClientConfig {
     server_ip: String,
     level: String,
+    #[serde(default)]
+    vr: bool,
+}
+
+/// Reads `assets/config.toml`'s `vr` field *before* the `App` (and therefore the `AssetServer`)
+/// exists at all — `main.rs`'s `Prototype19::build` has to decide between `DefaultPlugins` and
+/// `add_xr_plugins(...)` right away, which is before any `Startup` system (including
+/// `load_client_config`, below) could possibly run. Resolves the config file's location the exact
+/// same way Bevy's own `FileAssetReader` does (`bevy_asset::io::file::get_base_path`:
+/// `BEVY_ASSET_ROOT` env var, then `CARGO_MANIFEST_DIR` env var, then the running executable's own
+/// directory) so this stays consistent with wherever the `AssetServer` would resolve the same file
+/// later, rather than inventing a second, different path convention. A missing file or unparseable
+/// content both just mean "not VR" — same graceful-fallback philosophy as
+/// `ServerAddress`/`DefaultLevel`'s hardcoded defaults.
+pub fn is_vr_enabled_presync() -> bool {
+    let base_path = if let Ok(root) = std::env::var("BEVY_ASSET_ROOT") {
+        PathBuf::from(root)
+    } else if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        PathBuf::from(manifest_dir)
+    } else {
+        std::env::current_exe()
+            .ok()
+            .and_then(|path| path.parent().map(ToOwned::to_owned))
+            .unwrap_or_default()
+    };
+    let Ok(contents) = std::fs::read_to_string(base_path.join("assets/config.toml")) else {
+        return false;
+    };
+    toml::from_str::<ClientConfig>(&contents)
+        .map(|config| config.vr)
+        .unwrap_or(false)
 }
 
 /// Overwrites `ServerAddress`/`DefaultLevel`'s hardcoded fallbacks with `assets/config.toml`'s

@@ -63,8 +63,22 @@ struct Prototype19;
 
 impl Plugin for Prototype19 {
     fn build(&self, app: &mut App) {
+        // Decided *before* anything else below — which plugin group even gets added is a
+        // one-time choice at build time, long before any `Startup` system (including
+        // `networking::load_client_config`, which reads the *rest* of `config.toml` the normal
+        // way, via the `AssetServer`) could run. See `is_vr_enabled_presync`'s doc comment for why
+        // this can't just reuse that later, `AssetServer`-based path.
+        let vr_enabled = networking::is_vr_enabled_presync();
+
+        if vr_enabled {
+            app.add_plugins(add_xr_plugins(
+                DefaultPlugins.build().disable::<PipelinedRenderingPlugin>(),
+            ));
+        } else {
+            app.add_plugins(DefaultPlugins);
+        }
+
         app.add_plugins((
-            add_xr_plugins(DefaultPlugins.build().disable::<PipelinedRenderingPlugin>()),
             bevy::feathers::FeathersPlugins,
             PAnimationPlugin,
             PConsolePlugin,
@@ -82,28 +96,38 @@ impl Plugin for Prototype19 {
                 NpcSpawnerPlugin,
                 PlayerCharacterPlugin,
                 FpsControllerPlugin,
-                GameStatePlugin,
+                GameStatePlugin { vr_enabled },
                 NameplatePlugin,
                 ui::PrototypeUiPlugin,
                 networking::NetworkingPlugin,
             ),
-        ))
-        .insert_resource(OxrSessionConfig {
-            blend_mode_preference: vec![EnvironmentBlendMode::OPAQUE],
-            ..default()
-        })
-        .add_plugins((
-            bevy_mod_xr::hand_debug_gizmos::HandGizmosPlugin,
-            VrControllersPlugin,
-        ))
-        .insert_resource(UiTheme(create_dark_theme()))
-        .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.15)))
-        .insert_resource(GlobalAmbientLight {
-            color: Color::WHITE,
-            brightness: 100.,
-            ..default()
-        })
-        .register_type::<ColliderConstructor>()
-        .add_systems(OnEnter(GameState::MainMenu), ui::main_menu_scene.spawn());
+        ));
+
+        // `OxrSessionConfig`/`HandGizmosPlugin`/`VrControllersPlugin` are all meaningless (and, for
+        // `VrControllersPlugin`, actively broken — its `Startup`/`On<PlayerSpawned>` systems use
+        // `Single<Entity, With<XrTrackingRoot>>`, an entity that only exists once the XR plugins
+        // above actually ran, so a bare `Single` query on it panics under plain `DefaultPlugins`)
+        // without an active XR session, so they're only added when `vr_enabled` is true, not just
+        // toggled off via a `run_if` inside them.
+        if vr_enabled {
+            app.insert_resource(OxrSessionConfig {
+                blend_mode_preference: vec![EnvironmentBlendMode::OPAQUE],
+                ..default()
+            })
+            .add_plugins((
+                bevy_mod_xr::hand_debug_gizmos::HandGizmosPlugin,
+                VrControllersPlugin,
+            ));
+        }
+
+        app.insert_resource(UiTheme(create_dark_theme()))
+            .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.15)))
+            .insert_resource(GlobalAmbientLight {
+                color: Color::WHITE,
+                brightness: 100.,
+                ..default()
+            })
+            .register_type::<ColliderConstructor>()
+            .add_systems(OnEnter(GameState::MainMenu), ui::main_menu_scene.spawn());
     }
 }

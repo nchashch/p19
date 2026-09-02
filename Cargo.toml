@@ -6,6 +6,13 @@ members = ["client", "server", "shared"]
 version = "0.1.0"
 edition = "2024"
 
+# Debug symbols in the release profile so Tracy (see `client`'s `bevy/trace_tracy` feature) shows
+# real function names instead of addresses. Cargo profiles are workspace-wide, not per-member, so
+# this also applies to `server`'s release build — harmless there (bigger binary, no behavior
+# change), since `server` doesn't enable `trace_tracy` itself.
+[profile.release]
+debug = true
+
 [workspace.dependencies]
 bevy_fluent = "0.15"
 fluent = "0.16.0"
