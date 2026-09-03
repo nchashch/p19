@@ -1,10 +1,20 @@
 use bevy::light::Skybox;
 use bevy::{
     anti_alias::taa::TemporalAntiAliasing,
-    pbr::ScreenSpaceAmbientOcclusion,
+    pbr::{DistanceFog, FogFalloff, ScreenSpaceAmbientOcclusion},
     prelude::*,
     render::render_resource::{TextureViewDescriptor, TextureViewDimension},
 };
+
+/// Matches `main.rs`'s `ClearColor` — with the skybox disabled (see `player_camera`), the
+/// background behind un-fogged geometry *is* the clear color, so fog needs the same tint to blend
+/// into it instead of fading distant geometry to a visibly different flat color.
+const FOG_COLOR: Color = Color::srgb(0.1, 0.1, 0.15);
+/// Chosen relative to existing gameplay distances rather than arbitrarily: `targeting::SELECT_RANGE`
+/// and `nameplate.rs`'s `FADE_END_DISTANCE` (30.0) are both well inside `FOG_START`, so fog never
+/// visibly interferes with targeting or nameplate readability at any range they actually matter.
+const FOG_START: f32 = 40.0;
+const FOG_END: f32 = 180.0;
 
 pub struct PlayerCameraPlugin;
 
@@ -28,6 +38,14 @@ pub fn player_camera(asset_server: &Res<AssetServer>, cubemap: &mut Cubemap) -> 
         Msaa::Off,
         TemporalAntiAliasing::default(),
         ScreenSpaceAmbientOcclusion::default(),
+        DistanceFog {
+            color: FOG_COLOR,
+            falloff: FogFalloff::Linear {
+                start: FOG_START,
+                end: FOG_END,
+            },
+            ..default()
+        },
         /*
                 Skybox {
                     image: Some(skybox_handle.clone()),

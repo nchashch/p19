@@ -225,11 +225,11 @@ pub fn player_controls() -> impl Bundle {
             ));
             context.spawn((
                 Action::<Shoot>::new(),
-                bindings![KeyCode::KeyE, GamepadButton::West],
+                bindings![KeyCode::KeyE, GamepadButton::LeftTrigger],
             ));
             context.spawn((
                 Action::<SpawnNpcAction>::new(),
-                bindings![KeyCode::KeyR, GamepadButton::East],
+                bindings![KeyCode::KeyR, GamepadButton::LeftTrigger2],
             ));
             context.spawn((
                 Action::<Deselect>::new(),
