@@ -13,12 +13,12 @@ What's still genuinely missing, worth not assuming exists: client-side predictio
 ## Commands
 
 ```sh
-cargo build -p client         # debug build of the game
-cargo build -p server         # debug build of the server stub
-cargo build --workspace       # build everything
-cargo run -p client           # run the game (connects to 127.0.0.1:6000 once Play is pressed, not on startup)
-cargo run -p server           # run the authoritative headless server (listens on 0.0.0.0:6000)
-cargo check --workspace       # fastest way to verify compile errors across all members
+cargo build -p client --release   # build of the game
+cargo build -p server --release   # build of the server
+cargo build --workspace --release # build everything
+cargo run -p client --release     # run the game (connects to 127.0.0.1:6000 once Play is pressed, not on startup)
+cargo run -p server --release     # run the authoritative headless server (listens on 0.0.0.0:6000)
+cargo check --workspace           # fastest way to verify compile errors across all members
 cargo clippy --workspace
 ```
 

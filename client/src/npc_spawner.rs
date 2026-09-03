@@ -6,6 +6,7 @@ use shared::npc_spawner::{Npc, NpcSpawner};
 
 use crate::cube_spawner::Decorated;
 use crate::events::SpawnNpc;
+use crate::npc_ui_quad::NpcUiQuad;
 
 pub struct NpcSpawnerPlugin;
 
@@ -27,10 +28,16 @@ fn request_spawn_npc(
     });
 }
 
+/// Height above the NPC's own origin the UI quad sits at — roughly head height for the `rig.glb`
+/// model spawned alongside it (see the `-0.9` offset that model's own child gets below, which
+/// puts its feet at the NPC's origin).
+const UI_QUAD_HEIGHT: f32 = 1.8;
+
 fn decorate_npcs(
     cubes: Query<Entity, (With<Npc>, Without<Decorated>)>,
     level_root: Single<Entity, With<LevelRoot>>,
     asset_server: Res<AssetServer>,
+    npc_ui_quad: Res<NpcUiQuad>,
     mut commands: Commands,
 ) {
     for cube in cubes {
@@ -40,6 +47,14 @@ fn decorate_npcs(
             .with_child((
                 WorldAssetRoot(asset_server.load("rig.glb#Scene0")),
                 Transform::from_translation(Vec3::new(0.0, -0.9, 0.0)),
+            ))
+            .with_child((
+                Mesh3d(npc_ui_quad.mesh.clone()),
+                MeshMaterial3d(npc_ui_quad.material.clone()),
+                // No billboard system on this child — it's a plain `ChildOf`-parented transform,
+                // so it turns with the NPC exactly like `rig.glb` above does, rather than always
+                // facing the camera the way `nameplate.rs`'s screen-space nameplates do.
+                Transform::from_translation(Vec3::new(0.0, UI_QUAD_HEIGHT, 0.0)),
             ));
     }
 }

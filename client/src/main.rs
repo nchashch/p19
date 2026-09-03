@@ -34,6 +34,7 @@ mod localization;
 mod nameplate;
 mod networking;
 mod npc_spawner;
+mod npc_ui_quad;
 mod particles;
 mod player_character;
 mod targeting;
@@ -53,7 +54,8 @@ pub(crate) use add_observers_run_if;
 
 use crate::{
     animation::PAnimationPlugin, loading::LoadingPlugin, localization::LocalizationPlugin,
-    nameplate::NameplatePlugin, npc_spawner::NpcSpawnerPlugin, vr_controllers::VrControllersPlugin,
+    nameplate::NameplatePlugin, npc_spawner::NpcSpawnerPlugin, npc_ui_quad::NpcUiQuadPlugin,
+    vr_controllers::VrControllersPlugin,
 };
 
 fn main() {
@@ -95,6 +97,7 @@ impl Plugin for Prototype19 {
             (
                 CubeSpawnerPlugin,
                 NpcSpawnerPlugin,
+                NpcUiQuadPlugin,
                 PlayerCharacterPlugin,
                 FpsControllerPlugin,
                 GameStatePlugin { vr_enabled },
