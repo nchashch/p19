@@ -6,7 +6,7 @@ use shared::npc_spawner::{Npc, NpcSpawner};
 
 use crate::cube_spawner::Decorated;
 use crate::events::SpawnNpc;
-use crate::npc_ui_quad::NpcUiQuad;
+use crate::npc_ui_quad::{NpcUiQuad, NpcUiQuadMesh};
 
 pub struct NpcSpawnerPlugin;
 
@@ -51,6 +51,10 @@ fn decorate_npcs(
             .with_child((
                 Mesh3d(npc_ui_quad.mesh.clone()),
                 MeshMaterial3d(npc_ui_quad.material.clone()),
+                // Lets `npc_ui_quad::drive_npc_ui_quad_pointer` filter its `MeshRayCast` down to
+                // just these, and (via this child's own `ChildOf`) resolve a hit back to which NPC
+                // it belongs to.
+                NpcUiQuadMesh,
                 // No billboard system on this child — it's a plain `ChildOf`-parented transform,
                 // so it turns with the NPC exactly like `rig.glb` above does, rather than always
                 // facing the camera the way `nameplate.rs`'s screen-space nameplates do.

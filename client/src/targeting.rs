@@ -34,6 +34,24 @@ pub struct Selected(pub Option<Entity>);
 
 pub const SELECT_RANGE: f32 = 50.0;
 
+/// The crosshair ray: straight out from the center of the screen, through the active camera —
+/// shared by `raycast_from_center` (world-entity hover/select, via Avian's `SpatialQuery`) and
+/// `npc_ui_quad`'s pointer-driving system (UI-on-a-quad hover/click, via `bevy_picking`'s
+/// `MeshRayCast` — Avian's raycast hits don't carry a UV coordinate, so that one can't reuse
+/// `SpatialQuery` the way this module does). Both should look at the exact same point on screen,
+/// so this is computed once here rather than duplicated.
+pub(crate) fn screen_center_ray(
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    window: &Window,
+) -> Option<Ray3d> {
+    let screen_origin = window.size() / 2.0;
+    // Screen space -> world ray. `None` if the camera has no usable viewport/projection this frame.
+    camera
+        .viewport_to_world(camera_transform, screen_origin)
+        .ok()
+}
+
 fn raycast_from_center(
     local_player: Res<LocalPlayer>,
     spatial_query: SpatialQuery,
@@ -49,21 +67,7 @@ fn raycast_from_center(
         return;
     };
 
-    /*
-    // Center of the screen in logical (not physical) pixels.
-    let screen_origin = if disable_fps_camera_control.0 {
-        window.cursor_position().unwrap_or(Vec2::ZERO)
-    } else {
-        return;
-        // window.size() / 2.0
-    };
-    */
-
-    let screen_origin = window.size() / 2.0;
-
-    // Screen space -> world ray. Returns Err if the camera has no usable
-    // viewport/projection this frame.
-    let Ok(ray) = camera.viewport_to_world(camera_transform, screen_origin) else {
+    let Some(ray) = screen_center_ray(camera, camera_transform, window) else {
         return;
     };
 

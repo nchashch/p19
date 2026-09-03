@@ -7,34 +7,76 @@
 //! turns with the NPC exactly like any other attached mesh (e.g. `rig.glb`).
 //!
 //! One shared render target/camera/UI root for every NPC, not one per instance — the UI content
-//! here is static, so there's nothing per-NPC to render differently. A version that showed each
-//! NPC's own name/HP would need its own `Image`/`Camera2d`/UI root per entity instead of sharing
-//! `NpcUiQuad`.
+//! here is static (an "NPC" label and a "Kill" button), so there's nothing per-NPC to render
+//! differently. A version that showed each NPC's own name/HP would need its own `Image`/
+//! `Camera2d`/UI root per entity instead of sharing `NpcUiQuad`.
+//!
+//! The "Kill" button is real `bevy_ui` content (`widgets::button`, with its normal hover/press
+//! observers), driven by a virtual pointer rather than the real mouse — same technique as the
+//! Bevy example's own `drive_diegetic_pointer`, but using the crosshair's screen-center ray
+//! (`targeting::screen_center_ray`, the same one `targeting::raycast_from_center` uses for world
+//! selection) instead of the window cursor position, and `bevy_picking`'s `MeshRayCast` instead of
+//! Avian's `SpatialQuery` — Avian's `RayHitData` has no UV coordinate on the hit surface, which is
+//! exactly what's needed to turn "the ray hit this quad here" into "the pointer is at this pixel
+//! on the render texture."
 
 use bevy::{
-    asset::RenderAssetUsages,
+    asset::{RenderAssetUsages, uuid::Uuid},
     camera::RenderTarget,
     color::palettes::css::{DARK_SLATE_GRAY, WHITE_SMOKE},
+    picking::{
+        PickingSystems,
+        pointer::{Location, PointerAction, PointerButton, PointerId, PointerInput},
+    },
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages},
+    text::FontSourceTemplate,
 };
+use bevy_replicon::prelude::ClientTriggerExt;
+use shared::client_events::KillAttempt;
 
-use crate::widgets::SERIF_FONT;
+use crate::targeting::screen_center_ray;
+use crate::widgets::{Activate, SERIF_FONT, button};
 
 pub struct NpcUiQuadPlugin;
 
 impl Plugin for NpcUiQuadPlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<NpcUiQuadTarget>();
         app.add_systems(Startup, setup_npc_ui_quad);
+        // Same schedule/set the Bevy example this is based on uses for its own virtual pointer —
+        // `PickingSystems::Input` is where real pointer backends (mouse, touch) also turn raw
+        // input into `PointerInput` events, so this needs to run alongside them, before hit-testing
+        // consumes whatever `PointerInput`s exist for this frame.
+        app.add_systems(
+            First,
+            drive_npc_ui_quad_pointer.in_set(PickingSystems::Input),
+        );
     }
 }
 
-/// The quad mesh + material every NPC's sign uses — see `npc_spawner::decorate_npcs`.
+/// The quad mesh + material every NPC's sign uses — see `npc_spawner::decorate_npcs`. Also holds
+/// the texture camera's entity, so `drive_npc_ui_quad_pointer` can look up its `RenderTarget`
+/// without a separate query/marker just for that one entity.
 #[derive(Resource, Clone)]
 pub struct NpcUiQuad {
     pub mesh: Handle<Mesh>,
     pub material: Handle<StandardMaterial>,
+    texture_camera: Entity,
 }
+
+/// Marks the quad mesh entity itself (not the NPC it's parented to) so `drive_npc_ui_quad_pointer`
+/// can filter `MeshRayCast` down to just these — casting against every mesh in the level every
+/// frame would be needlessly expensive and could hit unrelated geometry.
+#[derive(Component, Clone, Default)]
+pub struct NpcUiQuadMesh;
+
+/// Which NPC (if any) the crosshair is currently over a UI quad for — read by the "Kill" button's
+/// own `Activate` observer to know which entity to dispatch `KillAttempt` against, since the
+/// button entity itself is shared across every NPC's quad (see the module doc comment) and has no
+/// way to know on its own which quad it was clicked through.
+#[derive(Resource, Default)]
+struct NpcUiQuadTarget(Option<Entity>);
 
 const TEXTURE_SIZE: u32 = 256;
 const QUAD_WIDTH: f32 = 0.8;
@@ -45,7 +87,6 @@ fn setup_npc_ui_quad(
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
 ) {
     let size = Extent3d {
         width: TEXTURE_SIZE,
@@ -78,28 +119,41 @@ fn setup_npc_ui_quad(
         .id();
 
     commands
-        .spawn((
+        .spawn_scene(bsn! {
             Node {
                 width: percent(100),
                 height: percent(100),
+                flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
-                ..default()
-            },
-            BackgroundColor(DARK_SLATE_GRAY.into()),
-            UiTargetCamera(texture_camera),
-        ))
-        .with_children(|parent| {
-            parent.spawn((
-                Text::new("NPC"),
-                TextColor(WHITE_SMOKE.into()),
-                TextFont {
-                    font: FontSource::Handle(asset_server.load(SERIF_FONT)),
-                    font_size: FontSize::Px(64.0),
-                    ..default()
-                },
-            ));
-        });
+                row_gap: px(12),
+            }
+            BackgroundColor(DARK_SLATE_GRAY)
+            Children [
+                (
+                    Text("NPC")
+                    TextColor(WHITE_SMOKE)
+                    TextFont {
+                        font: FontSourceTemplate::Handle(SERIF_FONT),
+                        font_size: px(64),
+                    }
+                ),
+                (
+                    button(px(140), px(50), "hud-npc-kill")
+                    on(on_kill_button)
+                ),
+            ]
+        })
+        // `UiTargetCamera` doesn't implement `FromTemplate`, so it can't be constructed through
+        // bsn!'s tuple-call component syntax the way e.g. `BackgroundColor` above can — inserted
+        // directly instead, same effect.
+        .insert(UiTargetCamera(texture_camera));
+
+    // The pointer this whole module drives — see `drive_npc_ui_quad_pointer`. A stable id is
+    // needed since (per `PointerId`'s own docs) pointers can be spawned/despawned independently of
+    // any one entity; `Uuid::from_u128` with an arbitrary fixed constant is the same pattern the
+    // Bevy example this is based on uses for its own virtual pointer.
+    commands.spawn(NPC_UI_QUAD_POINTER_ID);
 
     let mesh = meshes.add(Rectangle::new(QUAD_WIDTH, QUAD_HEIGHT));
     let material = materials.add(StandardMaterial {
@@ -108,5 +162,121 @@ fn setup_npc_ui_quad(
         ..default()
     });
 
-    commands.insert_resource(NpcUiQuad { mesh, material });
+    commands.insert_resource(NpcUiQuad {
+        mesh,
+        material,
+        texture_camera,
+    });
+}
+
+fn on_kill_button(_event: On<Activate>, target: Res<NpcUiQuadTarget>, mut commands: Commands) {
+    if let Some(entity) = target.0 {
+        commands.client_trigger(KillAttempt { entity });
+    }
+}
+
+const NPC_UI_QUAD_POINTER_ID: PointerId =
+    PointerId::Custom(Uuid::from_u128(0x4e5043_5549_5051_4144_000000000000));
+
+/// Off-canvas sentinel position for when the crosshair isn't over any NPC's quad this frame —
+/// moving the virtual pointer here (rather than simply not sending a `Move` event) is what makes
+/// the "Kill" button's hover state actually clear once you look away from it; `bevy_picking`
+/// re-hit-tests off each pointer's last known location every frame, not off whether a fresh event
+/// arrived, so a pointer left sitting on the button's last position would read as still-hovered
+/// forever.
+const OFF_CANVAS: Vec2 = Vec2::new(-1.0, -1.0);
+
+/// Feeds the crosshair ray into `bevy_ui`'s normal picking pipeline as a synthetic pointer, so
+/// `hud.rs`'s reticle can hover/click real `bevy_ui` content (the "Kill" button) the same way a
+/// real cursor would — see the module doc comment for why `MeshRayCast` instead of `SpatialQuery`.
+fn drive_npc_ui_quad_pointer(
+    mut last_position: Local<Vec2>,
+    mut ray_cast: MeshRayCast,
+    camera_query: Query<(&Camera, &GlobalTransform), With<IsDefaultUiCamera>>,
+    window_query: Query<&Window>,
+    npc_ui_quad: Option<Res<NpcUiQuad>>,
+    quads: Query<(), With<NpcUiQuadMesh>>,
+    parents: Query<&ChildOf>,
+    render_targets: Query<&RenderTarget>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    mut target: ResMut<NpcUiQuadTarget>,
+    mut pointer_inputs: MessageWriter<PointerInput>,
+) {
+    let Some(npc_ui_quad) = npc_ui_quad else {
+        return; // not ready yet (only true for the first frame or so after Startup)
+    };
+    let Ok(render_target) = render_targets.get(npc_ui_quad.texture_camera) else {
+        return;
+    };
+    let Some(normalized_target) = render_target.normalize(None) else {
+        return;
+    };
+
+    let Ok((camera, camera_transform)) = camera_query.single() else {
+        return;
+    };
+    let Ok(window) = window_query.single() else {
+        return;
+    };
+    let Some(ray) = screen_center_ray(camera, camera_transform, window) else {
+        return;
+    };
+
+    let settings = MeshRayCastSettings {
+        visibility: RayCastVisibility::VisibleInView,
+        filter: &|entity| quads.contains(entity),
+        early_exit_test: &|_| false,
+    };
+
+    let hit = ray_cast
+        .cast_ray(ray, &settings)
+        .first()
+        .and_then(|(quad_entity, hit)| Some((*quad_entity, hit.uv?)));
+
+    let (position, hit_npc) = match hit {
+        Some((quad_entity, uv)) => (
+            uv * TEXTURE_SIZE as f32,
+            parents.get(quad_entity).ok().map(ChildOf::parent),
+        ),
+        None => (OFF_CANVAS, None),
+    };
+    target.0 = hit_npc;
+
+    if position != *last_position {
+        pointer_inputs.write(PointerInput::new(
+            NPC_UI_QUAD_POINTER_ID,
+            Location {
+                target: normalized_target.clone(),
+                position,
+            },
+            PointerAction::Move {
+                delta: position - *last_position,
+            },
+        ));
+        *last_position = position;
+    }
+
+    // Only meaningful while actually hovering a quad — off-canvas, nothing is there to press.
+    if hit_npc.is_some() {
+        if mouse_buttons.just_pressed(MouseButton::Left) {
+            pointer_inputs.write(PointerInput::new(
+                NPC_UI_QUAD_POINTER_ID,
+                Location {
+                    target: normalized_target.clone(),
+                    position,
+                },
+                PointerAction::Press(PointerButton::Primary),
+            ));
+        }
+        if mouse_buttons.just_released(MouseButton::Left) {
+            pointer_inputs.write(PointerInput::new(
+                NPC_UI_QUAD_POINTER_ID,
+                Location {
+                    target: normalized_target,
+                    position,
+                },
+                PointerAction::Release(PointerButton::Primary),
+            ));
+        }
+    }
 }
