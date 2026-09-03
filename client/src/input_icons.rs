@@ -13,7 +13,7 @@
 //! are pixel-identical — a font-level limitation found while fixing that font's winding-direction
 //! bug (see the font file's own history), not fixable by re-winding contours.
 
-use bevy::prelude::{KeyCode, MouseButton};
+use bevy::prelude::{GamepadButton, KeyCode, MouseButton};
 
 /// Every path below lives under this directory (copied from
 /// `assets_src/input_prompts/Keyboard & Mouse/Default/` under the pack's own filenames).
@@ -134,3 +134,49 @@ pub fn mouse_button_icon_png(button: MouseButton) -> Option<&'static str> {
 /// controls. Exposed as its own constant rather than a `mouse_button_icon_png`-style function
 /// since there's only ever one of these, unlike buttons.
 pub const MOUSE_MOVE_ICON_PNG: &str = icon_png!("mouse_move");
+
+/// Every path below lives under this directory (copied from
+/// `assets_src/input_prompts/Steam Deck/Default/` under the pack's own filenames).
+macro_rules! steam_deck_icon_png {
+    ($name:literal) => {
+        concat!("textures/input_prompts/steam_deck/", $name, ".png")
+    };
+}
+
+/// Looks up the icon-PNG asset path for a gamepad button, using Steam Deck's own button icons —
+/// this project's primary handheld/gamepad target (see the project's own vision notes) — rather
+/// than a generic/Xbox/PlayStation set. `bevy`'s `GamepadButton` names describe an Xbox-style
+/// layout (`South`/`East`/`North`/`West`), which the Steam Deck's face buttons also use physically
+/// (A/B/X/Y), so the mapping is direct. Only the variants `controls.rs`'s `player_controls()`
+/// actually binds are covered — `None` for the rest, same "let the caller decide" contract as
+/// `key_code_icon_png`.
+pub fn gamepad_button_icon_png(button: GamepadButton) -> Option<&'static str> {
+    Some(match button {
+        GamepadButton::South => steam_deck_icon_png!("steamdeck_button_a"),
+        GamepadButton::East => steam_deck_icon_png!("steamdeck_button_b"),
+        GamepadButton::North => steam_deck_icon_png!("steamdeck_button_y"),
+        GamepadButton::West => steam_deck_icon_png!("steamdeck_button_x"),
+        GamepadButton::LeftTrigger => steam_deck_icon_png!("steamdeck_button_l1"),
+        GamepadButton::LeftTrigger2 => steam_deck_icon_png!("steamdeck_button_l2"),
+        GamepadButton::RightTrigger => steam_deck_icon_png!("steamdeck_button_r1"),
+        GamepadButton::RightTrigger2 => steam_deck_icon_png!("steamdeck_button_r2"),
+        GamepadButton::LeftThumb => steam_deck_icon_png!("steamdeck_stick_l_press"),
+        GamepadButton::RightThumb => steam_deck_icon_png!("steamdeck_stick_r_press"),
+        // The Steam Deck's own naming for its two small menu-row buttons: "Options" (right side,
+        // the Xbox-style Start/menu equivalent `bevy`'s `Start` maps onto) and "View" (left side,
+        // the Xbox-style Select/back equivalent `bevy`'s `Select` maps onto).
+        GamepadButton::Start => steam_deck_icon_png!("steamdeck_button_options"),
+        GamepadButton::Select => steam_deck_icon_png!("steamdeck_button_view"),
+        GamepadButton::DPadUp => steam_deck_icon_png!("steamdeck_dpad_up"),
+        GamepadButton::DPadDown => steam_deck_icon_png!("steamdeck_dpad_down"),
+        GamepadButton::DPadLeft => steam_deck_icon_png!("steamdeck_dpad_left"),
+        GamepadButton::DPadRight => steam_deck_icon_png!("steamdeck_dpad_right"),
+
+        _ => return None,
+    })
+}
+
+/// The left-stick "move" and right-stick "look" icons (not tied to any `GamepadButton` press) —
+/// same idea as `MOUSE_MOVE_ICON_PNG`.
+pub const GAMEPAD_MOVE_STICK_ICON_PNG: &str = steam_deck_icon_png!("steamdeck_stick_l");
+pub const GAMEPAD_LOOK_STICK_ICON_PNG: &str = steam_deck_icon_png!("steamdeck_stick_r");

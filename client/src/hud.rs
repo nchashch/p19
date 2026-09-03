@@ -1,5 +1,8 @@
-use crate::game_state::GameState;
-use crate::input_icons::{MOUSE_MOVE_ICON_PNG, key_code_icon_png, mouse_button_icon_png};
+use crate::game_state::{GameState, InputDeviceState};
+use crate::input_icons::{
+    GAMEPAD_LOOK_STICK_ICON_PNG, GAMEPAD_MOVE_STICK_ICON_PNG, MOUSE_MOVE_ICON_PNG,
+    gamepad_button_icon_png, key_code_icon_png, mouse_button_icon_png,
+};
 use crate::localization::{LocalizedText, localized};
 use crate::player_character::LocalPlayer;
 use crate::targeting::{Hovered, SELECT_RANGE, Selected};
@@ -31,7 +34,12 @@ impl Plugin for HudPlugin {
         app.add_observer(add_gcd_overlay);
         app.add_systems(
             Update,
-            (update_data_frame, update_gcd_overlay, update_hud_visibility),
+            (
+                update_data_frame,
+                update_gcd_overlay,
+                update_hud_visibility,
+                update_controls_tips_visibility,
+            ),
         );
     }
 }
@@ -40,14 +48,18 @@ impl Plugin for HudPlugin {
 /// `HudElement` root, which (being ordinary UI `Node` hierarchies, unlike `nameplate.rs`'s
 /// non-child-parented nameplates) hides every descendant for free via `InheritedVisibility`
 /// propagation. Doesn't cover `nameplate.rs`'s `NameplatesVisible` — that's a separate toggle for
-/// a separate, non-HUD UI surface.
+/// a separate, non-HUD UI surface. Also read directly by `update_controls_tips_visibility` — the
+/// two `controls_tips` panels (see below) aren't tagged `HudElement` themselves, since their
+/// visibility already depends on a *second* condition (`InputDeviceState`) that would fight this
+/// system if both tried to drive the same `Visibility` independently.
 #[derive(Resource)]
 pub struct HudVisible(pub bool);
 
-/// Marks each of `in_game_scene`'s top-level roots (`data_frame`/`hotbar`/`crosshair`/
-/// `controls_tips`) so `update_hud_visibility` can find and toggle all of them without needing a
-/// single common parent — they're independent root entities (see `in_game_scene`'s `bsn_list!`),
-/// not siblings under one `Node`.
+/// Marks each of `in_game_scene`'s top-level roots that only depend on `HudVisible`
+/// (`data_frame`/`hotbar`/`crosshair`) so `update_hud_visibility` can find and toggle all of them
+/// without needing a single common parent — they're independent root entities (see
+/// `in_game_scene`'s `bsn_list!`), not siblings under one `Node`. The two `controls_tips` panels
+/// are deliberately *not* tagged with this — see `update_controls_tips_visibility`.
 #[derive(Component, Clone, Default)]
 struct HudElement;
 
@@ -55,7 +67,7 @@ struct HudElement;
 /// last toggle (e.g. reloading the level respawns `in_game_scene`'s roots while `HudVisible` is
 /// still `false` from an earlier toggle), and that new entity's default `Visibility::Inherited`
 /// would never get corrected to match if this only reacted to `HudVisible` changing. The element
-/// count here is tiny (four roots), so running every frame is cheap.
+/// count here is tiny, so running every frame is cheap.
 fn update_hud_visibility(
     hud_visible: Res<HudVisible>,
     mut elements: Query<&mut Visibility, With<HudElement>>,
@@ -70,8 +82,66 @@ fn update_hud_visibility(
     }
 }
 
+/// Marks `controls_tips`'s root — shown only while `HudVisible` *and* `InputDeviceState` is
+/// `KeyboardMouse`. See `update_controls_tips_visibility`.
+#[derive(Component, Clone, Default)]
+struct KeyboardMouseControlsTips;
+
+/// Marks `gamepad_controls_tips`'s root — the mirror image of `KeyboardMouseControlsTips`, shown
+/// only while `InputDeviceState` is `Gamepad`.
+#[derive(Component, Clone, Default)]
+struct GamepadControlsTips;
+
+/// Combines two independent conditions (`HudVisible` and `InputDeviceState`) into the visibility
+/// of whichever controls-tips panel matches the currently active input device — kept as its own
+/// system rather than folding these two panels into `update_hud_visibility`'s plain `HudElement`
+/// handling, since that system only knows about one condition (`HudVisible`) and would otherwise
+/// force both panels visible together the instant the HUD is shown, regardless of which device is
+/// actually in use.
+fn update_controls_tips_visibility(
+    hud_visible: Res<HudVisible>,
+    input_device: Res<State<InputDeviceState>>,
+    mut keyboard_mouse: Query<
+        &mut Visibility,
+        (
+            With<KeyboardMouseControlsTips>,
+            Without<GamepadControlsTips>,
+        ),
+    >,
+    mut gamepad: Query<
+        &mut Visibility,
+        (
+            With<GamepadControlsTips>,
+            Without<KeyboardMouseControlsTips>,
+        ),
+    >,
+) {
+    let visibility = |show: bool| {
+        if show {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        }
+    };
+    let show_keyboard_mouse =
+        hud_visible.0 && *input_device.get() == InputDeviceState::KeyboardMouse;
+    let show_gamepad = hud_visible.0 && *input_device.get() == InputDeviceState::Gamepad;
+    for mut element_visibility in &mut keyboard_mouse {
+        *element_visibility = visibility(show_keyboard_mouse);
+    }
+    for mut element_visibility in &mut gamepad {
+        *element_visibility = visibility(show_gamepad);
+    }
+}
+
 pub fn in_game_scene() -> impl SceneList {
-    bsn_list![data_frame(), hotbar(), crosshair(), controls_tips(),]
+    bsn_list![
+        data_frame(),
+        hotbar(),
+        crosshair(),
+        controls_tips(),
+        gamepad_controls_tips(),
+    ]
 }
 
 const CONTROLS_TIPS_ICON_SIZE: f32 = 40.0;
@@ -92,7 +162,7 @@ const CONTROLS_TIPS_LABEL_FONT_SIZE: f32 = 16.0;
 /// own PNG (`ImageNode`) rather than packing glyphs into a `Text` run with an icon font.
 fn controls_tips() -> impl Scene {
     bsn! {
-        HudElement
+        KeyboardMouseControlsTips
         Node {
             width: percent(100),
             height: percent(100),
@@ -119,6 +189,49 @@ fn controls_tips() -> impl Scene {
         ]
         DespawnOnExit::<GameState>(GameState::InGame)
     }
+}
+
+/// The gamepad equivalent of `controls_tips` — same rows, same order, same labels, just Steam
+/// Deck button/stick icons (`input_icons::gamepad_button_icon_png`) sourced from the actual
+/// `GamepadButton`s `controls.rs`'s `player_controls()` binds, instead of `KeyCode`s. Shown
+/// instead of `controls_tips` (never alongside it) once `InputDeviceState` says a gamepad is the
+/// active device — see `update_controls_tips_visibility`.
+fn gamepad_controls_tips() -> impl Scene {
+    bsn! {
+        GamepadControlsTips
+        Node {
+            width: percent(100),
+            height: percent(100),
+            align_items: AlignItems::Start,
+            justify_content: JustifyContent::Start,
+        }
+        Children[
+            panel(px(300), px(600))
+            Children [
+                control_tip_icons(vec![GAMEPAD_MOVE_STICK_ICON_PNG], "hud-controls-move"),
+                control_tip_icons(vec![GAMEPAD_LOOK_STICK_ICON_PNG], "hud-controls-look"),
+                control_tip_gamepad_buttons(&[GamepadButton::South], "hud-controls-jump"),
+                control_tip_gamepad_buttons(&[GamepadButton::RightThumb], "hud-controls-select"),
+                control_tip_gamepad_buttons(&[GamepadButton::LeftThumb], "hud-controls-deselect"),
+                control_tip_gamepad_buttons(&[GamepadButton::RightTrigger2], "hud-controls-attack"),
+                control_tip_gamepad_buttons(&[GamepadButton::RightTrigger], "hud-controls-kill"),
+                control_tip_gamepad_buttons(&[GamepadButton::LeftTrigger], "hud-controls-spawn-cube"),
+                control_tip_gamepad_buttons(&[GamepadButton::LeftTrigger2], "hud-controls-spawn-npc"),
+                control_tip_gamepad_buttons(&[GamepadButton::Start], "hud-controls-main-menu"),
+            ]
+        ]
+        DespawnOnExit::<GameState>(GameState::InGame)
+    }
+}
+
+/// Same idea as `control_tip_keys`, for `GamepadButton`s instead of `KeyCode`s — any button the
+/// pack doesn't cover is silently skipped, same contract as `input_icons::gamepad_button_icon_png`.
+fn control_tip_gamepad_buttons(buttons: &[GamepadButton], label_key: &'static str) -> impl Scene {
+    let icons: Vec<&'static str> = buttons
+        .iter()
+        .filter_map(|&button| gamepad_button_icon_png(button))
+        .collect();
+    control_tip_icons(icons, label_key)
 }
 
 /// Builds a `control_tip_icons` row directly from the `KeyCode`s a binding actually uses, via
