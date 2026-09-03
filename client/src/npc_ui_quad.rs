@@ -1,10 +1,12 @@
-//! Demonstrates rendering `bevy_ui` onto a texture and displaying that texture on a rigid 3D quad
-//! — the same technique as Bevy's own `examples/ui/render_ui_to_texture.rs` (a second `Camera2d`
+//! Demonstrates rendering `bevy_ui` onto a texture and displaying that texture on a 3D quad — the
+//! same technique as Bevy's own `examples/ui/render_ui_to_texture.rs` (a second `Camera2d`
 //! targeting an off-screen `Image` instead of the window, with a UI root pointed at it via
 //! `UiTargetCamera`), applied here to a small `Rectangle` mesh parented onto each NPC
-//! (`npc_spawner::decorate_npcs`) instead of a spinning cube. The quad is a plain child with a
-//! fixed local `Transform` — no billboarding system counter-rotates it toward the camera, so it
-//! turns with the NPC exactly like any other attached mesh (e.g. `rig.glb`).
+//! (`npc_spawner::decorate_npcs`) instead of a spinning cube. The quad is a child with a fixed
+//! local *translation* (it sits above the NPC's head) but `billboard_npc_ui_quads` overrides its
+//! local *rotation* every frame so it always faces the player's camera, unlike `rig.glb`, which
+//! rotates rigidly with the NPC — a flat panel of text/a button reads far worse edge-on or facing
+//! away than a `rig.glb`-style mesh does, which is fine from any angle.
 //!
 //! One shared render target/camera/UI root for every NPC, not one per instance — the UI content
 //! here is static (an "NPC" label and a "Kill" button), so there's nothing per-NPC to render
@@ -44,6 +46,7 @@ impl Plugin for NpcUiQuadPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<NpcUiQuadTarget>();
         app.add_systems(Startup, setup_npc_ui_quad);
+        app.add_systems(Update, billboard_npc_ui_quads);
         // Same schedule/set the Bevy example this is based on uses for its own virtual pointer —
         // `PickingSystems::Input` is where real pointer backends (mouse, touch) also turn raw
         // input into `PointerInput` events, so this needs to run alongside them, before hit-testing
@@ -172,6 +175,43 @@ fn setup_npc_ui_quad(
 fn on_kill_button(_event: On<Activate>, target: Res<NpcUiQuadTarget>, mut commands: Commands) {
     if let Some(entity) = target.0 {
         commands.client_trigger(KillAttempt { entity });
+    }
+}
+
+/// Keeps every NPC's UI quad facing the player's camera, overriding whatever rotation it'd
+/// otherwise inherit from its parent NPC. Runs in `Update`, not `PostUpdate` before
+/// `TransformSystems::Propagate` — same convention as `nameplate.rs`'s `track_nameplates` — so it
+/// reads the NPC's `GlobalTransform` from the end of *last* frame's propagation, one frame behind
+/// the camera's actual latest position; imperceptible for anything not spinning or moving fast.
+fn billboard_npc_ui_quads(
+    camera_query: Query<&GlobalTransform, With<IsDefaultUiCamera>>,
+    parent_transforms: Query<&GlobalTransform, Without<NpcUiQuadMesh>>,
+    mut quads: Query<(&mut Transform, &ChildOf), With<NpcUiQuadMesh>>,
+) {
+    let Ok(camera_transform) = camera_query.single() else {
+        return;
+    };
+    let camera_position = camera_transform.translation();
+
+    for (mut transform, child_of) in &mut quads {
+        let Ok(parent_transform) = parent_transforms.get(child_of.parent()) else {
+            continue;
+        };
+        let world_position = parent_transform.transform_point(transform.translation);
+        let to_camera = camera_position - world_position;
+        if to_camera.length_squared() < f32::EPSILON {
+            continue; // camera exactly at the quad's position - nothing sensible to face
+        }
+        // `RectangleMeshBuilder` gives this mesh a `+Z` normal (see its `Meshable` impl), and
+        // `Transform::forward()` (what `looking_to` aims at `direction`) is `-Z` by convention —
+        // so aim `-to_camera` to get local `+Z` (the visible face) pointing at the camera instead.
+        let world_rotation = Transform::default()
+            .looking_to(-to_camera, Vec3::Y)
+            .rotation;
+        // Convert the desired *world* rotation into this entity's *local* rotation, since it's
+        // parented to the NPC and would otherwise have the NPC's own rotation applied on top of
+        // whatever gets set here.
+        transform.rotation = parent_transform.rotation().inverse() * world_rotation;
     }
 }
 
