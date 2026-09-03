@@ -1,4 +1,5 @@
 use avian3d::prelude::*;
+use bevy::ecs::schedule::{LogLevel, ScheduleBuildSettings};
 use bevy::feathers::{dark_theme::create_dark_theme, theme::UiTheme};
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
@@ -90,7 +91,44 @@ impl Plugin for Prototype19 {
             SeedlingPlugins,
             ParticleEffectsPlugin,
             SkeinPlugin::default(),
-            PhysicsPlugins::default(),
+            // The server is authoritative for physics — the client only needs colliders and
+            // spatial queries (`SpatialQuery` raycasts/shapecasts, e.g. `targeting.rs`'s hover
+            // raycast and `character_controller.rs`'s grounding shape-casts), not to actually
+            // simulate anything itself. Disabling just the solver-related plugins (as opposed to
+            // e.g. `Time::<Physics>::pause()`, which would also stop broad/narrow-phase from
+            // running and leave spatial queries stale against moving colliders) keeps collision
+            // detection and `Position`/`Rotation` <-> `Transform` sync running every frame, while
+            // nothing is left to apply forces or resolve contacts locally. One visible
+            // consequence: `RigidBody::Dynamic` cubes/NPCs no longer predict their own motion
+            // between replication ticks — they only move when a new server `Transform` arrives —
+            // unlike `PlayerCharacter` movement, which stays smooth since it's driven directly by
+            // `character_controller.rs`'s kinematic move-and-slide, not the solver.
+            //
+            // Deliberately *not* also disabling `SolverBodyPlugin`/`IslandPlugin`/
+            // `IslandSleepingPlugin`, despite the "solver" naming — confirmed by testing, not
+            // theory: disabling `SolverBodyPlugin` crashed `update_moved_collider_aabbs` with an
+            // index-out-of-bounds panic, because the collider tree that spatial queries depend on
+            // indexes into a `SolverBody`-tracked slot for every awake dynamic/kinematic body —
+            // it's shared per-body bookkeeping the broad-phase relies on, not solving itself.
+            // `IntegratorPlugin`/`SolverPlugin`/`CcdPlugin` are the actual force/contact/sweep
+            // resolution steps, and disabling only those was enough to stop local motion
+            // prediction without touching that bookkeeping. Also not disabling
+            // `JointPlugin`/`JointGraphPlugin<_>` — nothing in this project ever spawns a joint,
+            // so those stay registered but inert (no joint entities for them to act on) rather
+            // than needing their own disable calls.
+            PhysicsPlugins::default()
+                .build()
+                .disable::<IntegratorPlugin>()
+                .disable::<SolverPlugin>()
+                .disable::<CcdPlugin>()
+                // `XpbdSolverPlugin` (from the `xpbd_joints` feature, on by default) has its own
+                // joint-motor warm-start systems that unconditionally read the `SolverConfig`
+                // resource `SolverPlugin` normally provides — confirmed by testing: without also
+                // disabling this, startup panicked with "Resource does not exist: SolverConfig"
+                // even with zero joints ever spawned. Safe to disable outright for the same reason
+                // `JointPlugin`/`JointGraphPlugin<_>` are left inert rather than needing their own
+                // exception: nothing in this project ever spawns a joint.
+                .disable::<XpbdSolverPlugin>(),
             bevy_replicon::prelude::RepliconPlugins,
             RepliconQuinnetPlugins,
             SharedReplicationPlugin,
@@ -106,6 +144,35 @@ impl Plugin for Prototype19 {
                 networking::NetworkingPlugin,
             ),
         ));
+
+        // `PhysicsSchedulePlugin` (added above, inside `PhysicsPlugins`) configures
+        // `PhysicsSchedule` with `ambiguity_detection: LogLevel::Error` — appropriate when the
+        // full solver stack is present, since Avian's own plugins rely on each other's system
+        // sets to establish a total order. With several of those solver plugins disabled above,
+        // that ordering chain has gaps, and Bevy now reports ~50 systems as ambiguous relative to
+        // each other (panicking at schedule-build time rather than just warning, because of the
+        // `Error` level). Every ambiguity in that list is between joint-related systems (this
+        // project never spawns a joint), collider-hierarchy systems (no compound/child colliders
+        // here — colliders live directly on the root rigid-body entity), or `trigger_collision_events`
+        // (nothing here reads Avian's `CollisionStarted`/`CollisionEnded` — `character_controller.rs`
+        // tracks its own `CharacterCollisions` from shape-casts instead) — none of which this
+        // project's systems actually race on. Relaxing back to `Warn` (Bevy's own schedule
+        // default) accepts that, instead of manually chaining ~50 system pairs by hand.
+        app.edit_schedule(PhysicsSchedule, |schedule| {
+            schedule.set_build_settings(ScheduleBuildSettings {
+                ambiguity_detection: LogLevel::Warn,
+                ..default()
+            });
+        });
+
+        // `IntegratorPlugin` (disabled above) is normally what initializes the `Gravity`
+        // resource — confirmed by testing: without this, `IslandSleepingPlugin`'s
+        // `resource_changed::<Gravity>` run condition (checking whether to re-evaluate sleeping
+        // thresholds) panicked at startup with "Resource does not exist: Gravity", even though
+        // nothing here actually reads `Gravity` for real integration anymore. `Gravity` is just
+        // inert data (a `Vector` newtype with a `Default`), not tied to any system of its own, so
+        // this is a safe, minimal stand-in rather than re-enabling `IntegratorPlugin` itself.
+        app.init_resource::<Gravity>();
 
         // `OxrSessionConfig`/`HandGizmosPlugin`/`VrControllersPlugin` are all meaningless (and, for
         // `VrControllersPlugin`, actively broken — its `Startup`/`On<PlayerSpawned>` systems use
