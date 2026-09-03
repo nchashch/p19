@@ -40,6 +40,14 @@ bevy_simple_text_input = "0.15.0"
 futures-lite = "2.6.1"
 serde.workspace = true
 toml = "0.9"
+# `bevy-steamworks` re-exports the underlying `steamworks` crate's types directly (everything
+# except its `Client`, which it wraps as its own Bevy resource) — no separate direct dependency on
+# `steamworks` itself is needed. `steamworks-sys` (its transitive dependency) vendors the
+# Steamworks SDK's redistributable binaries and headers directly in the published crate, so this
+# builds out of the box with no `STEAM_SDK_LOCATION` env var or separate SDK download needed.
+# Client-only (platform/presentation-layer integration, not simulation) — `server`/`shared` don't
+# need it.
+bevy-steamworks = "0.17.0"
 
 bevy_mod_openxr = { path = "../../bevy_oxr/crates/bevy_openxr" }
 bevy_xr_utils = { path = "../../bevy_oxr/crates/bevy_xr_utils" }
