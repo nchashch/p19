@@ -33,6 +33,20 @@ pub struct Jump;
 #[action_output(bool)]
 pub struct MainMenu;
 
+/// Opens/closes the in-game pause menu (`modal_menu.rs`) — see `game_state::ModalMenuState`.
+/// Bound to Escape/`GamepadButton::Start` (see `controls.rs`'s `player_controls()`); `MainMenu`
+/// above is currently unbound to any input — its instant, no-confirmation disconnect was replaced
+/// by this plus the modal's own "Main Menu" button.
+#[derive(InputAction)]
+#[action_output(bool)]
+pub struct ToggleModalMenu;
+
+/// Shows/hides `hud.rs`'s `DataFrame` debug panel (hidden by default). Bound to
+/// Tab/`GamepadButton::Select` — see `controls.rs`'s `toggle_data_frame`.
+#[derive(InputAction)]
+#[action_output(bool)]
+pub struct ToggleDataFrame;
+
 #[derive(InputAction)]
 #[action_output(bool)]
 pub struct Shoot;

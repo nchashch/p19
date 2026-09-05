@@ -1,9 +1,5 @@
-use crate::game_state::{GameState, InputDeviceState};
-use crate::input_icons::{
-    GAMEPAD_LOOK_STICK_ICON_PNG, GAMEPAD_MOVE_STICK_ICON_PNG, MOUSE_MOVE_ICON_PNG,
-    gamepad_button_icon_png, key_code_icon_png, mouse_button_icon_png,
-};
-use crate::localization::{LocalizedText, localized};
+use crate::game_state::GameState;
+use crate::localization::localized;
 use crate::player_character::LocalPlayer;
 use crate::targeting::{Hovered, SELECT_RANGE, Selected};
 use crate::widgets::{
@@ -22,23 +18,34 @@ use fluent::FluentArgs;
 use shared::character_controller::Grounded;
 use shared::combat::{ATTACK_RANGE, DAMAGE, GCD_DURATION, Gcd, HitPoints};
 
-/// The always-visible in-game HUD: the `DataFrame` debug panel, the ability hotbar (with its GCD
-/// cooldown-sweep overlay), and the crosshair.
+/// The in-game HUD: the crosshair (always visible), the `DataFrame` debug panel (hidden by
+/// default, toggled by `Tab`/`GamepadButton::Select` — see `DataFrameVisible`), and the ability
+/// hotbar (with its GCD cooldown-sweep overlay). The controls-tips panel used to live here too —
+/// it's now part of the pause modal instead (see `modal_menu.rs`'s `controls_tips`).
 pub struct HudPlugin;
 
 impl Plugin for HudPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(HudVisible(true));
-        app.add_plugins(UiMaterialPlugin::<GcdOverlayMaterial>::default());
-        app.add_systems(Startup, setup_gcd_overlay_material);
+        app.insert_resource(DataFrameVisible(false));
+        app.add_plugins((
+            UiMaterialPlugin::<GcdOverlayMaterial>::default(),
+            UiMaterialPlugin::<CrosshairGcdMaterial>::default(),
+        ));
+        app.add_systems(
+            Startup,
+            (setup_gcd_overlay_material, setup_crosshair_gcd_material),
+        );
         app.add_observer(add_gcd_overlay);
+        app.add_observer(add_crosshair_gcd_ring);
         app.add_systems(
             Update,
             (
                 update_data_frame,
                 update_gcd_overlay,
+                update_crosshair_gcd,
                 update_hud_visibility,
-                update_controls_tips_visibility,
+                update_data_frame_visibility,
             ),
         );
     }
@@ -55,11 +62,10 @@ impl Plugin for HudPlugin {
 #[derive(Resource)]
 pub struct HudVisible(pub bool);
 
-/// Marks each of `in_game_scene`'s top-level roots that only depend on `HudVisible`
-/// (`data_frame`/`hotbar`/`crosshair`) so `update_hud_visibility` can find and toggle all of them
-/// without needing a single common parent — they're independent root entities (see
-/// `in_game_scene`'s `bsn_list!`), not siblings under one `Node`. The two `controls_tips` panels
-/// are deliberately *not* tagged with this — see `update_controls_tips_visibility`.
+/// Marks `in_game_scene`'s `HudVisible`-only top-level roots (currently just `hotbar`, disabled
+/// while testing — see `in_game_scene`) so `update_hud_visibility` can find and toggle all of them
+/// without needing a single common parent. `data_frame` is deliberately *not* tagged with this any
+/// more — see `DataFrameVisible`.
 #[derive(Component, Clone, Default)]
 struct HudElement;
 
@@ -82,223 +88,60 @@ fn update_hud_visibility(
     }
 }
 
-/// Marks `controls_tips`'s root — shown only while `HudVisible` *and* `InputDeviceState` is
-/// `KeyboardMouse`. See `update_controls_tips_visibility`.
-#[derive(Component, Clone, Default)]
-struct KeyboardMouseControlsTips;
+/// Toggled by `Tab`/`GamepadButton::Select` (`controls::toggle_data_frame`) — hidden by default,
+/// unlike `HudVisible`. Kept as its own resource/condition rather than folding the `DataFrame`
+/// panel into `HudElement`, the same reasoning `update_controls_tips_visibility` used to combine
+/// `HudVisible` with a second condition before that panel moved to `modal_menu.rs`: this needs to
+/// AND with `HudVisible` (the console's `hud` command should still master-hide it) without forcing
+/// it visible the instant the HUD is shown.
+#[derive(Resource)]
+pub struct DataFrameVisible(pub bool);
 
-/// Marks `gamepad_controls_tips`'s root — the mirror image of `KeyboardMouseControlsTips`, shown
-/// only while `InputDeviceState` is `Gamepad`.
+/// Marks `data_frame`'s root — see `DataFrameVisible`/`update_data_frame_visibility`.
 #[derive(Component, Clone, Default)]
-struct GamepadControlsTips;
+struct DataFramePanel;
 
-/// Combines two independent conditions (`HudVisible` and `InputDeviceState`) into the visibility
-/// of whichever controls-tips panel matches the currently active input device — kept as its own
-/// system rather than folding these two panels into `update_hud_visibility`'s plain `HudElement`
-/// handling, since that system only knows about one condition (`HudVisible`) and would otherwise
-/// force both panels visible together the instant the HUD is shown, regardless of which device is
-/// actually in use.
-fn update_controls_tips_visibility(
+/// Combines `HudVisible` and `DataFrameVisible` the same way `update_controls_tips_visibility`
+/// used to combine `HudVisible` and `InputDeviceState` — see `DataFrameVisible`'s doc comment.
+/// Deliberately unconditional (no `is_changed()` guard) for the same reason as
+/// `update_hud_visibility`: a level reload can respawn `DataFramePanel` while both toggles are
+/// still whatever they were left at.
+fn update_data_frame_visibility(
     hud_visible: Res<HudVisible>,
-    input_device: Res<State<InputDeviceState>>,
-    mut keyboard_mouse: Query<
-        &mut Visibility,
-        (
-            With<KeyboardMouseControlsTips>,
-            Without<GamepadControlsTips>,
-        ),
-    >,
-    mut gamepad: Query<
-        &mut Visibility,
-        (
-            With<GamepadControlsTips>,
-            Without<KeyboardMouseControlsTips>,
-        ),
-    >,
+    data_frame_visible: Res<DataFrameVisible>,
+    mut panels: Query<&mut Visibility, With<DataFramePanel>>,
 ) {
-    let visibility = |show: bool| {
-        if show {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        }
+    let visibility = if hud_visible.0 && data_frame_visible.0 {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
     };
-    let show_keyboard_mouse =
-        hud_visible.0 && *input_device.get() == InputDeviceState::KeyboardMouse;
-    let show_gamepad = hud_visible.0 && *input_device.get() == InputDeviceState::Gamepad;
-    for mut element_visibility in &mut keyboard_mouse {
-        *element_visibility = visibility(show_keyboard_mouse);
-    }
-    for mut element_visibility in &mut gamepad {
-        *element_visibility = visibility(show_gamepad);
+    for mut panel_visibility in &mut panels {
+        *panel_visibility = visibility;
     }
 }
 
+// `hotbar()` is left out of the scene below (rather than deleted) while testing the minimalist
+// crosshair-only look — see `update_crosshair_gcd`. Add `hotbar(),` back to re-enable it.
 pub fn in_game_scene() -> impl SceneList {
-    bsn_list![
-        data_frame(),
-        hotbar(),
-        crosshair(),
-        controls_tips(),
-        gamepad_controls_tips(),
-    ]
-}
-
-const CONTROLS_TIPS_ICON_SIZE: f32 = 40.0;
-const CONTROLS_TIPS_ICON_GAP: f32 = 4.0;
-const CONTROLS_TIPS_LABEL_FONT_SIZE: f32 = 16.0;
-
-/// Top-left panel listing every keyboard/mouse binding `controls.rs`'s `player_controls()` sets up
-/// — kept in sync with that list by hand, same as `console.ftl`'s `console-controls` text hint is;
-/// there's no single source of truth `bevy_enhanced_input` bindings could be introspected from
-/// automatically. Using the actual `KeyCode`s here (via `control_tip_keys`/`input_icons`) at least
-/// makes *that* part self-documenting — a row visibly says `KeyCode::Escape`, not an opaque asset
-/// path with nothing connecting it back to which key it's supposed to be. Mouse buttons/motion
-/// aren't `KeyCode`, so `hud-controls-look`/`hud-controls-select` go through `control_tip_icons`
-/// directly with a PNG path from `input_icons::mouse_button_icon_png`/`MOUSE_MOVE_ICON_PNG`
-/// instead of a `key_code_icon_png` lookup. `mouse_move` (for `FpsCameraRotation`'s mouse-motion
-/// binding) is included since it's a real, always-on control, even though it isn't a discrete
-/// key/button press. See `input_icons`'s module doc comment for why this renders each icon as its
-/// own PNG (`ImageNode`) rather than packing glyphs into a `Text` run with an icon font.
-fn controls_tips() -> impl Scene {
-    bsn! {
-        KeyboardMouseControlsTips
-        Node {
-            width: percent(100),
-            height: percent(100),
-            align_items: AlignItems::Start,
-            justify_content: JustifyContent::Start,
-        }
-        Children[
-            panel(px(300), px(600))
-            Children [
-                control_tip_keys(
-                    &[KeyCode::KeyW, KeyCode::KeyA, KeyCode::KeyS, KeyCode::KeyD],
-                    "hud-controls-move",
-                ),
-                control_tip_icons(vec![MOUSE_MOVE_ICON_PNG], "hud-controls-look"),
-                control_tip_keys(&[KeyCode::Space], "hud-controls-jump"),
-                control_tip_mouse_button(MouseButton::Left, "hud-controls-select"),
-                control_tip_mouse_button(MouseButton::Right, "hud-controls-deselect"),
-                control_tip_keys(&[KeyCode::KeyF], "hud-controls-attack"),
-                control_tip_keys(&[KeyCode::KeyT], "hud-controls-kill"),
-                control_tip_keys(&[KeyCode::KeyE], "hud-controls-spawn-cube"),
-                control_tip_keys(&[KeyCode::KeyR], "hud-controls-spawn-npc"),
-                control_tip_keys(&[KeyCode::Escape], "hud-controls-main-menu"),
-            ]
-        ]
-        DespawnOnExit::<GameState>(GameState::InGame)
-    }
-}
-
-/// The gamepad equivalent of `controls_tips` — same rows, same order, same labels, just Steam
-/// Deck button/stick icons (`input_icons::gamepad_button_icon_png`) sourced from the actual
-/// `GamepadButton`s `controls.rs`'s `player_controls()` binds, instead of `KeyCode`s. Shown
-/// instead of `controls_tips` (never alongside it) once `InputDeviceState` says a gamepad is the
-/// active device — see `update_controls_tips_visibility`.
-fn gamepad_controls_tips() -> impl Scene {
-    bsn! {
-        GamepadControlsTips
-        Node {
-            width: percent(100),
-            height: percent(100),
-            align_items: AlignItems::Start,
-            justify_content: JustifyContent::Start,
-        }
-        Children[
-            panel(px(300), px(600))
-            Children [
-                control_tip_icons(vec![GAMEPAD_MOVE_STICK_ICON_PNG], "hud-controls-move"),
-                control_tip_icons(vec![GAMEPAD_LOOK_STICK_ICON_PNG], "hud-controls-look"),
-                control_tip_gamepad_buttons(&[GamepadButton::South], "hud-controls-jump"),
-                control_tip_gamepad_buttons(&[GamepadButton::RightThumb], "hud-controls-select"),
-                control_tip_gamepad_buttons(&[GamepadButton::LeftThumb], "hud-controls-deselect"),
-                control_tip_gamepad_buttons(&[GamepadButton::RightTrigger2], "hud-controls-attack"),
-                control_tip_gamepad_buttons(&[GamepadButton::RightTrigger], "hud-controls-kill"),
-                control_tip_gamepad_buttons(&[GamepadButton::LeftTrigger], "hud-controls-spawn-cube"),
-                control_tip_gamepad_buttons(&[GamepadButton::LeftTrigger2], "hud-controls-spawn-npc"),
-                control_tip_gamepad_buttons(&[GamepadButton::Start], "hud-controls-main-menu"),
-            ]
-        ]
-        DespawnOnExit::<GameState>(GameState::InGame)
-    }
-}
-
-/// Same idea as `control_tip_keys`, for `GamepadButton`s instead of `KeyCode`s — any button the
-/// pack doesn't cover is silently skipped, same contract as `input_icons::gamepad_button_icon_png`.
-fn control_tip_gamepad_buttons(buttons: &[GamepadButton], label_key: &'static str) -> impl Scene {
-    let icons: Vec<&'static str> = buttons
-        .iter()
-        .filter_map(|&button| gamepad_button_icon_png(button))
-        .collect();
-    control_tip_icons(icons, label_key)
-}
-
-/// Builds a `control_tip_icons` row directly from the `KeyCode`s a binding actually uses, via
-/// `input_icons::key_code_icon_png` — any key the pack doesn't cover is silently skipped rather
-/// than showing a broken image or panicking, so an unmapped key just quietly narrows the icon set
-/// for that row instead of breaking it.
-fn control_tip_keys(keys: &[KeyCode], label_key: &'static str) -> impl Scene {
-    let icons: Vec<&'static str> = keys
-        .iter()
-        .filter_map(|&key| key_code_icon_png(key))
-        .collect();
-    control_tip_icons(icons, label_key)
-}
-
-/// Same idea as `control_tip_keys`, for the one mouse-button tip (`Select`) — not a `KeyCode`, so
-/// it goes through `input_icons::mouse_button_icon_png` instead.
-fn control_tip_mouse_button(button: MouseButton, label_key: &'static str) -> impl Scene {
-    let icons: Vec<&'static str> = mouse_button_icon_png(button).into_iter().collect();
-    control_tip_icons(icons, label_key)
-}
-
-/// One row: zero or more icon images side by side (e.g. `W A S D` as four separate `ImageNode`s,
-/// left to right) followed by a localized label. `icons` is a `Vec` rather than a fixed-size slice
-/// since a binding can use any number of keys, including zero if none of them mapped to an icon —
-/// the row then just shows the label on its own instead of disappearing entirely, so a gap in
-/// icon coverage stays visible/debuggable rather than silently dropping the whole tip.
-fn control_tip_icons(icons: Vec<&'static str>, label_key: &'static str) -> impl Scene {
-    let icons: Vec<_> = icons.into_iter().map(control_tip_icon).collect();
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(8),
-        }
-        Pickable::IGNORE
-        Children [
-            {icons},
-            (
-                Text(label_key)
-                LocalizedText(label_key)
-                TextFont {
-                    font: FontSourceTemplate::Handle(SERIF_FONT),
-                    font_size: px(CONTROLS_TIPS_LABEL_FONT_SIZE),
-                }
-                TextColor(WHITE)
-                Pickable::IGNORE
-            ),
-        ]
-    }
-}
-
-/// A single icon image at the panel's fixed icon size — one `ImageNode` per key/button, laid out
-/// in a row by `control_tip_icons`'s parent `Node` rather than packed into one `Text` the way the
-/// font-glyph version did.
-fn control_tip_icon(path: &'static str) -> impl Scene {
-    bsn! {
-        ImageNode { image: path }
-        Node {
-            width: px(CONTROLS_TIPS_ICON_SIZE),
-            height: px(CONTROLS_TIPS_ICON_SIZE),
-            margin: UiRect::right(px(CONTROLS_TIPS_ICON_GAP)),
-        }
-        Pickable::IGNORE
-    }
+    bsn_list![data_frame(), crosshair()]
 }
 
 const CROSSHAIR_SIZE: f32 = 8.0;
+/// Outer diameter of the GCD progress ring — bigger than the dot it replaces so the ring has room
+/// to read clearly around it (see `crosshair_gcd.wgsl`'s `RING_THICKNESS`).
+const CROSSHAIR_GCD_RING_SIZE: f32 = 22.0;
+
+/// Marks the plain dot shown while the GCD is ready — hidden in favor of `CrosshairGcdRing` while
+/// it's running. See `update_crosshair_gcd`.
+#[derive(Component, Clone, Default)]
+struct CrosshairDot;
+
+/// Marks the radial GCD progress overlay (`crosshair_gcd.wgsl`) shown in place of the dot while
+/// the GCD is running. Sized to `CROSSHAIR_GCD_RING_SIZE` and absolutely positioned so it overlays
+/// the dot's wrapper node rather than participating in its flex layout.
+#[derive(Component, Clone, Default)]
+struct CrosshairGcdRing;
 
 fn crosshair() -> impl Scene {
     bsn! {
@@ -312,12 +155,34 @@ fn crosshair() -> impl Scene {
         Children [
             (
                 Node {
-                    width: px(CROSSHAIR_SIZE),
-                    height: px(CROSSHAIR_SIZE),
-                    border_radius: px(CROSSHAIR_SIZE / 2.0),
+                    width: px(CROSSHAIR_GCD_RING_SIZE),
+                    height: px(CROSSHAIR_GCD_RING_SIZE),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
                 }
-                BackgroundColor(WHITE)
                 Pickable::IGNORE
+                Children [
+                    (
+                        CrosshairGcdRing
+                        Node {
+                            position_type: PositionType::Absolute,
+                            width: percent(100),
+                            height: percent(100),
+                        }
+                        Visibility::Hidden
+                        Pickable::IGNORE
+                    ),
+                    (
+                        CrosshairDot
+                        Node {
+                            width: px(CROSSHAIR_SIZE),
+                            height: px(CROSSHAIR_SIZE),
+                            border_radius: px(CROSSHAIR_SIZE / 2.0),
+                        }
+                        BackgroundColor(WHITE)
+                        Pickable::IGNORE
+                    ),
+                ]
             ),
         ]
         DespawnOnExit::<GameState>(GameState::InGame)
@@ -326,7 +191,8 @@ fn crosshair() -> impl Scene {
 
 fn data_frame() -> impl Scene {
     bsn! {
-        HudElement
+        DataFramePanel
+        Visibility::Hidden
         Node {
             width: percent(100),
             height: percent(100),
@@ -505,6 +371,86 @@ fn update_gcd_overlay(
         return;
     };
     material.covered = Vec4::splat(gcd.0.fraction_remaining());
+}
+
+/// Radial GCD progress-ring material for the crosshair — see `assets/shaders/crosshair_gcd.wgsl`.
+/// A separate `UiMaterial` type from `GcdOverlayMaterial` even though the uniform shape is
+/// identical, since `UiMaterial::fragment_shader()` is per-type, not per-instance — the crosshair
+/// needs its own shader (a thin ring, not a filled-square pie wipe).
+#[derive(AsBindGroup, Asset, TypePath, Debug, Clone)]
+struct CrosshairGcdMaterial {
+    #[uniform(0)]
+    covered: Vec4,
+}
+
+impl UiMaterial for CrosshairGcdMaterial {
+    fn fragment_shader() -> ShaderRef {
+        "shaders/crosshair_gcd.wgsl".into()
+    }
+}
+
+#[derive(Resource)]
+struct CrosshairGcdMaterialHandle(Handle<CrosshairGcdMaterial>);
+
+fn setup_crosshair_gcd_material(
+    mut commands: Commands,
+    mut materials: ResMut<Assets<CrosshairGcdMaterial>>,
+) {
+    commands.insert_resource(CrosshairGcdMaterialHandle(materials.add(
+        CrosshairGcdMaterial {
+            covered: Vec4::ZERO,
+        },
+    )));
+}
+
+/// Attaches the `MaterialNode` to the ring as it spawns — same reason as `add_gcd_overlay`: the
+/// handle needs `Assets<CrosshairGcdMaterial>`, which isn't available inside the `bsn!` scene.
+fn add_crosshair_gcd_ring(
+    added: On<Add, CrosshairGcdRing>,
+    handle: Res<CrosshairGcdMaterialHandle>,
+    mut commands: Commands,
+) {
+    commands
+        .entity(added.entity)
+        .insert(MaterialNode(handle.0.clone()));
+}
+
+/// Swaps the crosshair between the plain dot (GCD ready) and the radial progress ring (GCD
+/// running), and keeps the ring's fill in sync while it's shown. Toggling `Visibility` rather than
+/// despawning/respawning either node keeps this a plain per-frame state sync, matching
+/// `update_gcd_overlay`'s style.
+fn update_crosshair_gcd(
+    local_player: Res<LocalPlayer>,
+    player: Query<&Gcd>,
+    handle: Res<CrosshairGcdMaterialHandle>,
+    mut materials: ResMut<Assets<CrosshairGcdMaterial>>,
+    mut dot: Query<&mut Visibility, (With<CrosshairDot>, Without<CrosshairGcdRing>)>,
+    mut ring: Query<&mut Visibility, (With<CrosshairGcdRing>, Without<CrosshairDot>)>,
+) {
+    let Some(local_player) = local_player.0 else {
+        return;
+    };
+    let Ok(gcd) = player.get(local_player) else {
+        return;
+    };
+    let running = !gcd.0.is_finished();
+    if let Ok(mut dot_visibility) = dot.single_mut() {
+        *dot_visibility = if running {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        };
+    }
+    if let Ok(mut ring_visibility) = ring.single_mut() {
+        *ring_visibility = if running {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+    }
+    if let Some(mut material) = materials.get_mut(&handle.0) {
+        material.covered = Vec4::splat(gcd.0.fraction_remaining());
+    }
 }
 
 #[derive(Component, Clone, Default, Debug)]

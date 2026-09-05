@@ -18,6 +18,19 @@ pub enum GameState {
     InGame,
 }
 
+/// Whether the in-game pause/modal menu (`modal_menu.rs`) is up — a second, independent state
+/// machine layered on top of `GameState::InGame`, the same pattern `VRState`/`InputDeviceState`
+/// use rather than adding another `GameState` variant: the modal doesn't replace `InGame`, it
+/// overlays it (gameplay entities stay alive underneath, `GameState` itself never changes while
+/// the modal is up). `controls::toggle_modal_menu` (bound to `KeyCode::Tab`/`GamepadButton::Select`)
+/// flips this; `modal_menu.rs` reacts to it to spawn/despawn the menu UI.
+#[derive(States, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ModalMenuState {
+    #[default]
+    Closed,
+    Open,
+}
+
 /// Which input device the player last actually used — a `States` type (not a plain `Resource`)
 /// since "which device is active" is exactly the kind of thing other systems want to branch on
 /// (e.g. `hud.rs`'s `controls_tips` picking a keyboard/mouse vs. gamepad icon set), the same
@@ -81,6 +94,7 @@ impl Plugin for GameStatePlugin {
             VRState::Desktop
         });
         app.init_state::<InputDeviceState>();
+        app.init_state::<ModalMenuState>();
         app.add_systems(Update, track_last_input_device);
     }
 }

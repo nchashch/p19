@@ -161,7 +161,11 @@ impl Default for GroundDetection {
 /// ground, meaning the steepness is less than [`GroundDetection::max_angle`].
 ///
 /// Characters that are grounded can jump, and do not slide down slopes.
-#[derive(Component)]
+///
+/// Replicated (see `shared::replication::SharedReplicationPlugin`) rather than computed
+/// client-side — the server's `update_grounded` (run as part of `CharacterControllerPlugin`,
+/// server-only) is the single source of truth, same as the rest of physics/movement resolution.
+#[derive(Component, Serialize, Deserialize, Default, Clone)]
 #[component(storage = "SparseSet")]
 pub struct Grounded;
 

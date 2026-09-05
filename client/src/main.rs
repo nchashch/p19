@@ -32,6 +32,7 @@ mod hud;
 mod input_icons;
 mod loading;
 mod localization;
+mod modal_menu;
 mod nameplate;
 mod networking;
 mod npc_spawner;
@@ -55,8 +56,8 @@ pub(crate) use add_observers_run_if;
 
 use crate::{
     animation::PAnimationPlugin, loading::LoadingPlugin, localization::LocalizationPlugin,
-    nameplate::NameplatePlugin, npc_spawner::NpcSpawnerPlugin, npc_ui_quad::NpcUiQuadPlugin,
-    vr_controllers::VrControllersPlugin,
+    modal_menu::ModalMenuPlugin, nameplate::NameplatePlugin, npc_spawner::NpcSpawnerPlugin,
+    npc_ui_quad::NpcUiQuadPlugin, vr_controllers::VrControllersPlugin,
 };
 
 fn main() {
@@ -142,6 +143,7 @@ impl Plugin for Prototype19 {
                 NameplatePlugin,
                 ui::PrototypeUiPlugin,
                 networking::NetworkingPlugin,
+                ModalMenuPlugin,
             ),
         ));
 

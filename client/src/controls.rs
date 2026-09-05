@@ -2,7 +2,8 @@ use crate::actions::*;
 use crate::add_observers_run_if;
 use crate::events::{SpawnCube, SpawnNpc};
 use crate::fps_controller::FpsCamera;
-use crate::game_state::GameState;
+use crate::game_state::{GameState, ModalMenuState};
+use crate::hud::DataFrameVisible;
 use crate::networking::PendingLevelId;
 use crate::targeting::{Hovered, SELECT_RANGE, Selected, TargetingPlugin};
 use bevy::prelude::*;
@@ -38,19 +39,24 @@ impl Plugin for PlayerControlsPlugin {
 
         app.add_observer(on_movement_stop);
 
+        add_observers_run_if!(app, console_closed, main_menu, toggle_modal_menu);
+
+        // Gameplay actions also pause while the modal menu (`modal_menu.rs`) is open — same idea
+        // as the `console_closed` gate, just for a second UI surface that shouldn't let the player
+        // keep moving/fighting underneath it.
         add_observers_run_if!(
             app,
-            console_closed,
+            console_closed.and_then(in_state(ModalMenuState::Closed)),
             attack,
             kill,
             apply_fps_camera_rotation,
-            main_menu,
             select,
             deselect,
             shoot,
             spawn_npc,
             on_jump,
             on_movement,
+            toggle_data_frame,
         );
     }
 }
@@ -75,6 +81,25 @@ fn spawn_npc(_: On<Start<SpawnNpcAction>>, mut commands: Commands) {
 
 fn main_menu(
     _: On<Start<MainMenu>>,
+    commands: Commands,
+    client: ResMut<QuinnetClient>,
+    pending_level_id: ResMut<PendingLevelId>,
+    particle_effects: Query<Entity, With<ParticleEffect>>,
+    sample_players: Query<Entity, With<SamplePlayer>>,
+) {
+    return_to_main_menu(
+        commands,
+        client,
+        pending_level_id,
+        particle_effects,
+        sample_players,
+    );
+}
+
+/// Shared by the `MainMenu` action (Escape/Start, above) and `modal_menu.rs`'s "Main Menu" button
+/// — both close the connection and drop the player back to `GameState::MainMenu` the same way, so
+/// this is factored out rather than duplicated across the two input surfaces.
+pub(crate) fn return_to_main_menu(
     mut commands: Commands,
     mut client: ResMut<QuinnetClient>,
     mut pending_level_id: ResMut<PendingLevelId>,
@@ -90,6 +115,35 @@ fn main_menu(
     client.close_all_connections();
     pending_level_id.0 = None;
     commands.set_state(GameState::MainMenu);
+}
+
+/// Opens/closes the pause modal (`modal_menu.rs`) — toggling rather than only-opening lets Tab
+/// double as its own "close" as well, alongside the modal's explicit Resume button. Also drives
+/// the cursor directly here (rather than via `ModalMenuState`'s `OnEnter`/`OnExit`, which would
+/// race `GameState`'s own cursor lock/unlock on the frame the "Main Menu" button changes both
+/// states at once) — see `modal_menu.rs`'s Resume button for the matching close-side logic.
+fn toggle_modal_menu(
+    _: On<Start<ToggleModalMenu>>,
+    state: Res<State<ModalMenuState>>,
+    mut next_state: ResMut<NextState<ModalMenuState>>,
+    mut cursor_options: Single<&mut CursorOptions>,
+) {
+    match state.get() {
+        ModalMenuState::Closed => {
+            next_state.set(ModalMenuState::Open);
+            cursor_options.visible = true;
+            cursor_options.grab_mode = CursorGrabMode::None;
+        }
+        ModalMenuState::Open => {
+            next_state.set(ModalMenuState::Closed);
+            cursor_options.visible = false;
+            cursor_options.grab_mode = CursorGrabMode::Locked;
+        }
+    }
+}
+
+fn toggle_data_frame(_: On<Start<ToggleDataFrame>>, mut data_frame_visible: ResMut<DataFrameVisible>) {
+    data_frame_visible.0 = !data_frame_visible.0;
 }
 
 fn on_movement(
@@ -239,9 +293,19 @@ pub fn player_controls() -> impl Bundle {
                 Action::<Select>::new(),
                 bindings![MouseButton::Left, GamepadButton::RightThumb],
             ));
+            /*
+                        context.spawn((
+                            Action::<MainMenu>::new(),
+                            bindings![KeyCode::Escape, GamepadButton::Start],
+                        ));
+            */
             context.spawn((
-                Action::<MainMenu>::new(),
+                Action::<ToggleModalMenu>::new(),
                 bindings![KeyCode::Escape, GamepadButton::Start],
+            ));
+            context.spawn((
+                Action::<ToggleDataFrame>::new(),
+                bindings![KeyCode::Tab, GamepadButton::Select],
             ));
             context.spawn((
                 Action::<FpsCameraRotation>::new(),

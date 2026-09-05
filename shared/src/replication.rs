@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy_replicon::prelude::*;
 
 use crate::character_controller::{
-    Character, CharacterController, DesiredMotion, GroundDetection, Idle,
+    Character, CharacterController, DesiredMotion, Grounded, GroundDetection, Idle,
 };
 use crate::client_events::{
     AttackAttempt, Jump, KillAttempt, LoadLevelRequest, Movement, SpawnCubeRequest, SpawnNpcRequest,
@@ -30,6 +30,7 @@ impl Plugin for SharedReplicationPlugin {
         app.replicate::<HitPoints>();
         app.replicate::<Gcd>();
         app.replicate::<GroundDetection>();
+        app.replicate::<Grounded>();
         app.replicate::<Collider>();
         app.replicate::<CollisionLayers>();
         app.replicate::<DesiredMotion>();

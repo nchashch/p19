@@ -24,20 +24,22 @@ impl Plugin for PrototypeUiPlugin {
     }
 }
 
-/// The `bevy_enhanced_input` context for gamepad/keyboard main-menu navigation — see
-/// `menu_controls()`. Lives on its own entity, spawned/despawned alongside the main menu itself
-/// (`DespawnOnExit(GameState::MainMenu)`), separate from `controls::PlayerControls` since that
-/// context only exists once a player character has spawned (see `player_character.rs`), which
-/// hasn't happened yet while this menu is up.
+/// The `bevy_enhanced_input` context for gamepad/keyboard directional-navigation UI — see
+/// `menu_controls()`. Lives on its own entity, separate from `controls::PlayerControls` (which
+/// only exists once a player character has spawned — see `player_character.rs`, and stays focused
+/// on gameplay actions, not UI navigation). Two independent call sites spawn one of these, each
+/// tagged with its own lifetime-matching `DespawnOnExit`: the main menu itself (below, scoped to
+/// `GameState::MainMenu`) and `modal_menu.rs`'s pause menu (scoped to `ModalMenuState::Open`) —
+/// they're never both alive at once, so reusing the same context type/bindings for both is safe.
 #[derive(Component, Reflect, Default)]
 #[reflect(Component)]
-struct MenuControls;
+pub(crate) struct MenuControls;
 
 fn spawn_menu_controls(mut commands: Commands) {
     commands.spawn((menu_controls(), DespawnOnExit(GameState::MainMenu)));
 }
 
-fn menu_controls() -> impl Bundle {
+pub(crate) fn menu_controls() -> impl Bundle {
     (
         MenuControls,
         Actions::<MenuControls>::spawn(SpawnWith(|context: &mut ActionSpawner<_>| {
@@ -60,6 +62,20 @@ fn menu_controls() -> impl Bundle {
             ));
             context.spawn((
                 Action::<UiConfirm>::new(),
+                // Without this, confirming a button that causes `MenuControls` itself to
+                // despawn-and-respawn on the very same input (e.g. `modal_menu.rs`'s "Main Menu"
+                // button, closing the modal and dropping straight into a fresh main-menu
+                // `MenuControls` with `Play` auto-focused) reads the still-held South/Enter as a
+                // brand-new press on the new context's own `Press` condition (a fresh component,
+                // so it has no memory of the input already being down) and immediately activates
+                // whatever's newly focused. `require_reset` is `bevy_enhanced_input`'s built-in
+                // fix for exactly this: it tracks the physical binding globally (not per-context),
+                // so a still-held button stays ignored across a context respawn until it's
+                // actually released. See `ActionSettings::require_reset`'s doc comment.
+                ActionSettings {
+                    require_reset: true,
+                    ..default()
+                },
                 Press::new(1.0),
                 bindings![GamepadButton::South, KeyCode::Enter],
             ));
