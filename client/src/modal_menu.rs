@@ -1,11 +1,12 @@
 use crate::controls::return_to_main_menu;
-use crate::game_state::{GameState, InputDeviceState, ModalMenuState};
+use crate::game_state::{GameState, InputDeviceState, ModalMenuState, VRState};
 use crate::input_icons::{
     GAMEPAD_LOOK_STICK_ICON_PNG, GAMEPAD_MOVE_STICK_ICON_PNG, MOUSE_MOVE_ICON_PNG,
     gamepad_button_icon_png, key_code_icon_png, mouse_button_icon_png,
 };
 use crate::localization::LocalizedText;
 use crate::networking::PendingLevelId;
+use crate::quad_panel::quad_panel;
 use crate::ui::menu_controls;
 use crate::widgets::{Activate, SERIF_FONT, button, panel};
 use bevy::color::palettes::css::WHITE;
@@ -14,8 +15,11 @@ use bevy::prelude::*;
 use bevy::text::FontSourceTemplate;
 use bevy::window::{CursorGrabMode, CursorOptions};
 use bevy_hanabi::ParticleEffect;
+use bevy_mod_xr::session::XrTrackingRoot;
 use bevy_quinnet::client::QuinnetClient;
 use bevy_seedling::sample::SamplePlayer;
+use bevy_xr_utils::tracking_utils::XrTrackedLeftGrip;
+use std::f32::consts::FRAC_PI_2;
 
 /// The in-game pause menu — see `game_state::ModalMenuState`. Opened/closed by
 /// `controls::toggle_modal_menu` (Escape/`GamepadButton::Start`). Besides its two buttons, this is
@@ -35,6 +39,11 @@ impl Plugin for ModalMenuPlugin {
         // disconnect/kick path, so a later `Play` never starts with a stale `Open` state.
         app.add_systems(OnExit(GameState::InGame), close_modal_menu);
         app.add_systems(Update, update_controls_tips_visibility);
+        app.add_systems(
+            Update,
+            spawn_vr_in_game_wrist_panel
+                .run_if(in_state(GameState::InGame).and_then(in_state(VRState::VR))),
+        );
     }
 }
 
@@ -99,6 +108,7 @@ fn main_menu_button(
     pending_level_id: ResMut<PendingLevelId>,
     particle_effects: Query<Entity, With<ParticleEffect>>,
     sample_players: Query<Entity, With<SamplePlayer>>,
+    xr_root: Query<Entity, With<XrTrackingRoot>>,
 ) {
     return_to_main_menu(
         commands,
@@ -106,7 +116,83 @@ fn main_menu_button(
         pending_level_id,
         particle_effects,
         sample_players,
+        xr_root,
     );
+}
+
+const IN_GAME_WRIST_PANEL_WIDTH: f32 = 0.18;
+const IN_GAME_WRIST_PANEL_HEIGHT: f32 = 0.095;
+const IN_GAME_WRIST_PANEL_TEXTURE_WIDTH: u32 = 420;
+const IN_GAME_WRIST_PANEL_TEXTURE_HEIGHT: u32 = 220;
+
+/// Marks the spawned in-game wrist panel so `spawn_vr_in_game_wrist_panel` doesn't spawn a second
+/// one — see that system's doc comment for why it has to poll rather than spawn once on
+/// `OnEnter(GameState::InGame)`.
+#[derive(Component)]
+struct VrInGameWristPanel;
+
+/// Same single-button content on every `quad_panel`, reusing `main_menu_button` directly — a VR
+/// player presses this exactly the way they'd press the pause modal's own "Main Menu" button,
+/// just without needing to open the pause modal first.
+fn in_game_wrist_menu() -> impl Scene {
+    bsn! {
+        panel(px(300), px(120))
+        Children [
+            (
+                button(px(240), px(70), "modal-menu-main-menu")
+                on(main_menu_button)
+            ),
+        ]
+    }
+}
+
+/// Spawns a `quad_panel` with a single "Main Menu" button, attached to the left controller's
+/// tracked grip pose — the always-available VR equivalent of the pause modal's own "Main Menu"
+/// button, for a player who wants to quit to the main menu without first opening the pause modal.
+///
+/// Runs every frame while `GameState::InGame` and `VRState::VR`, rather than once on
+/// `OnEnter(GameState::InGame)` — same reasoning as `ui::spawn_vr_main_menu_wrist_panel`: the
+/// `XrTrackedLeftGrip`-marked entity this parents onto comes from a one-shot `Startup` system
+/// (`vr_controllers::spawn_controller_cubes`) that itself depends on the real OpenXR session
+/// having come up, which takes observable wall-clock time — an `OnEnter`-based spawn here would
+/// race that and could easily find zero matching entities. Polling instead just tries again next
+/// frame until the grip entity exists, then spawns exactly once (`VrInGameWristPanel`, checked
+/// before spawning) and becomes a no-op afterward.
+fn spawn_vr_in_game_wrist_panel(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    left_grip: Query<Entity, With<XrTrackedLeftGrip>>,
+    existing: Query<(), With<VrInGameWristPanel>>,
+) {
+    if !existing.is_empty() {
+        return;
+    }
+    let Ok(left_grip) = left_grip.single() else {
+        return; // XR tracking hasn't come up yet — try again next frame
+    };
+
+    let panel = quad_panel(
+        &mut commands,
+        &mut images,
+        &mut meshes,
+        &mut materials,
+        IN_GAME_WRIST_PANEL_WIDTH,
+        IN_GAME_WRIST_PANEL_HEIGHT,
+        IN_GAME_WRIST_PANEL_TEXTURE_WIDTH,
+        IN_GAME_WRIST_PANEL_TEXTURE_HEIGHT,
+        in_game_wrist_menu(),
+    );
+    commands.spawn((
+        panel,
+        VrInGameWristPanel,
+        // Same offset/rotation guess as `ui::spawn_vr_main_menu_wrist_panel` — see that system's
+        // doc comment for why it's unverified on real hardware and how to nudge it.
+        Transform::from_xyz(0.0, 0.12, 0.0).with_rotation(Quat::from_rotation_x(-FRAC_PI_2)),
+        ChildOf(left_grip),
+        DespawnOnExit(GameState::InGame),
+    ));
 }
 
 /// Closes the modal and hands control back to gameplay — `GameState` never left `InGame` while

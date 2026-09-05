@@ -29,7 +29,10 @@ pub fn npc(shape: Collider, translation: Vec3) -> impl Bundle {
         Transform::from_translation(translation),
         RigidBody::Dynamic,
         shape,
-        CollisionLayers::new(GameLayer::Npc, LayerMask::ALL & !LayerMask::from(GameLayer::Player)),
+        CollisionLayers::new(
+            GameLayer::Npc,
+            LayerMask::ALL & !LayerMask::from(GameLayer::Player),
+        ),
         LockedAxes::new()
             .lock_rotation_x()
             .lock_rotation_y()

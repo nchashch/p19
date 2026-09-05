@@ -5,40 +5,42 @@
 //! (`npc_spawner::decorate_npcs`) instead of a spinning cube. The quad is a child with a fixed
 //! local *translation* (it sits above the NPC's head) but `billboard_npc_ui_quads` overrides its
 //! local *rotation* every frame so it always faces the player's camera, unlike `rig.glb`, which
-//! rotates rigidly with the NPC — a flat panel of text/a button reads far worse edge-on or facing
-//! away than a `rig.glb`-style mesh does, which is fine from any angle.
+//! rotates rigidly with the NPC — a flat panel of text reads far worse edge-on or facing away than
+//! a `rig.glb`-style mesh does, which is fine from any angle.
 //!
 //! One shared render target/camera/UI root for every NPC, not one per instance — the UI content
-//! here is static (an "NPC" label and a "Kill" button), so there's nothing per-NPC to render
-//! differently. A version that showed each NPC's own name/HP would need its own `Image`/
-//! `Camera2d`/UI root per entity instead of sharing `NpcUiQuad`.
+//! here is static (just an "NPC" label), so there's nothing per-NPC to render differently. This
+//! used to also carry a real, clickable "Kill" button (driven by a virtual pointer fed into
+//! `bevy_ui`'s picking pipeline) — removed. That button was a single shared entity rendered once
+//! into this one shared texture, so its own hover/press state was inherently global: hovering it
+//! through *any* one NPC's quad visually highlighted *all* of them at once, since every quad
+//! displays the exact same rendered image. A real per-NPC button would need its own `Image`/
+//! `Camera2d`/UI root per entity instead of sharing `NpcUiQuad` (same as a version showing each
+//! NPC's own name/HP would). Given that cost, clicking the nameplate now just selects the NPC
+//! instead (`update_npc_ui_quad_target`) — the existing hotbar's Kill ability already covers what
+//! the button did, once something is selected.
 //!
-//! The "Kill" button is real `bevy_ui` content (`widgets::button`, with its normal hover/press
-//! observers), driven by a virtual pointer rather than the real mouse — same technique as the
-//! Bevy example's own `drive_diegetic_pointer`, but using the crosshair's screen-center ray
-//! (`targeting::screen_center_ray`, the same one `targeting::raycast_from_center` uses for world
-//! selection) instead of the window cursor position, and `bevy_picking`'s `MeshRayCast` instead of
-//! Avian's `SpatialQuery` — Avian's `RayHitData` has no UV coordinate on the hit surface, which is
-//! exactly what's needed to turn "the ray hit this quad here" into "the pointer is at this pixel
-//! on the render texture."
+//! Hover *feedback* for "which NPC's nameplate is under the pointer" still needs to be per-quad,
+//! though, and — unlike a real UI element's state — that's easy to give it even while sharing one
+//! texture: see `update_npc_ui_quad_hover_material`.
 
 use bevy::{
-    asset::{RenderAssetUsages, uuid::Uuid},
+    asset::RenderAssetUsages,
     camera::RenderTarget,
     color::palettes::css::{DARK_SLATE_GRAY, WHITE_SMOKE},
-    picking::{
-        PickingSystems,
-        pointer::{Location, PointerAction, PointerButton, PointerId, PointerInput},
-    },
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages},
     text::FontSourceTemplate,
 };
-use bevy_replicon::prelude::ClientTriggerExt;
-use shared::client_events::KillAttempt;
+use bevy_mod_openxr::openxr_session_running;
+use bevy_xr_utils::{
+    actions::XRUtilsActionState,
+    tracking_utils::{XrTrackedLeftGrip, XrTrackedRightGrip},
+};
 
-use crate::targeting::screen_center_ray;
-use crate::widgets::{Activate, SERIF_FONT, button};
+use crate::targeting::{SELECT_RANGE, Selected, screen_center_ray};
+use crate::vr_controllers::{LeftTriggerAction, RightTriggerAction, analog_just_pressed};
+use crate::widgets::SERIF_FONT;
 
 pub struct NpcUiQuadPlugin;
 
@@ -46,40 +48,52 @@ impl Plugin for NpcUiQuadPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<NpcUiQuadTarget>();
         app.add_systems(Startup, setup_npc_ui_quad);
-        app.add_systems(Update, billboard_npc_ui_quads);
-        // Same schedule/set the Bevy example this is based on uses for its own virtual pointer —
-        // `PickingSystems::Input` is where real pointer backends (mouse, touch) also turn raw
-        // input into `PointerInput` events, so this needs to run alongside them, before hit-testing
-        // consumes whatever `PointerInput`s exist for this frame.
         app.add_systems(
-            First,
-            drive_npc_ui_quad_pointer.in_set(PickingSystems::Input),
+            Update,
+            (
+                billboard_npc_ui_quads,
+                update_npc_ui_quad_hover_material,
+                update_npc_ui_quad_target,
+                update_npc_ui_quad_target_vr.run_if(openxr_session_running),
+            ),
         );
     }
 }
 
-/// The quad mesh + material every NPC's sign uses — see `npc_spawner::decorate_npcs`. Also holds
-/// the texture camera's entity, so `drive_npc_ui_quad_pointer` can look up its `RenderTarget`
-/// without a separate query/marker just for that one entity.
+/// The quad mesh + material every NPC's sign uses — see `npc_spawner::decorate_npcs`.
 #[derive(Resource, Clone)]
 pub struct NpcUiQuad {
     pub mesh: Handle<Mesh>,
     pub material: Handle<StandardMaterial>,
-    texture_camera: Entity,
+    /// Swapped onto whichever quad a pointer currently targets — see
+    /// `update_npc_ui_quad_hover_material`.
+    material_hovered: Handle<StandardMaterial>,
 }
 
-/// Marks the quad mesh entity itself (not the NPC it's parented to) so `drive_npc_ui_quad_pointer`
+/// Marks the quad mesh entity itself (not the NPC it's parented to) so the target-tracking systems
 /// can filter `MeshRayCast` down to just these — casting against every mesh in the level every
 /// frame would be needlessly expensive and could hit unrelated geometry.
 #[derive(Component, Clone, Default)]
 pub struct NpcUiQuadMesh;
 
-/// Which NPC (if any) the crosshair is currently over a UI quad for — read by the "Kill" button's
-/// own `Activate` observer to know which entity to dispatch `KillAttempt` against, since the
-/// button entity itself is shared across every NPC's quad (see the module doc comment) and has no
-/// way to know on its own which quad it was clicked through.
+/// Which pointer source a `NpcUiQuadTarget` entry came from — an internal stand-in for
+/// `bevy_picking::pointer::PointerId`, which this module no longer needs (nothing here feeds
+/// `bevy_ui`'s picking pipeline any more — see the module doc comment). Just needs to distinguish
+/// concurrent independent rays: the desktop crosshair and each VR controller's laser.
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+enum PointerSource {
+    Desktop,
+    VrLeft,
+    VrRight,
+}
+
+/// Which NPC (if any) each pointer source currently has its ray over a UI quad for — read by
+/// `update_npc_ui_quad_hover_material` for the tint, and by `update_npc_ui_quad_target`/`_vr`
+/// themselves to decide what a press selects. Keyed by `PointerSource` rather than a single
+/// `Option<Entity>` since more than one ray can be live at once (desktop crosshair + two VR
+/// lasers) and each should track its own target independently.
 #[derive(Resource, Default)]
-struct NpcUiQuadTarget(Option<Entity>);
+struct NpcUiQuadTarget(bevy::platform::collections::HashMap<PointerSource, Entity>);
 
 const TEXTURE_SIZE: u32 = 256;
 const QUAD_WIDTH: f32 = 0.8;
@@ -126,10 +140,8 @@ fn setup_npc_ui_quad(
             Node {
                 width: percent(100),
                 height: percent(100),
-                flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
-                row_gap: px(12),
             }
             BackgroundColor(DARK_SLATE_GRAY)
             Children [
@@ -141,10 +153,6 @@ fn setup_npc_ui_quad(
                         font_size: px(64),
                     }
                 ),
-                (
-                    button(px(140), px(50), "hud-npc-kill")
-                    on(on_kill_button)
-                ),
             ]
         })
         // `UiTargetCamera` doesn't implement `FromTemplate`, so it can't be constructed through
@@ -152,15 +160,17 @@ fn setup_npc_ui_quad(
         // directly instead, same effect.
         .insert(UiTargetCamera(texture_camera));
 
-    // The pointer this whole module drives — see `drive_npc_ui_quad_pointer`. A stable id is
-    // needed since (per `PointerId`'s own docs) pointers can be spawned/despawned independently of
-    // any one entity; `Uuid::from_u128` with an arbitrary fixed constant is the same pattern the
-    // Bevy example this is based on uses for its own virtual pointer.
-    commands.spawn(NPC_UI_QUAD_POINTER_ID);
-
     let mesh = meshes.add(Rectangle::new(QUAD_WIDTH, QUAD_HEIGHT));
     let material = materials.add(StandardMaterial {
+        base_color_texture: Some(image_handle.clone()),
+        unlit: true,
+        ..default()
+    });
+    // A second material for whichever quad a pointer currently targets — see
+    // `update_npc_ui_quad_hover_material`. Same texture, just a brighter tint multiplied over it.
+    let material_hovered = materials.add(StandardMaterial {
         base_color_texture: Some(image_handle),
+        base_color: Color::srgb(1.3, 1.3, 0.9),
         unlit: true,
         ..default()
     });
@@ -168,13 +178,36 @@ fn setup_npc_ui_quad(
     commands.insert_resource(NpcUiQuad {
         mesh,
         material,
-        texture_camera,
+        material_hovered,
     });
 }
 
-fn on_kill_button(_event: On<Activate>, target: Res<NpcUiQuadTarget>, mut commands: Commands) {
-    if let Some(entity) = target.0 {
-        commands.client_trigger(KillAttempt { entity });
+/// Tints whichever NPC's quad a pointer currently targets. This has to be driven separately from
+/// each quad's shared render texture (rather than, say, a button's own hover-driven
+/// `BackgroundColor`) precisely because that texture is shared across every NPC — see the module
+/// doc comment. Each quad entity has its own `MeshMaterial3d` component, though (see
+/// `npc_spawner::decorate_npcs`), even though every one of them starts out pointing at the same
+/// handle — swapping just the targeted quad's handle to `NpcUiQuad::material_hovered` doesn't
+/// touch any other quad's.
+fn update_npc_ui_quad_hover_material(
+    npc_ui_quad: Res<NpcUiQuad>,
+    target: Res<NpcUiQuadTarget>,
+    parents: Query<&ChildOf>,
+    mut quads: Query<(Entity, &mut MeshMaterial3d<StandardMaterial>), With<NpcUiQuadMesh>>,
+) {
+    for (quad_entity, mut material) in &mut quads {
+        let hovered = parents
+            .get(quad_entity)
+            .ok()
+            .is_some_and(|child_of| target.0.values().any(|&npc| npc == child_of.parent()));
+        let handle = if hovered {
+            &npc_ui_quad.material_hovered
+        } else {
+            &npc_ui_quad.material
+        };
+        if material.0 != *handle {
+            material.0 = handle.clone();
+        }
     }
 }
 
@@ -215,43 +248,66 @@ fn billboard_npc_ui_quads(
     }
 }
 
-const NPC_UI_QUAD_POINTER_ID: PointerId =
-    PointerId::Custom(Uuid::from_u128(0x4e5043_5549_5051_4144_000000000000));
+/// Casts `ray` against NPC UI quads, resolves the hit to its parent NPC, and records that as
+/// `source`'s current target (or clears it, on a miss) — shared by the desktop crosshair
+/// (`update_npc_ui_quad_target`) and each VR controller's laser (`update_npc_ui_quad_target_vr`).
+/// On `pressed`, selects that NPC exactly like `controls::select`/`vr_controllers::try_select` do
+/// for a world `Selectable` hit (same `SELECT_RANGE` check) — clicking the nameplate is meant to
+/// be equivalent to clicking the NPC's own capsule, not a separate mechanic.
+fn update_quad_target(
+    source: PointerSource,
+    ray: Ray3d,
+    pressed: bool,
+    ray_cast: &mut MeshRayCast,
+    quads: &Query<(), With<NpcUiQuadMesh>>,
+    parents: &Query<&ChildOf>,
+    target: &mut NpcUiQuadTarget,
+    selected: &mut Selected,
+) {
+    let settings = MeshRayCastSettings {
+        visibility: RayCastVisibility::VisibleInView,
+        filter: &|entity| quads.contains(entity),
+        early_exit_test: &|_| false,
+    };
 
-/// Off-canvas sentinel position for when the crosshair isn't over any NPC's quad this frame —
-/// moving the virtual pointer here (rather than simply not sending a `Move` event) is what makes
-/// the "Kill" button's hover state actually clear once you look away from it; `bevy_picking`
-/// re-hit-tests off each pointer's last known location every frame, not off whether a fresh event
-/// arrived, so a pointer left sitting on the button's last position would read as still-hovered
-/// forever.
-const OFF_CANVAS: Vec2 = Vec2::new(-1.0, -1.0);
+    let hit = ray_cast
+        .cast_ray(ray, &settings)
+        .first()
+        .map(|(entity, hit)| (*entity, hit.distance));
 
-/// Feeds the crosshair ray into `bevy_ui`'s normal picking pipeline as a synthetic pointer, so
-/// `hud.rs`'s reticle can hover/click real `bevy_ui` content (the "Kill" button) the same way a
-/// real cursor would — see the module doc comment for why `MeshRayCast` instead of `SpatialQuery`.
-fn drive_npc_ui_quad_pointer(
-    mut last_position: Local<Vec2>,
+    let hit_npc = hit.and_then(|(quad_entity, distance)| {
+        Some((parents.get(quad_entity).ok()?.parent(), distance))
+    });
+
+    match hit_npc {
+        Some((npc, _)) => {
+            target.0.insert(source, npc);
+        }
+        None => {
+            target.0.remove(&source);
+        }
+    }
+
+    if pressed
+        && let Some((npc, distance)) = hit_npc
+        && distance < SELECT_RANGE
+    {
+        selected.0 = Some(npc);
+    }
+}
+
+/// Drives the desktop crosshair's `PointerSource::Desktop` entry from the screen-center ray + left
+/// mouse button.
+fn update_npc_ui_quad_target(
     mut ray_cast: MeshRayCast,
     camera_query: Query<(&Camera, &GlobalTransform), With<IsDefaultUiCamera>>,
     window_query: Query<&Window>,
-    npc_ui_quad: Option<Res<NpcUiQuad>>,
     quads: Query<(), With<NpcUiQuadMesh>>,
     parents: Query<&ChildOf>,
-    render_targets: Query<&RenderTarget>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut target: ResMut<NpcUiQuadTarget>,
-    mut pointer_inputs: MessageWriter<PointerInput>,
+    mut selected: ResMut<Selected>,
 ) {
-    let Some(npc_ui_quad) = npc_ui_quad else {
-        return; // not ready yet (only true for the first frame or so after Startup)
-    };
-    let Ok(render_target) = render_targets.get(npc_ui_quad.texture_camera) else {
-        return;
-    };
-    let Some(normalized_target) = render_target.normalize(None) else {
-        return;
-    };
-
     let Ok((camera, camera_transform)) = camera_query.single() else {
         return;
     };
@@ -262,61 +318,61 @@ fn drive_npc_ui_quad_pointer(
         return;
     };
 
-    let settings = MeshRayCastSettings {
-        visibility: RayCastVisibility::VisibleInView,
-        filter: &|entity| quads.contains(entity),
-        early_exit_test: &|_| false,
-    };
+    update_quad_target(
+        PointerSource::Desktop,
+        ray,
+        mouse_buttons.just_pressed(MouseButton::Left),
+        &mut ray_cast,
+        &quads,
+        &parents,
+        &mut target,
+        &mut selected,
+    );
+}
 
-    let hit = ray_cast
-        .cast_ray(ray, &settings)
-        .first()
-        .and_then(|(quad_entity, hit)| Some((*quad_entity, hit.uv?)));
+/// Drives `PointerSource::VrLeft`/`VrRight` from each controller's laser ray (same -Z
+/// grip-forward convention as `vr_controllers::controller_ray_hit` — see its doc comment) and
+/// trigger. Each hand's press-edge state (`left_trigger_held`/`right_trigger_held`) is this
+/// system's own, independent of `vr_controllers::update_vr_pointers`'s identically-named locals —
+/// the same physical trigger press is meant to drive *both* world-object select and this quad's
+/// nameplate-click select, whichever the ray actually hits, and each needs to track "was it
+/// already held" for its own purposes.
+fn update_npc_ui_quad_target_vr(
+    mut left_trigger_held: Local<bool>,
+    mut right_trigger_held: Local<bool>,
+    mut ray_cast: MeshRayCast,
+    quads: Query<(), With<NpcUiQuadMesh>>,
+    parents: Query<&ChildOf>,
+    left_grip: Single<&GlobalTransform, With<XrTrackedLeftGrip>>,
+    right_grip: Single<&GlobalTransform, With<XrTrackedRightGrip>>,
+    left_trigger: Single<&XRUtilsActionState, With<LeftTriggerAction>>,
+    right_trigger: Single<&XRUtilsActionState, With<RightTriggerAction>>,
+    mut target: ResMut<NpcUiQuadTarget>,
+    mut selected: ResMut<Selected>,
+) {
+    let left_pressed = analog_just_pressed(&left_trigger, &mut left_trigger_held);
+    let left_ray = Ray3d::new(left_grip.translation(), left_grip.forward());
+    update_quad_target(
+        PointerSource::VrLeft,
+        left_ray,
+        left_pressed,
+        &mut ray_cast,
+        &quads,
+        &parents,
+        &mut target,
+        &mut selected,
+    );
 
-    let (position, hit_npc) = match hit {
-        Some((quad_entity, uv)) => (
-            uv * TEXTURE_SIZE as f32,
-            parents.get(quad_entity).ok().map(ChildOf::parent),
-        ),
-        None => (OFF_CANVAS, None),
-    };
-    target.0 = hit_npc;
-
-    if position != *last_position {
-        pointer_inputs.write(PointerInput::new(
-            NPC_UI_QUAD_POINTER_ID,
-            Location {
-                target: normalized_target.clone(),
-                position,
-            },
-            PointerAction::Move {
-                delta: position - *last_position,
-            },
-        ));
-        *last_position = position;
-    }
-
-    // Only meaningful while actually hovering a quad — off-canvas, nothing is there to press.
-    if hit_npc.is_some() {
-        if mouse_buttons.just_pressed(MouseButton::Left) {
-            pointer_inputs.write(PointerInput::new(
-                NPC_UI_QUAD_POINTER_ID,
-                Location {
-                    target: normalized_target.clone(),
-                    position,
-                },
-                PointerAction::Press(PointerButton::Primary),
-            ));
-        }
-        if mouse_buttons.just_released(MouseButton::Left) {
-            pointer_inputs.write(PointerInput::new(
-                NPC_UI_QUAD_POINTER_ID,
-                Location {
-                    target: normalized_target,
-                    position,
-                },
-                PointerAction::Release(PointerButton::Primary),
-            ));
-        }
-    }
+    let right_pressed = analog_just_pressed(&right_trigger, &mut right_trigger_held);
+    let right_ray = Ray3d::new(right_grip.translation(), right_grip.forward());
+    update_quad_target(
+        PointerSource::VrRight,
+        right_ray,
+        right_pressed,
+        &mut ray_cast,
+        &quads,
+        &parents,
+        &mut target,
+        &mut selected,
+    );
 }

@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use bevy_mod_outline::{AsyncWorldInheritOutline, OutlinePlugin, OutlineVolume};
 use shared::player::Selectable;
 
+use crate::game_state::VRState;
 use crate::player_character::LocalPlayer;
 
 pub struct TargetingPlugin;
@@ -15,7 +16,10 @@ impl Plugin for TargetingPlugin {
         app.add_systems(
             Update,
             (
-                raycast_from_center,
+                // VR has its own hover/select input (`vr_controllers::update_vr_pointers`, one
+                // raycast per controller) — the screen-center crosshair ray makes no sense once
+                // there's no fixed "center of the screen" the player is actually looking through.
+                raycast_from_center.run_if(in_state(VRState::Desktop)),
                 update_outline_hovered_selected,
                 deselect_when_out_of_range,
             ),

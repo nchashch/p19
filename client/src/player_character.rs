@@ -69,10 +69,15 @@ pub fn on_player_spawned(
         .with_children(|parent| {
             parent.spawn(controls::player_controls());
             parent
-                .spawn((Transform::from_xyz(0., 0.5, 0.),))
+                // `Visibility::default()` on these two plain transform-anchor entities matters
+                // for the same reason `PlayerCharacter`'s `#[require(Visibility)]` does (see
+                // `shared::player`) — without it, the chain from `Player` down to the camera
+                // (which does have `Visibility`, via `Camera3d`) breaks here instead, producing
+                // the same `bevy_app::hierarchy` B0004 warning one link further down.
+                .spawn((Transform::from_xyz(0., 0.5, 0.), Visibility::default()))
                 .with_children(|parent| {
                     parent
-                        .spawn((FpsCamera::new(), Transform::IDENTITY))
+                        .spawn((FpsCamera::new(), Transform::IDENTITY, Visibility::default()))
                         .with_children(|parent| {
                             parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), CubeSpawner));
                             parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), NpcSpawner));

@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use bevy_replicon::prelude::*;
 
 use crate::character_controller::{
-    Character, CharacterController, DesiredMotion, Grounded, GroundDetection, Idle,
+    Character, CharacterController, DesiredMotion, GroundDetection, Grounded, Idle,
 };
 use crate::client_events::{
     AttackAttempt, Jump, KillAttempt, LoadLevelRequest, Movement, SpawnCubeRequest, SpawnNpcRequest,
