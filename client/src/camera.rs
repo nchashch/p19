@@ -3,12 +3,13 @@ use bevy::{
     anti_alias::taa::TemporalAntiAliasing,
     pbr::{DistanceFog, FogFalloff, ScreenSpaceAmbientOcclusion},
     prelude::*,
-    render::render_resource::{TextureViewDescriptor, TextureViewDimension},
 };
+use bevy_mod_xr::camera::XrCamera;
 
-/// Matches `main.rs`'s `ClearColor` — with the skybox disabled (see `player_camera`), the
-/// background behind un-fogged geometry *is* the clear color, so fog needs the same tint to blend
-/// into it instead of fading distant geometry to a visibly different flat color.
+/// Matches `main.rs`'s `ClearColor` — a fallback background for whatever the skybox doesn't
+/// cover (there's always a moment before `skyboxes/night_sky.ktx2` finishes streaming in where
+/// nothing is rendered there yet), so fog blends into that instead of a visibly different flat
+/// color in the meantime.
 const FOG_COLOR: Color = Color::srgb(0.1, 0.1, 0.15);
 /// Chosen relative to existing gameplay distances rather than arbitrarily: `targeting::SELECT_RANGE`
 /// and `nameplate.rs`'s `FADE_END_DISTANCE` (30.0) are both well inside `FOG_START`, so fog never
@@ -16,84 +17,70 @@ const FOG_COLOR: Color = Color::srgb(0.1, 0.1, 0.15);
 const FOG_START: f32 = 40.0;
 const FOG_END: f32 = 180.0;
 
-pub struct PlayerCameraPlugin;
+/// Scales `skyboxes/night_sky.ktx2`'s stored HDR values (roughly 0.006-2.0, per the source HDRI —
+/// see `scripts/hdri_to_skybox.py`) into the candela-per-square-meter units `Skybox::brightness`
+/// expects. Tuned by eye for a dim-but-visible night sky against this project's existing lighting
+/// (`main.rs`'s `GlobalAmbientLight`); adjust here if the sky reads too bright/dark after other
+/// lighting changes.
+const SKYBOX_BRIGHTNESS: f32 = 100.0;
 
-impl Plugin for PlayerCameraPlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(Cubemap {
-            is_loaded: false,
-            image_handle: None,
-        });
-        app.add_systems(Update, cubemap_loaded);
+fn distance_fog() -> DistanceFog {
+    DistanceFog {
+        color: FOG_COLOR,
+        falloff: FogFalloff::Linear {
+            start: FOG_START,
+            end: FOG_END,
+        },
+        ..default()
     }
 }
 
-pub fn player_camera(asset_server: &Res<AssetServer>, cubemap: &mut Cubemap) -> impl Bundle {
-    let skybox_handle = asset_server.load("Ryfjallet_cubemap.png");
-    cubemap.is_loaded = false;
-    cubemap.image_handle = Some(skybox_handle.clone());
+fn skybox(asset_server: &AssetServer) -> Skybox {
+    // Unlike the old PNG-vertical-strip cubemap this replaces, a KTX2 file carries its own
+    // cubemap metadata (see `scripts/hdri_to_skybox.py`'s doc comment) — Bevy's KTX2 loader
+    // detects the 6 faces and sets up `TextureViewDimension::Cube` automatically, so this can
+    // just be loaded and inserted directly, with no manual "wait for load, then reinterpret
+    // the texture" dance required (that machinery lived here before; see git history).
+    Skybox {
+        image: Some(asset_server.load("skyboxes/night_sky.ktx2")),
+        brightness: SKYBOX_BRIGHTNESS,
+        ..default()
+    }
+}
+
+pub fn player_camera(asset_server: &Res<AssetServer>) -> impl Bundle {
     (
         Camera3d::default(),
         IsDefaultUiCamera,
         Msaa::Off,
         TemporalAntiAliasing::default(),
         ScreenSpaceAmbientOcclusion::default(),
-        DistanceFog {
-            color: FOG_COLOR,
-            falloff: FogFalloff::Linear {
-                start: FOG_START,
-                end: FOG_END,
-            },
-            ..default()
-        },
-        /*
-                Skybox {
-                    image: Some(skybox_handle.clone()),
-                    brightness: 1000.0,
-                    ..default()
-                },
-        */
+        distance_fog(),
+        skybox(asset_server),
     )
 }
 
-#[derive(Resource)]
-pub struct Cubemap {
-    is_loaded: bool,
-    image_handle: Option<Handle<Image>>,
+pub struct PlayerCameraPlugin;
+
+impl Plugin for PlayerCameraPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_observer(on_xr_camera_added);
+    }
 }
 
-fn cubemap_loaded(
+/// In VR, rendering goes through separate `XrCamera` entities (one per eye — spawned by
+/// `bevy_openxr`'s view-setup code with only a bare default `Camera3d`, entirely independent of
+/// the `Camera3d` `player_camera()` spawns), so `Skybox`/`DistanceFog`/etc. on our own camera
+/// never reach them. An `On<Add, XrCamera>` observer rather than a polling system, per this
+/// project's component-lifecycle convention — these entities are created at a time relative to
+/// session startup that nothing else here controls (see `camera.rs`'s git history / CLAUDE.md
+/// for the broader pattern of XR entities appearing later than `Startup`/`OnEnter`).
+fn on_xr_camera_added(
+    added: On<Add, XrCamera>,
+    mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut images: ResMut<Assets<Image>>,
-    mut cubemap: ResMut<Cubemap>,
-    mut skyboxes: Query<&mut Skybox>,
 ) {
-    if cubemap.image_handle.is_none() {
-        return;
-    }
-    if !cubemap.is_loaded
-        && asset_server
-            .load_state(&cubemap.image_handle.clone().unwrap())
-            .is_loaded()
-    {
-        let mut image = images
-            .get_mut(&cubemap.image_handle.clone().unwrap())
-            .unwrap();
-        // NOTE: PNGs do not have any metadata that could indicate they contain a cubemap texture,
-        // so they appear as one texture. The following code reconfigures the texture as necessary.
-        if image.texture_descriptor.array_layer_count() == 1 {
-            let layers = image.height() / image.width();
-            image
-                .reinterpret_stacked_2d_as_array(layers)
-                .expect("asset should be 2d texture and height will always be evenly divisible with the given layers");
-            image.texture_view_descriptor = Some(TextureViewDescriptor {
-                dimension: Some(TextureViewDimension::Cube),
-                ..default()
-            });
-        }
-        for mut skybox in &mut skyboxes {
-            skybox.image = cubemap.image_handle.clone();
-        }
-        cubemap.is_loaded = true;
-    }
+    commands
+        .entity(added.entity)
+        .insert((distance_fog(), skybox(&asset_server)));
 }

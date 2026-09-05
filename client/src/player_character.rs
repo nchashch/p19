@@ -1,5 +1,5 @@
 use crate::{
-    camera::{Cubemap, PlayerCameraPlugin, player_camera},
+    camera::{PlayerCameraPlugin, player_camera},
     combat::CombatPlugin,
     controls::{self, PlayerControlsPlugin},
     fps_controller::FpsCamera,
@@ -60,7 +60,6 @@ pub fn on_player_spawned(
     spawned: On<PlayerSpawned>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut cubemap: ResMut<Cubemap>,
 ) {
     commands.insert_resource(LocalPlayer(Some(spawned.entity)));
     commands
@@ -81,7 +80,7 @@ pub fn on_player_spawned(
                         .with_children(|parent| {
                             parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), CubeSpawner));
                             parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), NpcSpawner));
-                            parent.spawn(player_camera(&asset_server, &mut cubemap));
+                            parent.spawn(player_camera(&asset_server));
                         });
                 });
         });
