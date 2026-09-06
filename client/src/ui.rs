@@ -119,7 +119,7 @@ fn main_menu() -> impl Scene {
             justify_content: JustifyContent::Start,
         }
         Children [ main_menu_buttons() ]
-        WorldAssetRoot("MenuBackground.glb#Scene0")
+        WorldAssetRoot("models/MenuBackground.glb#Scene0")
         DespawnOnExit::<GameState>(GameState::MainMenu)
     }
 }

@@ -26,7 +26,7 @@ impl Plugin for PAnimationPlugin {
     }
 }
 
-const MODEL: &str = "rig.glb";
+const MODEL: &str = "models/rig.glb";
 // const ANIMATION_NAME: &str = "metarigAction";
 const ANIMATION_NAME: &str = "idle";
 

@@ -53,3 +53,11 @@ audionimbus = { path = "../audionimbus/audionimbus", features = [
 	"auto-install",
 ] }
 chill_bevy_console = "0.3.1"
+
+# `gltf` (transitive, via `bevy`/`bevy_gltf`) is patched to a vendored fork with
+# https://github.com/gltf-rs/gltf/pull/467 applied, adding support for `KHR_texture_basisu`
+# (KTX2/Basis Universal compressed textures embedded in `.glb`) — not merged upstream yet.
+# `gltf-json`/`gltf-derive` don't need their own patch entries: `../gltf`'s own Cargo.toml
+# references them as workspace-local path dependencies, not crates.io ones.
+[patch.crates-io]
+gltf = { path = "../gltf" }

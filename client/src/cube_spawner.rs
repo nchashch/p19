@@ -42,7 +42,7 @@ fn decorate_cubes(
         commands
             .entity(cube)
             .insert((Visibility::default(), Decorated, ChildOf(*level_root)))
-            .with_child(WorldAssetRoot(asset_server.load("Cube.glb#Scene0")));
+            .with_child(WorldAssetRoot(asset_server.load("models/Cube.glb#Scene0")));
     }
 }
 
