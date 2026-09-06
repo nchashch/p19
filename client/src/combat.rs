@@ -10,7 +10,7 @@ use shared::{
     server_events::{Attack, EntityDied, Kill},
 };
 
-use crate::{particles::CubeParticleEffect, targeting::Selected};
+use crate::{assets::CommonAssets, particles::CubeParticleEffect, targeting::Selected};
 
 pub struct CombatPlugin;
 
@@ -29,14 +29,13 @@ struct Lifetime(Timer);
 
 /// Reacts to a confirmed hit — sound only. Animation (attacker's "attack"/"hurt" one-offs) reacts
 /// to the same `Attack` event independently in `animation.rs`.
-fn on_attack(_: On<Attack>, mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn(SamplePlayer::new(asset_server.load("audio/explosion.wav")));
+fn on_attack(_: On<Attack>, mut commands: Commands, common_assets: Res<CommonAssets>) {
+    commands.spawn(SamplePlayer::new(common_assets.explosion.clone()));
 }
 
 /// Reacts to a confirmed kill — sound only, mirroring `on_attack`.
-fn on_kill(_: On<Kill>, mut commands: Commands, asset_server: Res<AssetServer>) {
-    info!("kill triggered");
-    commands.spawn(SamplePlayer::new(asset_server.load("audio/explosion.wav")));
+fn on_kill(_: On<Kill>, mut commands: Commands, common_assets: Res<CommonAssets>) {
+    commands.spawn(SamplePlayer::new(common_assets.explosion.clone()));
 }
 
 /// Reacts to an authoritative death — sound, particle effect, and clearing `Selected` if it
@@ -46,12 +45,12 @@ fn on_kill(_: On<Kill>, mut commands: Commands, asset_server: Res<AssetServer>) 
 fn on_entity_died(
     died: On<EntityDied>,
     effect: Res<CubeParticleEffect>,
-    asset_server: Res<AssetServer>,
+    common_assets: Res<CommonAssets>,
     mut selected: ResMut<Selected>,
     mut commands: Commands,
 ) {
     info!("position: {:?}", died.position);
-    commands.spawn(SamplePlayer::new(asset_server.load("audio/crunch.wav")));
+    commands.spawn(SamplePlayer::new(common_assets.crunch.clone()));
     commands.spawn((
         ParticleEffect::new(effect.0.clone()),
         Transform::from_translation(died.position),

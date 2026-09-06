@@ -10,9 +10,15 @@ pub enum VRState {
     VR,
 }
 
+/// `AssetLoading` is the app's real starting state now, not `MainMenu` — `main.rs`'s
+/// `LoadingState::new(GameState::AssetLoading).continue_to_state(GameState::MainMenu)` blocks the
+/// transition to `MainMenu` until `assets::CommonAssets` finishes loading, so nothing that reacts
+/// to `OnEnter(GameState::MainMenu)` (spawning the main menu scene, etc.) can run before every
+/// asset in that collection is ready.
 #[derive(States, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GameState {
     #[default]
+    AssetLoading,
     MainMenu,
     Loading,
     InGame,

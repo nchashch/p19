@@ -27,11 +27,9 @@ fn spawn_npc(
     time: Res<Time>,
     spatial_query: SpatialQuery,
 ) {
-    info!("server spawning npc");
     let ClientId::Client(entity) = request.client_id else {
         return;
     };
-    info!("npc spawned by {:?}", entity);
     let Ok(mut gcd) = casters.get_mut(entity) else {
         return;
     };

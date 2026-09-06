@@ -1,5 +1,6 @@
 use crate::actions::{UiConfirm, UiNavigate};
 use crate::add_observers_run_if;
+use crate::assets::CommonAssets;
 use crate::events::LoadLevel;
 use crate::game_state::{GameState, VRState};
 use crate::hud::HudPlugin;
@@ -106,11 +107,14 @@ fn on_ui_confirm(_confirm: On<Start<UiConfirm>>, focus: Res<InputFocus>, mut com
     }
 }
 
-pub fn main_menu_scene() -> impl SceneList {
-    bsn_list![main_menu()]
+/// A real system (not the usual `some_scene.spawn()` adapter, which only works for a zero-arg
+/// `Fn() -> impl SceneList`) since `main_menu()`'s `WorldAssetRoot` needs `Res<CommonAssets>` —
+/// see `modal_menu.rs`'s `spawn_modal_menu` for the same pattern.
+pub fn spawn_main_menu(mut commands: Commands, common_assets: Res<CommonAssets>) {
+    commands.spawn_scene_list(bsn_list![main_menu(&common_assets)]);
 }
 
-fn main_menu() -> impl Scene {
+fn main_menu(common_assets: &CommonAssets) -> impl Scene {
     bsn! {
         Node {
             width: percent(100),
@@ -119,7 +123,7 @@ fn main_menu() -> impl Scene {
             justify_content: JustifyContent::Start,
         }
         Children [ main_menu_buttons() ]
-        WorldAssetRoot("models/MenuBackground.glb#Scene0")
+        WorldAssetRoot({common_assets.menu_background.clone()})
         DespawnOnExit::<GameState>(GameState::MainMenu)
     }
 }

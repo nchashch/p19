@@ -7,13 +7,13 @@ use std::time::Duration;
 use shared::character_controller::{Character, Grounded, Idle};
 use shared::server_events::Attack;
 
+use crate::assets::CommonAssets;
 use crate::events::{AnimationFinished, PlayAnimationLooping, PlayAnimationOnce};
 
 pub struct PAnimationPlugin;
 
 impl Plugin for PAnimationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, load_rig_gltf);
         app.add_systems(
             Update,
             (build_graph_when_loaded, animation_finished, locomotion),
@@ -26,7 +26,6 @@ impl Plugin for PAnimationPlugin {
     }
 }
 
-const MODEL: &str = "models/rig.glb";
 // const ANIMATION_NAME: &str = "metarigAction";
 const ANIMATION_NAME: &str = "idle";
 
@@ -36,19 +35,16 @@ pub struct Animations {
     pub nodes: HashMap<String, AnimationNodeIndex>,
 }
 
-fn load_rig_gltf(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.insert_resource(ModelHandle(asset_server.load(MODEL)));
-}
-
-#[derive(Resource)]
-struct ModelHandle(Handle<Gltf>);
-
 #[derive(Component)]
 struct AnimationRoot(Entity);
 
+/// Reads `common_assets.rig_gltf` (see `assets.rs`) rather than loading its own handle — `Res<
+/// CommonAssets>` doesn't exist until `GameState::AssetLoading` finishes, so this just doesn't run
+/// (not panics — a missing `Res<T>` skips the system) until then, same as the polling it already
+/// did against the old dedicated `ModelHandle`.
 fn build_graph_when_loaded(
     mut commands: Commands,
-    model: Res<ModelHandle>,
+    common_assets: Option<Res<CommonAssets>>,
     gltfs: Res<Assets<Gltf>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     mut done: Local<bool>,
@@ -56,7 +52,10 @@ fn build_graph_when_loaded(
     if *done {
         return;
     }
-    let Some(gltf) = gltfs.get(&model.0) else {
+    let Some(common_assets) = common_assets else {
+        return;
+    };
+    let Some(gltf) = gltfs.get(&common_assets.rig_gltf) else {
         return;
     };
 

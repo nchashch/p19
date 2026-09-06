@@ -1,4 +1,5 @@
 use crate::{
+    assets::CommonAssets,
     camera::{PlayerCameraPlugin, player_camera},
     combat::CombatPlugin,
     controls::{self, PlayerControlsPlugin},
@@ -31,10 +32,19 @@ pub struct OtherPlayer;
 pub fn decorate_other_players(
     players: Query<Entity, (With<PlayerCharacter>, Without<OtherPlayer>)>,
     local_player: Res<LocalPlayer>,
-    asset_server: Res<AssetServer>,
+    // Unlike `on_player_spawned` (an observer on a server event that can't fire before a level
+    // is actually loaded), this is a plain, unconditional `Update` system — with no `Single`/state
+    // gate of its own to lean on, it starts running from app startup, before `GameState::
+    // AssetLoading` finishes and inserts `CommonAssets`. Confirmed by testing: a bare `Res<
+    // CommonAssets>` here panicked ("Resource does not exist") on every startup, not just a
+    // hypothetical race.
+    common_assets: Option<Res<CommonAssets>>,
     mut commands: Commands,
 ) {
     let Some(local_player) = local_player.0 else {
+        return;
+    };
+    let Some(common_assets) = common_assets else {
         return;
     };
     for entity in players {
@@ -42,7 +52,7 @@ pub fn decorate_other_players(
             continue;
         }
         commands.entity(entity).insert(OtherPlayer).with_child((
-            WorldAssetRoot(asset_server.load("rig.glb#Scene0")),
+            WorldAssetRoot(common_assets.rig_world.clone()),
             Transform::from_translation(Vec3::new(0.0, -0.9, 0.0)),
             PlayerModel,
         ));
@@ -59,7 +69,7 @@ pub struct LocalPlayer(pub Option<Entity>);
 pub fn on_player_spawned(
     spawned: On<PlayerSpawned>,
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
+    common_assets: Res<CommonAssets>,
 ) {
     commands.insert_resource(LocalPlayer(Some(spawned.entity)));
     commands
@@ -80,7 +90,7 @@ pub fn on_player_spawned(
                         .with_children(|parent| {
                             parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), CubeSpawner));
                             parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), NpcSpawner));
-                            parent.spawn(player_camera(&asset_server));
+                            parent.spawn(player_camera(&common_assets));
                         });
                 });
         });

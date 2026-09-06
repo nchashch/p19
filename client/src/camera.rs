@@ -6,6 +6,8 @@ use bevy::{
 };
 use bevy_mod_xr::camera::XrCamera;
 
+use crate::assets::CommonAssets;
+
 /// Matches `main.rs`'s `ClearColor` — a fallback background for whatever the skybox doesn't
 /// cover (there's always a moment before `skyboxes/night_sky.ktx2` finishes streaming in where
 /// nothing is rendered there yet), so fog blends into that instead of a visibly different flat
@@ -17,11 +19,6 @@ const FOG_COLOR: Color = Color::srgb(0.1, 0.1, 0.15);
 const FOG_START: f32 = 40.0;
 const FOG_END: f32 = 180.0;
 
-/// Scales `skyboxes/night_sky.ktx2`'s stored HDR values (roughly 0.006-2.0, per the source HDRI —
-/// see `scripts/hdri_to_skybox.py`) into the candela-per-square-meter units `Skybox::brightness`
-/// expects. Tuned by eye for a dim-but-visible night sky against this project's existing lighting
-/// (`main.rs`'s `GlobalAmbientLight`); adjust here if the sky reads too bright/dark after other
-/// lighting changes.
 const SKYBOX_BRIGHTNESS: f32 = 100.0;
 
 fn distance_fog() -> DistanceFog {
@@ -35,20 +32,22 @@ fn distance_fog() -> DistanceFog {
     }
 }
 
-fn skybox(asset_server: &AssetServer) -> Skybox {
+fn skybox(common_assets: &CommonAssets) -> Skybox {
     // Unlike the old PNG-vertical-strip cubemap this replaces, a KTX2 file carries its own
     // cubemap metadata (see `scripts/hdri_to_skybox.py`'s doc comment) — Bevy's KTX2 loader
     // detects the 6 faces and sets up `TextureViewDimension::Cube` automatically, so this can
     // just be loaded and inserted directly, with no manual "wait for load, then reinterpret
-    // the texture" dance required (that machinery lived here before; see git history).
+    // the texture" dance required (that machinery lived here before; see git history). Loaded via
+    // `CommonAssets` (see `assets.rs`) rather than `asset_server.load(...)` here, so it's already
+    // resident by the time any camera is spawned instead of streaming in after the fact.
     Skybox {
-        image: Some(asset_server.load("skyboxes/night_sky_clean_bc6h.ktx2")),
+        image: Some(common_assets.skybox.clone()),
         brightness: SKYBOX_BRIGHTNESS,
         ..default()
     }
 }
 
-pub fn player_camera(asset_server: &Res<AssetServer>) -> impl Bundle {
+pub fn player_camera(common_assets: &CommonAssets) -> impl Bundle {
     (
         Camera3d::default(),
         IsDefaultUiCamera,
@@ -56,7 +55,7 @@ pub fn player_camera(asset_server: &Res<AssetServer>) -> impl Bundle {
         TemporalAntiAliasing::default(),
         ScreenSpaceAmbientOcclusion::default(),
         distance_fog(),
-        skybox(asset_server),
+        skybox(common_assets),
     )
 }
 
@@ -78,9 +77,16 @@ impl Plugin for PlayerCameraPlugin {
 fn on_xr_camera_added(
     added: On<Add, XrCamera>,
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
+    // `Option`, not a bare `Res` — the OpenXR session (and its `XrCamera` entities) starts at app
+    // boot in VR mode (`main.rs` inserts `OxrSessionConfig` unconditionally in `Prototype19::build`,
+    // not gated on any `GameState`), which can run before `GameState::AssetLoading` finishes and
+    // inserts `CommonAssets`.
+    common_assets: Option<Res<CommonAssets>>,
 ) {
+    let Some(common_assets) = common_assets else {
+        return;
+    };
     commands
         .entity(added.entity)
-        .insert((distance_fog(), skybox(&asset_server)));
+        .insert((distance_fog(), skybox(&common_assets)));
 }

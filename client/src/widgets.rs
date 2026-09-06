@@ -1,3 +1,4 @@
+use crate::assets::CommonAssets;
 use crate::localization::{LocalizedText, localized};
 use bevy::{
     color::palettes::css::{DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},
@@ -210,7 +211,7 @@ fn show_tooltip(
     over: On<Pointer<Over>>,
     tips: Query<(&Tooltip, Option<&TooltipAbove>)>,
     panel: Query<Entity, With<Panel>>,
-    asset_server: Res<AssetServer>,
+    common_assets: Res<CommonAssets>,
     localization: Option<Res<Localization>>,
     mut commands: Commands,
 ) {
@@ -231,7 +232,7 @@ fn show_tooltip(
         }
     }
     let text = localized(&localization, tip.key, &fluent_args);
-    let font = asset_server.load(SERIF_FONT);
+    let font = common_assets.serif_font.clone();
     let position = if let Some(above) = above {
         Node {
             position_type: PositionType::Absolute, // escape flex flow, free to overlap

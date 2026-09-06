@@ -3,6 +3,7 @@ use bevy::ecs::schedule::{LogLevel, ScheduleBuildSettings};
 use bevy::feathers::{dark_theme::create_dark_theme, theme::UiTheme};
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
+use bevy_asset_loader::prelude::*;
 use bevy_replicon_quinnet::RepliconQuinnetPlugins;
 use bevy_seedling::prelude::*;
 use bevy_skein::SkeinPlugin;
@@ -20,6 +21,7 @@ use openxr::EnvironmentBlendMode;
 
 mod actions;
 mod animation;
+mod assets;
 mod camera;
 mod combat;
 mod console;
@@ -203,6 +205,11 @@ impl Plugin for Prototype19 {
                 ..default()
             })
             .register_type::<ColliderConstructor>()
-            .add_systems(OnEnter(GameState::MainMenu), ui::main_menu_scene.spawn());
+            .add_loading_state(
+                LoadingState::new(GameState::AssetLoading)
+                    .continue_to_state(GameState::MainMenu)
+                    .load_collection::<assets::CommonAssets>(),
+            )
+            .add_systems(OnEnter(GameState::MainMenu), ui::spawn_main_menu);
     }
 }

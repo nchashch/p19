@@ -4,6 +4,7 @@ use shared::client_events::SpawnCubeRequest;
 use shared::cube_spawner::{Cube, CubeSpawner};
 use shared::level::LevelRoot;
 
+use crate::assets::CommonAssets;
 use crate::events::SpawnCube;
 use crate::fps_controller::FpsCamera;
 
@@ -35,14 +36,14 @@ fn request_spawn_cube(
 fn decorate_cubes(
     cubes: Query<Entity, (With<Cube>, Without<Decorated>)>,
     level_root: Single<Entity, With<LevelRoot>>,
-    asset_server: Res<AssetServer>,
+    common_assets: Res<CommonAssets>,
     mut commands: Commands,
 ) {
     for cube in cubes {
         commands
             .entity(cube)
             .insert((Visibility::default(), Decorated, ChildOf(*level_root)))
-            .with_child(WorldAssetRoot(asset_server.load("models/Cube.glb#Scene0")));
+            .with_child(WorldAssetRoot(common_assets.cube_world.clone()));
     }
 }
 

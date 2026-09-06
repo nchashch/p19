@@ -4,6 +4,7 @@ use shared::client_events::SpawnNpcRequest;
 use shared::level::LevelRoot;
 use shared::npc_spawner::{Npc, NpcSpawner};
 
+use crate::assets::CommonAssets;
 use crate::cube_spawner::Decorated;
 use crate::events::SpawnNpc;
 use crate::npc_ui_quad::{NpcUiQuad, NpcUiQuadMesh};
@@ -36,7 +37,7 @@ const UI_QUAD_HEIGHT: f32 = 1.8;
 fn decorate_npcs(
     cubes: Query<Entity, (With<Npc>, Without<Decorated>)>,
     level_root: Single<Entity, With<LevelRoot>>,
-    asset_server: Res<AssetServer>,
+    common_assets: Res<CommonAssets>,
     npc_ui_quad: Res<NpcUiQuad>,
     mut commands: Commands,
 ) {
@@ -45,7 +46,7 @@ fn decorate_npcs(
             .entity(cube)
             .insert((Visibility::default(), Decorated, ChildOf(*level_root)))
             .with_child((
-                WorldAssetRoot(asset_server.load("rig.glb#Scene0")),
+                WorldAssetRoot(common_assets.rig_world.clone()),
                 Transform::from_translation(Vec3::new(0.0, -0.9, 0.0)),
             ))
             .with_child((
