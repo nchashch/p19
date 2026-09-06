@@ -7,7 +7,7 @@ pub struct NameplatePlugin;
 
 impl Plugin for NameplatePlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(NameplatesVisible(true));
+        app.insert_resource(NameplatesVisible(false));
         app.add_systems(Update, track_nameplates);
         app.add_observer(spawn_nameplates);
     }

@@ -42,7 +42,7 @@ fn skybox(asset_server: &AssetServer) -> Skybox {
     // just be loaded and inserted directly, with no manual "wait for load, then reinterpret
     // the texture" dance required (that machinery lived here before; see git history).
     Skybox {
-        image: Some(asset_server.load("skyboxes/night_sky.ktx2")),
+        image: Some(asset_server.load("skyboxes/night_sky_clean.ktx2")),
         brightness: SKYBOX_BRIGHTNESS,
         ..default()
     }
