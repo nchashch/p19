@@ -4,7 +4,7 @@ use bevy::dev_tools::fps_overlay::FpsOverlayPlugin;
 use bevy::platform::collections::HashSet;
 use bevy::{dev_tools::fps_overlay::FpsOverlayConfig, prelude::*};
 use bevy_fluent::prelude::Localization;
-use chill_bevy_console::{ChillConsole, CommandArgs, ConsoleAppExt, ConsoleCommand};
+use chill_bevy_console::{ChillConsole, CommandArgs, ConsoleAppExt, ConsoleCommand, ConsoleConfig};
 use fluent::FluentArgs;
 use futures_lite::StreamExt;
 use std::path::Path;
@@ -27,7 +27,17 @@ pub struct PConsolePlugin;
 impl Plugin for PConsolePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
-            ChillConsole::default(),
+            ChillConsole {
+                // `font_path` resolves via a normal `asset_server.load(path)` (see
+                // `chill_bevy_console`'s `ConsoleAssets::from_world`), same as any other font
+                // reference in this codebase — `None` (the default) falls back to the crate's
+                // embedded Ubuntu Mono / Bevy's built-in default font instead.
+                config: ConsoleConfig {
+                    font_path: Some("fonts/mono/IBMPlexMono-Regular.ttf".to_string()),
+                    ..default()
+                },
+                ..default()
+            },
             PhysicsDebugPlugin::default(),
             FpsOverlayPlugin::default(),
         ))

@@ -204,6 +204,9 @@ fn data_frame() -> impl Scene {
             Children [
                 (
                     Text("")
+                    TextFont {
+                        font: FontSourceTemplate::Handle(SERIF_FONT),
+                    }
                     DataFrame
                 ),
             ]

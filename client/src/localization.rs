@@ -28,11 +28,20 @@ fn load_locales(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.insert_resource(LocaleFolder(asset_server.load_folder("locales")));
 }
 
+/// Rebuilds `Localization` once the locale folder first finishes loading, and again every time
+/// `Locale.requested` changes afterward (e.g. `ui.rs`'s `select_language`) — this used to remove
+/// `LocaleFolder` after the first build, a one-shot design that left a runtime locale switch
+/// mutating `Locale` with nothing ever reading it again. `built` (not `locale.is_changed()` alone)
+/// is what gates the *first* build: this system runs every frame from `Startup` on, so by the time
+/// the folder actually finishes loading, `Locale`'s own initial-insert change tick has already been
+/// "seen" by this system's own prior (early-returning) runs and no longer reads as changed.
 fn build_localization(
     mut commands: Commands,
     folder: Option<Res<LocaleFolder>>,
     asset_server: Res<AssetServer>,
+    locale: Res<Locale>,
     localization_builder: LocalizationBuilder,
+    mut built: Local<bool>,
 ) {
     let Some(folder) = folder else {
         return;
@@ -43,8 +52,11 @@ fn build_localization(
     ) {
         return;
     }
+    if *built && !locale.is_changed() {
+        return;
+    }
     commands.insert_resource(localization_builder.build(&folder.0));
-    commands.remove_resource::<LocaleFolder>();
+    *built = true;
 }
 
 /// Marks a `Text` entity to have its content set from `key`'s message in the current `Localization`

@@ -87,16 +87,18 @@ fn modal_menu(atlases: &InputIconAtlases) -> impl Scene {
             gamepad_controls_tips(atlases),
             (
                 Node {
-                    flex_direction: FlexDirection::Row,
+                    flex_direction: FlexDirection::Column,
                     column_gap: px(20),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
                 }
                 Children [
                     (
-                        button(px(220), px(60), "modal-menu-main-menu")
+                        button(px(320), px(120), "modal-menu-main-menu")
                         on(main_menu_button)
                     ),
                     (
-                        button(px(220), px(60), "modal-menu-resume")
+                        button(px(320), px(120), "modal-menu-resume")
                         AutoFocus
                         on(resume_button)
                     ),

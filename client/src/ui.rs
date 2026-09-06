@@ -13,9 +13,11 @@ use bevy::{
     ui::auto_directional_navigation::AutoDirectionalNavigator,
 };
 use bevy_enhanced_input::prelude::{Press, *};
+use bevy_fluent::prelude::Locale;
 use bevy_xr_utils::tracking_utils::XrTrackedLeftGrip;
 use chill_bevy_console::console_closed;
 use std::f32::consts::FRAC_PI_2;
+use unic_langid::{LanguageIdentifier, langid};
 
 pub struct PrototypeUiPlugin;
 
@@ -23,11 +25,18 @@ impl Plugin for PrototypeUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((WidgetsPlugin, HudPlugin, DirectionalNavigationPlugin));
         app.add_input_context::<MenuControls>();
-        app.add_systems(OnEnter(GameState::MainMenu), spawn_menu_controls);
+        app.init_resource::<LanguageMenuOpen>();
+        app.add_systems(
+            OnEnter(GameState::MainMenu),
+            (spawn_menu_controls, reset_language_menu),
+        );
         app.add_systems(
             Update,
-            spawn_vr_main_menu_wrist_panel
-                .run_if(in_state(GameState::MainMenu).and_then(in_state(VRState::VR))),
+            (
+                update_language_options_visibility,
+                spawn_vr_main_menu_wrist_panel
+                    .run_if(in_state(GameState::MainMenu).and_then(in_state(VRState::VR))),
+            ),
         );
         add_observers_run_if!(app, console_closed, on_ui_navigate, on_ui_confirm);
     }
@@ -158,7 +167,113 @@ pub(crate) fn main_menu_buttons() -> impl Scene {
                 Tooltip::new("main-menu-quit-tooltip")
                 on(quit_button)
             ),
+            language_picker(),
         ]
+    }
+}
+
+/// Whether the language options popup (below) is showing — a plain resource rather than a
+/// `States` type since this is a small, purely-cosmetic toggle local to one panel, not something
+/// anything else needs to branch on (see `game_state.rs`'s states for the "worth a states machine"
+/// bar this doesn't clear). Reset on every `OnEnter(GameState::MainMenu)` so a menu left open
+/// before leaving (e.g. hitting `Play` without picking a language) doesn't reappear pre-opened the
+/// next time the main menu spawns fresh.
+#[derive(Resource, Default)]
+struct LanguageMenuOpen(bool);
+
+fn reset_language_menu(mut open: ResMut<LanguageMenuOpen>) {
+    open.0 = false;
+}
+
+/// Tags the options popup so `update_language_options_visibility` can find it without needing to
+/// thread an entity reference through from `toggle_language_menu`.
+#[derive(Component, Clone, Default)]
+struct LanguageOptionsPanel;
+
+/// Which locale a language-option button switches to — read directly off the entity `Activate`
+/// fires on (see `select_language`), the same "look up a component on `activate.entity`" pattern
+/// `input_icons.rs`'s `PendingIcon` uses for a similar per-entity-payload problem.
+#[derive(Component, Clone, Default)]
+struct LocaleOption(LanguageIdentifier);
+
+/// The "Language" button plus its (initially hidden) options popup. `position_type: Relative` on
+/// the wrapping `Node` is what lets the popup's own `position_type: Absolute` anchor directly below
+/// the button instead of relative to the whole screen.
+fn language_picker() -> impl Scene {
+    bsn! {
+        Node {
+            position_type: PositionType::Relative,
+        }
+        Children [
+            (
+                button(px(200), px(50), "main-menu-language")
+                on(toggle_language_menu)
+            ),
+            language_options_panel(),
+        ]
+    }
+}
+
+/// Each option's label is the language's own name in its own script (`"English"`, `"Русский"`),
+/// deliberately *not* run through a real localization key — `button()` always attaches
+/// `LocalizedText`, but `localized()` (see `localization.rs`) falls back to the raw key string
+/// when no message matches, which these labels never do in any locale. That's relied on
+/// intentionally here: a language picker should show every option in its own language regardless
+/// of which language is currently active, not translate "Русский" into whatever's selected now.
+fn language_options_panel() -> impl Scene {
+    bsn! {
+        LanguageOptionsPanel
+        Visibility::Hidden
+        Node {
+            position_type: PositionType::Absolute,
+            top: percent(100),
+            left: px(0),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(4),
+        }
+        Children [
+            (
+                button(px(200), px(40), "English")
+                LocaleOption(langid!("en-US"))
+                on(select_language)
+            ),
+            (
+                button(px(200), px(40), "Русский")
+                LocaleOption(langid!("ru-RU"))
+                on(select_language)
+            ),
+        ]
+    }
+}
+
+fn toggle_language_menu(_: On<Activate>, mut open: ResMut<LanguageMenuOpen>) {
+    open.0 = !open.0;
+}
+
+fn select_language(
+    activate: On<Activate>,
+    options: Query<&LocaleOption>,
+    mut locale: ResMut<Locale>,
+    mut open: ResMut<LanguageMenuOpen>,
+) {
+    let Ok(option) = options.get(activate.entity) else {
+        return;
+    };
+    locale.requested = option.0.clone();
+    open.0 = false;
+}
+
+fn update_language_options_visibility(
+    open: Res<LanguageMenuOpen>,
+    mut panels: Query<&mut Visibility, With<LanguageOptionsPanel>>,
+) {
+    let visibility = if open.0 {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    for mut panel_visibility in &mut panels {
+        *panel_visibility = visibility;
     }
 }
 
