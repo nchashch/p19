@@ -1,9 +1,8 @@
-use crate::assets::CommonAssets;
 use crate::controls::return_to_main_menu;
 use crate::game_state::{GameState, InputDeviceState, ModalMenuState, VRState};
 use crate::input_icons::{
-    gamepad_button_icon, gamepad_look_stick_icon, gamepad_move_stick_icon, key_code_icon,
-    mouse_button_icon, mouse_move_icon,
+    Icon, InputIconAtlases, gamepad_button_icon, gamepad_look_stick_icon, gamepad_move_stick_icon,
+    key_code_icon, mouse_button_icon, mouse_move_icon,
 };
 use crate::localization::LocalizedText;
 use crate::networking::PendingLevelId;
@@ -35,6 +34,7 @@ impl Plugin for ModalMenuPlugin {
             OnEnter(ModalMenuState::Open),
             (spawn_modal_menu, spawn_modal_menu_controls),
         );
+        app.add_observer(on_pending_icon);
         // Resets the modal back to `Closed` whenever gameplay ends, regardless of how — the "Main
         // Menu" button below already sets it directly, but this also covers e.g. a future
         // disconnect/kick path, so a later `Play` never starts with a stale `Open` state.
@@ -65,14 +65,14 @@ fn spawn_modal_menu_controls(mut commands: Commands) {
 }
 
 /// A real system (not the usual `some_scene.spawn()` adapter, which only works for a zero-arg
-/// `Fn() -> impl SceneList`) since building the controls-tips rows needs `Res<CommonAssets>` to
-/// look up icon handles — see `input_icons.rs`. `CommandsSceneExt::spawn_scene_list` is the normal
+/// `Fn() -> impl SceneList`) since building the controls-tips rows needs `Res<InputIconAtlases>`
+/// to look up icons — see `input_icons.rs`. `CommandsSceneExt::spawn_scene_list` is the normal
 /// system-compatible way to spawn a `SceneList`, same underlying mechanism `.spawn()` wraps.
-fn spawn_modal_menu(mut commands: Commands, common_assets: Res<CommonAssets>) {
-    commands.spawn_scene_list(bsn_list![modal_menu(&common_assets)]);
+fn spawn_modal_menu(mut commands: Commands, atlases: Res<InputIconAtlases>) {
+    commands.spawn_scene_list(bsn_list![modal_menu(&atlases)]);
 }
 
-fn modal_menu(common_assets: &CommonAssets) -> impl Scene {
+fn modal_menu(atlases: &InputIconAtlases) -> impl Scene {
     bsn! {
         Node {
             width: percent(100),
@@ -83,8 +83,8 @@ fn modal_menu(common_assets: &CommonAssets) -> impl Scene {
         BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6))
         DespawnOnExit::<ModalMenuState>(ModalMenuState::Open)
         Children [
-            controls_tips(common_assets),
-            gamepad_controls_tips(common_assets),
+            controls_tips(atlases),
+            gamepad_controls_tips(atlases),
             (
                 Node {
                     flex_direction: FlexDirection::Row,
@@ -273,16 +273,16 @@ const CONTROLS_TIPS_LABEL_FONT_SIZE: f32 = 16.0;
 /// makes *that* part self-documenting — a row visibly says `KeyCode::Escape`, not an opaque asset
 /// path with nothing connecting it back to which key it's supposed to be. Mouse buttons/motion
 /// aren't `KeyCode`, so `hud-controls-look`/`hud-controls-select` go through `control_tip_icons`
-/// directly with a PNG path from `input_icons::mouse_button_icon_png`/`MOUSE_MOVE_ICON_PNG`
-/// instead of a `key_code_icon_png` lookup. `mouse_move` (for `FpsCameraRotation`'s mouse-motion
-/// binding) is included since it's a real, always-on control, even though it isn't a discrete
-/// key/button press. See `input_icons`'s module doc comment for why this renders each icon as its
-/// own PNG (`ImageNode`) rather than packing glyphs into a `Text` run with an icon font.
+/// directly with an `Icon` from `input_icons::mouse_button_icon`/`mouse_move_icon` instead of a
+/// `key_code_icon` lookup. `mouse_move` (for `FpsCameraRotation`'s mouse-motion binding) is
+/// included since it's a real, always-on control, even though it isn't a discrete key/button
+/// press. See `input_icons`'s module doc comment for why these icons come from a packed texture
+/// atlas rather than one `ImageNode` per separate PNG.
 ///
 /// `position_type: Absolute` (escaping `modal_menu()`'s centered flex flow) is what lets this sit
 /// at the top-left corner as a sibling of the centered button row instead of being squeezed into
 /// the same flex line.
-fn controls_tips(common_assets: &CommonAssets) -> impl Scene {
+fn controls_tips(atlases: &InputIconAtlases) -> impl Scene {
     bsn! {
         KeyboardMouseControlsTips
         Node {
@@ -299,31 +299,31 @@ fn controls_tips(common_assets: &CommonAssets) -> impl Scene {
             panel(px(300), px(600))
             Children [
                 control_tip_keys(
-                    common_assets,
+                    atlases,
                     &[KeyCode::KeyW, KeyCode::KeyA, KeyCode::KeyS, KeyCode::KeyD],
                     "hud-controls-move",
                 ),
-                control_tip_icons(vec![mouse_move_icon(common_assets)], "hud-controls-look"),
-                control_tip_keys(common_assets, &[KeyCode::Space], "hud-controls-jump"),
-                control_tip_mouse_button(common_assets, MouseButton::Left, "hud-controls-select"),
-                control_tip_mouse_button(common_assets, MouseButton::Right, "hud-controls-deselect"),
-                control_tip_keys(common_assets, &[KeyCode::KeyF], "hud-controls-attack"),
-                control_tip_keys(common_assets, &[KeyCode::KeyT], "hud-controls-kill"),
-                control_tip_keys(common_assets, &[KeyCode::KeyE], "hud-controls-spawn-cube"),
-                control_tip_keys(common_assets, &[KeyCode::KeyR], "hud-controls-spawn-npc"),
-                control_tip_keys(common_assets, &[KeyCode::Escape], "hud-controls-menu"),
-                control_tip_keys(common_assets, &[KeyCode::Tab], "hud-controls-stats"),
+                control_tip_icons(vec![mouse_move_icon(atlases)], "hud-controls-look"),
+                control_tip_keys(atlases, &[KeyCode::Space], "hud-controls-jump"),
+                control_tip_mouse_button(atlases, MouseButton::Left, "hud-controls-select"),
+                control_tip_mouse_button(atlases, MouseButton::Right, "hud-controls-deselect"),
+                control_tip_keys(atlases, &[KeyCode::KeyF], "hud-controls-attack"),
+                control_tip_keys(atlases, &[KeyCode::KeyT], "hud-controls-kill"),
+                control_tip_keys(atlases, &[KeyCode::KeyE], "hud-controls-spawn-cube"),
+                control_tip_keys(atlases, &[KeyCode::KeyR], "hud-controls-spawn-npc"),
+                control_tip_keys(atlases, &[KeyCode::Escape], "hud-controls-menu"),
+                control_tip_keys(atlases, &[KeyCode::Tab], "hud-controls-stats"),
             ]
         ]
     }
 }
 
 /// The gamepad equivalent of `controls_tips` — same rows, same order, same labels, just Steam
-/// Deck button/stick icons (`input_icons::gamepad_button_icon_png`) sourced from the actual
+/// Deck button/stick icons (`input_icons::gamepad_button_icon`) sourced from the actual
 /// `GamepadButton`s `controls.rs`'s `player_controls()` binds, instead of `KeyCode`s. Shown
 /// instead of `controls_tips` (never alongside it) once `InputDeviceState` says a gamepad is the
 /// active device — see `update_controls_tips_visibility`.
-fn gamepad_controls_tips(common_assets: &CommonAssets) -> impl Scene {
+fn gamepad_controls_tips(atlases: &InputIconAtlases) -> impl Scene {
     bsn! {
         GamepadControlsTips
         Node {
@@ -339,17 +339,17 @@ fn gamepad_controls_tips(common_assets: &CommonAssets) -> impl Scene {
         Children[
             panel(px(300), px(600))
             Children [
-                control_tip_icons(vec![gamepad_move_stick_icon(common_assets)], "hud-controls-move"),
-                control_tip_icons(vec![gamepad_look_stick_icon(common_assets)], "hud-controls-look"),
-                control_tip_gamepad_buttons(common_assets, &[GamepadButton::South], "hud-controls-jump"),
-                control_tip_gamepad_buttons(common_assets, &[GamepadButton::RightThumb], "hud-controls-select"),
-                control_tip_gamepad_buttons(common_assets, &[GamepadButton::LeftThumb], "hud-controls-deselect"),
-                control_tip_gamepad_buttons(common_assets, &[GamepadButton::RightTrigger2], "hud-controls-attack"),
-                control_tip_gamepad_buttons(common_assets, &[GamepadButton::RightTrigger], "hud-controls-kill"),
-                control_tip_gamepad_buttons(common_assets, &[GamepadButton::LeftTrigger], "hud-controls-spawn-cube"),
-                control_tip_gamepad_buttons(common_assets, &[GamepadButton::LeftTrigger2], "hud-controls-spawn-npc"),
-                control_tip_gamepad_buttons(common_assets, &[GamepadButton::Start], "hud-controls-menu"),
-                control_tip_gamepad_buttons(common_assets, &[GamepadButton::Select], "hud-controls-stats"),
+                control_tip_icons(vec![gamepad_move_stick_icon(atlases)], "hud-controls-move"),
+                control_tip_icons(vec![gamepad_look_stick_icon(atlases)], "hud-controls-look"),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::South], "hud-controls-jump"),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::RightThumb], "hud-controls-select"),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::LeftThumb], "hud-controls-deselect"),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::RightTrigger2], "hud-controls-attack"),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::RightTrigger], "hud-controls-kill"),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::LeftTrigger], "hud-controls-spawn-cube"),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::LeftTrigger2], "hud-controls-spawn-npc"),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::Start], "hud-controls-menu"),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::Select], "hud-controls-stats"),
             ]
         ]
     }
@@ -358,13 +358,13 @@ fn gamepad_controls_tips(common_assets: &CommonAssets) -> impl Scene {
 /// Same idea as `control_tip_keys`, for `GamepadButton`s instead of `KeyCode`s — any button the
 /// pack doesn't cover is silently skipped, same contract as `input_icons::gamepad_button_icon`.
 fn control_tip_gamepad_buttons(
-    common_assets: &CommonAssets,
+    atlases: &InputIconAtlases,
     buttons: &[GamepadButton],
     label_key: &'static str,
 ) -> impl Scene {
     let icons: Vec<_> = buttons
         .iter()
-        .filter_map(|&button| gamepad_button_icon(common_assets, button))
+        .filter_map(|&button| gamepad_button_icon(atlases, button))
         .collect();
     control_tip_icons(icons, label_key)
 }
@@ -374,13 +374,13 @@ fn control_tip_gamepad_buttons(
 /// than showing a broken image or panicking, so an unmapped key just quietly narrows the icon set
 /// for that row instead of breaking it.
 fn control_tip_keys(
-    common_assets: &CommonAssets,
+    atlases: &InputIconAtlases,
     keys: &[KeyCode],
     label_key: &'static str,
 ) -> impl Scene {
     let icons: Vec<_> = keys
         .iter()
-        .filter_map(|&key| key_code_icon(common_assets, key))
+        .filter_map(|&key| key_code_icon(atlases, key))
         .collect();
     control_tip_icons(icons, label_key)
 }
@@ -388,13 +388,11 @@ fn control_tip_keys(
 /// Same idea as `control_tip_keys`, for the one mouse-button tip (`Select`) — not a `KeyCode`, so
 /// it goes through `input_icons::mouse_button_icon` instead.
 fn control_tip_mouse_button(
-    common_assets: &CommonAssets,
+    atlases: &InputIconAtlases,
     button: MouseButton,
     label_key: &'static str,
 ) -> impl Scene {
-    let icons: Vec<_> = mouse_button_icon(common_assets, button)
-        .into_iter()
-        .collect();
+    let icons: Vec<_> = mouse_button_icon(atlases, button).into_iter().collect();
     control_tip_icons(icons, label_key)
 }
 
@@ -403,7 +401,7 @@ fn control_tip_mouse_button(
 /// since a binding can use any number of keys, including zero if none of them mapped to an icon —
 /// the row then just shows the label on its own instead of disappearing entirely, so a gap in
 /// icon coverage stays visible/debuggable rather than silently dropping the whole tip.
-fn control_tip_icons(icons: Vec<Handle<Image>>, label_key: &'static str) -> impl Scene {
+fn control_tip_icons(icons: Vec<Icon>, label_key: &'static str) -> impl Scene {
     let icons: Vec<_> = icons.into_iter().map(control_tip_icon).collect();
     bsn! {
         Node {
@@ -428,12 +426,39 @@ fn control_tip_icons(icons: Vec<Handle<Image>>, label_key: &'static str) -> impl
     }
 }
 
+/// Carries a resolved `Icon` (which atlas pack + index, both plain `Copy` data — see
+/// `input_icons.rs`) into `on_pending_icon`, which resolves it against `Res<InputIconAtlases>` and
+/// installs the real `ImageNode` right after spawn. Needed because `ImageNode` derives
+/// `FromTemplate`, and its `texture_atlas: Option<TextureAtlas>` field's own derived template type
+/// has no ergonomic "just take an already-built `TextureAtlas`" conversion `bsn!`'s struct-literal
+/// field syntax can reach (nor, transitively, does any wrapper type whose fields include
+/// `ImageNode`/`TextureAtlas`/`Handle<T>` directly — they all opt out of the trivial blanket
+/// `FromTemplate` impl for exactly this reason). Plain `Copy` data like `Icon` has no such
+/// problem, so it passes through `bsn!` as ordinary component data with no conversion fuss.
+#[derive(Component, Clone, Copy, Default)]
+struct PendingIcon(Icon);
+
+fn on_pending_icon(
+    added: On<Add, PendingIcon>,
+    pending: Query<&PendingIcon>,
+    atlases: Res<InputIconAtlases>,
+    mut commands: Commands,
+) {
+    let Ok(pending) = pending.get(added.entity) else {
+        return;
+    };
+    commands
+        .entity(added.entity)
+        .insert(pending.0.resolve(&atlases))
+        .remove::<PendingIcon>();
+}
+
 /// A single icon image at the panel's fixed icon size — one `ImageNode` per key/button, laid out
 /// in a row by `control_tip_icons`'s parent `Node` rather than packed into one `Text` the way the
 /// font-glyph version did.
-fn control_tip_icon(image: Handle<Image>) -> impl Scene {
+fn control_tip_icon(icon: Icon) -> impl Scene {
     bsn! {
-        ImageNode { image: image }
+        PendingIcon(icon)
         Node {
             width: px(CONTROLS_TIPS_ICON_SIZE),
             height: px(CONTROLS_TIPS_ICON_SIZE),

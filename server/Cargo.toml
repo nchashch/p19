@@ -16,10 +16,28 @@ edition.workspace = true
 # all — the whole Skein/world-asset pipeline is render-independent by design.
 bevy = { version = "0.19.0", default-features = false, features = [
 	"bevy_gltf",
-	# The level's GLTF materials reference PNG textures — `GltfLoader` decodes every referenced
-	# image as part of loading the whole scene (even though the server never samples them), so a
-	# missing image format fails the *entire* asset load, not just that one texture.
+	# The level's GLTF materials reference PNG/KTX2 textures — `GltfLoader` decodes every
+	# referenced image as part of loading the whole scene (even though the server never samples
+	# them), so a missing image format fails the *entire* asset load, not just that one texture.
 	"png",
+	# KTX2/UASTC-compressed textures (see `scripts/glbpack.sh`'s `-tu` flag and the workspace root
+	# `Cargo.toml`'s `[patch.crates-io]`/`shared`'s `gltf` feature-forcing comment for the client
+	# side of this) need both features to even *parse*, not just to render: `GltfPlugin::finish()`
+	# has no `CompressedImageFormatSupport` resource to read here (no `bevy_render`, headless), so
+	# it falls back to `CompressedImageFormats::NONE` — meaning the UASTC transcode this still
+	# requires (`basis-universal`) always lands on the plain `Rgba8Unorm` fallback rather than a
+	# real GPU-compressed format, which is fine: the server only needs a valid in-memory `Image` to
+	# finish loading the document, it never uploads or samples the result.
+	"ktx2",
+	"basis-universal",
+	# `gltfpack`/`ktx` also Zstd-supercompress the KTX2 container itself on top of the UASTC data
+	# (see `scripts/glbpack.sh`/`hdri_to_skybox.py`) — decoding that needs a zstd backend too,
+	# separately from the format/transcode features above. `zstd_rust` (pure-Rust `ruzstd`) over
+	# `zstd_c` (unsafe C bindings) for the same "safe by default" reason `bevy`'s own Cargo.toml
+	# recommends it. On the client this comes along for free, incidentally, via `bevy_mod_outline`/
+	# `bevy_enhanced_input` requesting it on their own `bevy` dependency — neither is a `server`
+	# dependency, so it has to be requested explicitly here instead.
+	"zstd_rust",
 	# `bevy_world_serialization`'s spawner reflects every component (including built-ins like
 	# `Transform`) onto the entities it instantiates, and panics on any type missing from the
 	# `AppTypeRegistry`. The client never registers `Transform` itself either — it gets this for

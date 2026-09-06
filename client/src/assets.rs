@@ -20,12 +20,12 @@
 //! combination that produces what `bevy_fluent` actually needs, so `localization.rs` keeps its
 //! own manual `asset_server.load_folder("locales")` + polling instead.
 
-use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAsset;
-use bevy_asset_loader::mapped::AssetFileStem;
 use bevy_asset_loader::prelude::*;
 use bevy_seedling::sample::AudioSample;
+
+use crate::input_icons::SparrowAtlasManifest;
 
 #[derive(AssetCollection, Resource)]
 pub struct CommonAssets {
@@ -60,17 +60,21 @@ pub struct CommonAssets {
     #[asset(path = "fonts/serif/IBMPlexSerif-Regular.ttf")]
     pub serif_font: Handle<Font>,
 
-    /// Every icon PNG in Kenney's keyboard/mouse "Input Prompts" pack, keyed by filename minus
-    /// extension (`AssetFileStem` — e.g. `"keyboard_a"`, `"mouse_left"`, `"mouse_move"`), matching
-    /// the same lookup keys `input_icons.rs`'s `icon_png!` macro used to hardcode as path strings.
-    #[asset(
-        path = "textures/input_prompts/keyboard_mouse",
-        collection(typed, mapped)
-    )]
-    pub keyboard_mouse_icons: HashMap<AssetFileStem, Handle<Image>>,
-    /// Same idea as `keyboard_mouse_icons`, for the Steam Deck button/stick icon pack.
-    #[asset(path = "textures/input_prompts/steam_deck", collection(typed, mapped))]
-    pub steam_deck_icons: HashMap<AssetFileStem, Handle<Image>>,
+    /// Kenney's own pre-built texture atlas for the keyboard/mouse "Input Prompts" pack — a single
+    /// sheet PNG plus a Sparrow/Starling-format XML manifest (`input_icons::SparrowAtlasManifest`
+    /// parses it) naming each icon's pixel rect within the sheet. Loading these two instead of the
+    /// pack's ~85 individual per-icon PNGs is deliberate — see `input_icons.rs`'s module doc
+    /// comment for why building our own atlas at runtime from the individual files was dropped in
+    /// favor of this.
+    #[asset(path = "textures/input_prompts/keyboard_mouse_sheet.png")]
+    pub keyboard_mouse_atlas_image: Handle<Image>,
+    #[asset(path = "textures/input_prompts/keyboard_mouse_sheet.xml")]
+    pub keyboard_mouse_atlas_manifest: Handle<SparrowAtlasManifest>,
+    /// Same idea as `keyboard_mouse_atlas_image`/`_manifest`, for the Steam Deck button/stick pack.
+    #[asset(path = "textures/input_prompts/steam_deck_sheet.png")]
+    pub steam_deck_atlas_image: Handle<Image>,
+    #[asset(path = "textures/input_prompts/steam_deck_sheet.xml")]
+    pub steam_deck_atlas_manifest: Handle<SparrowAtlasManifest>,
 }
 
 #[derive(AssetCollection, Resource)]

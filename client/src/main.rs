@@ -58,9 +58,10 @@ macro_rules! add_observers_run_if {
 pub(crate) use add_observers_run_if;
 
 use crate::{
-    animation::PAnimationPlugin, loading::LoadingPlugin, localization::LocalizationPlugin,
-    modal_menu::ModalMenuPlugin, nameplate::NameplatePlugin, npc_spawner::NpcSpawnerPlugin,
-    npc_ui_quad::NpcUiQuadPlugin, quad_panel::QuadPanelPlugin, vr_controllers::VrControllersPlugin,
+    animation::PAnimationPlugin, input_icons::InputIconsPlugin, loading::LoadingPlugin,
+    localization::LocalizationPlugin, modal_menu::ModalMenuPlugin, nameplate::NameplatePlugin,
+    npc_spawner::NpcSpawnerPlugin, npc_ui_quad::NpcUiQuadPlugin, quad_panel::QuadPanelPlugin,
+    vr_controllers::VrControllersPlugin,
 };
 
 fn main() {
@@ -148,6 +149,7 @@ impl Plugin for Prototype19 {
                 networking::NetworkingPlugin,
                 ModalMenuPlugin,
                 QuadPanelPlugin,
+                InputIconsPlugin,
             ),
         ));
 

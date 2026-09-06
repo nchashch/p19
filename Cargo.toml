@@ -53,6 +53,7 @@ audionimbus = { path = "../audionimbus/audionimbus", features = [
 	"auto-install",
 ] }
 chill_bevy_console = "0.3.1"
+quick-xml = "0.42.0"
 
 # `gltf` (transitive, via `bevy`/`bevy_gltf`) is patched to a vendored fork with
 # https://github.com/gltf-rs/gltf/pull/467 applied, adding support for `KHR_texture_basisu`

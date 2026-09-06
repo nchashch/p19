@@ -211,7 +211,11 @@ fn show_tooltip(
     over: On<Pointer<Over>>,
     tips: Query<(&Tooltip, Option<&TooltipAbove>)>,
     panel: Query<Entity, With<Panel>>,
-    common_assets: Res<CommonAssets>,
+    // `Option`, not a bare `Res` — confirmed by testing, not just theory: a `Pointer<Over>` can
+    // fire (and did, in practice) on a `Tooltip`-bearing, `Panel`-adjacent entity that exists
+    // before `GameState::AssetLoading` finishes and inserts `CommonAssets` (e.g. dev-console/FPS
+    // overlay UI, which `console.rs` adds unconditionally, independent of `GameState`).
+    common_assets: Option<Res<CommonAssets>>,
     localization: Option<Res<Localization>>,
     mut commands: Commands,
 ) {
@@ -222,6 +226,9 @@ fn show_tooltip(
         return;
     };
     let Some(localization) = localization else {
+        return;
+    };
+    let Some(common_assets) = common_assets else {
         return;
     };
     let mut fluent_args = FluentArgs::new();

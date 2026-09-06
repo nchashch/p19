@@ -1,4 +1,5 @@
 use avian3d::prelude::*;
+use bevy::image::{CompressedImageFormatSupport, CompressedImageFormats};
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
 use bevy_replicon::prelude::*;
@@ -62,6 +63,18 @@ fn main() {
         // (normally `ImagePlugin`'s job, which the server doesn't have either).
         .init_asset::<Mesh>()
         .init_asset::<Image>()
+        // Without a real render device, `GltfPlugin::finish()` has no `CompressedImageFormatSupport`
+        // to read and falls back to `CompressedImageFormats::NONE` — which forces any KTX2/UASTC
+        // texture's transcode down `bevy_image::ktx2`'s uncompressed `Rgba8Unorm` fallback path
+        // instead of a real block-compressed target. That fallback path has a real upstream bug
+        // (confirmed against `bevy_image-0.19.0`'s source): it slices the *source* UASTC bytes using
+        // a size computed for the *target* `Rgba8Unorm` bytes (4 bytes/pixel vs UASTC's 1 byte/pixel
+        // equivalent), so it panics with a slice-out-of-range error on any real KTX2 texture rather
+        // than just running slower. Claiming `BC` support here is a total fiction — the server never
+        // renders or samples the resulting `Image` at all — but it's harmless and routes the
+        // transcode down the BC7 branch instead, which doesn't hit the bug (BC7's block size happens
+        // to match UASTC's own, unlike `Rgba8Unorm`'s).
+        .insert_resource(CompressedImageFormatSupport(CompressedImageFormats::BC))
         // Needed for Skein to reflect `ColliderConstructor` off level geometry onto entities —
         // mirrors the same registration in `client/src/main.rs`.
         .register_type::<ColliderConstructor>()

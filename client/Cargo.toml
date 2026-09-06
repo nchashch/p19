@@ -57,3 +57,4 @@ bevy_mod_xr = { path = "../../bevy_oxr/crates/bevy_xr" }
 bevy_fluent.workspace = true
 fluent_content.workspace = true
 unic-langid.workspace = true
+quick-xml.workspace = true
