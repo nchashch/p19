@@ -1,12 +1,12 @@
 use crate::{
-    assets::CommonAssets,
-    camera::{PlayerCameraPlugin, player_camera},
-    combat::CombatPlugin,
-    controls::{self, PlayerControlsPlugin},
-    fps_controller::FpsCamera,
-    game_state::GameState,
+    controls::camera::{PlayerCameraPlugin, player_camera},
+    controls::controls::{self, PlayerControlsPlugin},
+    controls::fps_controller::FpsCamera,
+    gameplay::combat::CombatPlugin,
+    lifecycle::assets::CommonAssets,
 };
 use bevy::prelude::*;
+use shared::game_state::GameState;
 use shared::npc_spawner::NpcSpawner;
 use shared::player::PlayerCharacter;
 use shared::{cube_spawner::CubeSpawner, server_events::PlayerSpawned};

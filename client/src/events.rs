@@ -18,9 +18,10 @@ pub struct PlayAnimationOnce {
 }
 
 #[derive(Event)]
-pub struct LoadLevel {
-    pub id: String,
-}
+pub struct Connect;
+
+#[derive(Event)]
+pub struct Disconnect;
 
 /// Client-local trigger (bound to input) — translated into a `SpawnCubeRequest` carrying the
 /// player's current aim direction, since `shared` has no `FpsCamera` of its own.

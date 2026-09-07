@@ -4,10 +4,10 @@ use shared::client_events::SpawnNpcRequest;
 use shared::level::LevelRoot;
 use shared::npc_spawner::{Npc, NpcSpawner};
 
-use crate::assets::CommonAssets;
-use crate::cube_spawner::Decorated;
 use crate::events::SpawnNpc;
-use crate::npc_ui_quad::{NpcUiQuad, NpcUiQuadMesh};
+use crate::gameplay::cube_spawner::Decorated;
+use crate::lifecycle::assets::CommonAssets;
+use crate::ui::npc_ui_quad::{NpcUiQuad, NpcUiQuadMesh};
 
 pub struct NpcSpawnerPlugin;
 

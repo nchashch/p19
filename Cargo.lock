@@ -1891,8 +1891,6 @@ dependencies = [
 [[package]]
 name = "bevy_replicon_quinnet"
 version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4359d8b0c52c5725e28fbbbb9586a0641d8bd8a71a5bd53e36e85135b54d6d9"
 dependencies = [
  "bevy",
  "bevy_quinnet",

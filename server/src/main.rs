@@ -55,6 +55,7 @@ fn main() {
             ),
             networking::NetworkingPlugin,
         ))
+        .init_state::<ServerState>()
         // avian3d's collider cache reads `AssetEvent<Mesh>` (for mesh-derived colliders) even
         // though the server never renders — normally registered by rendering plugins the headless
         // server doesn't have, so it needs registering directly instead. `Image` needs the same

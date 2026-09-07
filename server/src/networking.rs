@@ -9,9 +9,12 @@ use bevy_quinnet::server::{
 };
 use bevy_replicon::prelude::*;
 use bevy_replicon_quinnet::ChannelsConfigurationExt;
+use shared::assets::asset_exists;
+use shared::server_events::ServerInGame;
 use shared::{
     character_controller::{JumpInput, MovementInput},
     client_events::{Jump, LoadLevelRequest, Movement},
+    game_state::ServerState,
     level::LevelRoot,
     player::{PlayerCharacterSpawner, player},
     server_events::{LoadLevel, PlayerSpawned},
@@ -57,75 +60,40 @@ fn on_jump(request: On<FromClient<Jump>>, mut commands: Commands) {
 fn on_load_level_request(
     request: On<FromClient<LoadLevelRequest>>,
     asset_server: Res<AssetServer>,
-    mut level_state: ResMut<LevelState>,
     mut commands: Commands,
 ) {
-    // A level is already loading or loaded — ignore. Without this gate, a client sending
-    // `LoadLevelRequest` twice (a double-fired UI button, a retried packet, or a malicious
-    // client) would spawn a second `LevelRoot`/`WorldAssetRoot` into the same ECS world:
-    // duplicate colliders, duplicate `PlayerCharacterSpawner`s, duplicate everything. Switching
-    // to a genuinely different level isn't supported yet either way — the server doesn't despawn
-    // a previous level's geometry on reload — so any request beyond the first is rejected
-    // regardless of id until that's addressed.
-    //
-    // `LevelState` is a plain resource specifically so this check-and-set is atomic within this
-    // one observer call — `bevy_replicon` can (and does) trigger this observer twice in the same
-    // frame when two `LoadLevelRequest`s arrive in the same network batch, and a `States`/
-    // `NextState`-based version wouldn't see the first call's transition applied until next
-    // frame, letting the second call straight through.
-    if !matches!(*level_state, LevelState::Idle) {
-        warn!(
-            "ignoring LoadLevelRequest for `{}` — a level is already loading or loaded",
-            request.id
-        );
+    let id = request.id.clone();
+    if !asset_exists(&asset_server, &id) {
+        info!("level {} doesn't exit", id);
         return;
     }
-    let id = request.id.clone();
-    *level_state = LevelState::Loading(id.clone());
-    let handle = asset_server.load(GltfAssetLabel::Scene(0).from_asset(&id));
-    // `Transform`/`Visibility` come from `LevelRoot`'s `#[require(...)]` now, but `Transform`
-    // is spelled out explicitly anyway to enforce the "must stay at IDENTITY" invariant at the
-    // spawn site rather than relying on the require's default matching it by coincidence.
+    commands.set_state(ServerState::Loading);
+    let handle = asset_server.load(GltfAssetLabel::Scene(0).from_asset(id.clone()));
     commands
-        .spawn((LevelRoot { id }, Replicated, Transform::IDENTITY))
+        .spawn((LevelRoot, Replicated, Transform::IDENTITY))
         .with_children(|parent| {
             parent.spawn(WorldAssetRoot(handle)).observe(on_level_ready);
         });
-}
-
-/// Fires once the level's local `WorldAssetRoot` (spawned above, never itself replicated — each
-/// side loads its own copy independently) has actually finished instantiating, including any
-/// Skein-reflected `ColliderConstructor`s Avian still needs to turn into real `Collider`s from
-/// the scene's `Mesh` data. Broadcasts `LoadLevel` so clients know the `LevelRoot` they've
-/// already received over replication is now backed by real, collidable geometry server-side —
-/// not just once its asset bytes are loaded, which can be true before the entities themselves
-/// exist (same reasoning as the client's own `on_level_ready` in `loading.rs`).
-fn on_level_ready(
-    ready: On<WorldInstanceReady>,
-    parents: Query<&ChildOf>,
-    level_roots: Query<&LevelRoot>,
-    player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
-    connected_clients: Query<Entity, With<AuthorizedClient>>,
-    mut level_state: ResMut<LevelState>,
-    mut commands: Commands,
-) {
-    let Ok(level_root_child_of) = parents.get(ready.entity) else {
-        return;
-    };
-    let level_root_entity = level_root_child_of.parent();
-    let Ok(level_root) = level_roots.get(level_root_entity) else {
-        return;
-    };
-    info!(
-        "level ready, broadcasting LoadLevel for `{}`",
-        level_root_entity
-    );
-    *level_state = LevelState::LevelLoaded(level_root.id.clone());
     commands.server_trigger(ToClients {
         targets: SendTargets::All,
-        message: LoadLevel {
-            entity: level_root_entity,
-        },
+        message: LoadLevel { id },
+    });
+}
+
+fn on_level_ready(
+    _ready: On<WorldInstanceReady>,
+    player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
+    connected_clients: Query<Entity, With<AuthorizedClient>>,
+    server_state: Res<State<ServerState>>,
+    mut commands: Commands,
+) {
+    if !matches!(server_state.get(), ServerState::Loading) {
+        return;
+    }
+    commands.set_state(ServerState::InGame);
+    commands.server_trigger(ToClients {
+        targets: SendTargets::All,
+        message: ServerInGame,
     });
     // The client's own connection entity *is* its player character (see `on_movement`/`on_jump`
     // above, which resolve straight off `ClientId::entity()`) — no separate client->player

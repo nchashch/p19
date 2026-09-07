@@ -2,6 +2,8 @@ use bevy::ecs::entity::MapEntities;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::game_state::GameState;
+
 /// Fired once an `AttackAttempt` is confirmed in range and damage has been applied — this is the
 /// fact client-side presentation (animation, sound) reacts to, not `AttackAttempt` itself.
 ///
@@ -47,11 +49,18 @@ pub struct NpcSpawned {
     pub facing_yaw: f32,
 }
 
-#[derive(EntityEvent, Serialize, Deserialize, MapEntities)]
-pub struct LoadLevel {
-    #[entities]
-    pub entity: Entity,
+#[derive(Event, Serialize, Deserialize)]
+pub struct UnloadLevel {
+    pub next_state: GameState,
 }
+
+#[derive(Event, Serialize, Deserialize)]
+pub struct LoadLevel {
+    pub id: String,
+}
+
+#[derive(Event, Serialize, Deserialize)]
+pub struct ServerInGame;
 
 /// Fired once a character's `HitPoints` actually reach zero in combat, right before the server
 /// despawns it — the fact client-side presentation (death sound, particle effect) reacts to,

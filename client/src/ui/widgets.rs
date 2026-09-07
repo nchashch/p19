@@ -1,5 +1,5 @@
-use crate::assets::CommonAssets;
-use crate::localization::{LocalizedText, localized};
+use crate::lifecycle::assets::CommonAssets;
+use crate::ui::localization::{LocalizedText, localized};
 use bevy::{
     color::palettes::css::{DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},
     input_focus::InputFocus,
@@ -62,7 +62,7 @@ pub fn panel(width: Val, height: Val) -> impl Scene {
 /// `'static`, and a borrowed `&CommonAssets` parameter makes edition-2024's default
 /// return-position-`impl-Trait` lifetime capture pull that borrow's lifetime into `impl Scene`'s
 /// hidden type, which doesn't satisfy that. An owned `Handle<Font>` has no such lifetime to fight.
-pub fn button(width: Val, height: Val, label_key: &'static str, font: Handle<Font>) -> impl Scene {
+pub fn button(width: Val, height: Val, label_key: &'static str) -> impl Scene {
     bsn! {
         Button
         // Makes the button a candidate for gamepad/keyboard directional navigation (see
@@ -86,7 +86,6 @@ pub fn button(width: Val, height: Val, label_key: &'static str, font: Handle<Fon
             Text(label_key)
             LocalizedText(label_key)
             TextFont {
-                font: FontSourceTemplate::Handle(font),
                 font_size: px(BUTTON_TEXT_FONT_SIZE),
             }
             TextColor(BUTTON_TEXT_COLOR)

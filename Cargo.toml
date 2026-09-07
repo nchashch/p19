@@ -32,7 +32,6 @@ bevy_enhanced_input = "0.26.0"
 bevy_asset_loader = { version = "0.27.0", features = ["standard_dynamic_assets"] }
 bevy_hanabi = "0.19.0"
 bevy_replicon = "0.41.1"
-bevy_replicon_quinnet = "0.20.0"
 # `recv_channels` (a default feature) adds an alternate auto-dispatch receive path that
 # `bevy_replicon_quinnet` doesn't use (it dequeues messages itself) — left off since nothing
 # else in this workspace needs it either.
@@ -46,6 +45,21 @@ serde = { version = "1.0.228", features = ["derive"] }
 polyanya = { path = "../polyanya" }
 rerecast = { path = "../rerecast/crates/rerecast" }
 bevy_mod_outline = { path = "../bevy_mod_outline" }
+# Vendored to fix a real reconnect bug: `RepliconQuinnetClientPlugin` registers
+# `set_connected`/`set_connecting`/`set_disconnected` as an unordered tuple in `PreUpdate`, all
+# writing to the same `NextState<ClientState>`. On a fast enough connection (confirmed on
+# loopback, especially a *second* connection in the same process — presumably faster than the
+# first since the OS/crypto context is already warmed up), `client_connecting` and
+# `client_just_connected` can both be true in the same frame; whichever of
+# `set_connecting`/`set_connected` happens to run last that frame wins, since `NextState` only
+# holds one pending value. If `set_connecting` wins, `ClientState` gets stuck reporting
+# `Connecting` forever — worse, `bevy_quinnet::client_just_connected`'s own internal `Local<bool>`
+# edge-detector already flipped to "connected" on the losing frame regardless of whose write won,
+# so it can never fire `set_connected` again for the rest of the process, even though the
+# underlying QUIC connection is genuinely fully connected. Symptom: `OnEnter(ClientState::Connected)`
+# silently stops firing on any reconnect after the first, while `bevy_quinnet`'s own low-level
+# "connection established" log line (unrelated to this broken edge-detector) still prints fine.
+bevy_replicon_quinnet = { path = "../bevy_replicon_quinnet" }
 bevy_vello = { path = "../bevy_vello" }
 bevy_seedling = { path = "../bevy_seedling", features = ["mp3"] }
 audionimbus = { path = "../audionimbus/audionimbus", features = [

@@ -14,7 +14,7 @@ use crate::level::LevelRoot;
 use crate::npc_spawner::Npc;
 use crate::player::{PlayerCharacter, Selectable};
 use crate::server_events::{
-    Attack, CubeSpawned, EntityDied, Kill, LoadLevel, NpcSpawned, PlayerSpawned,
+    Attack, CubeSpawned, EntityDied, Kill, LoadLevel, NpcSpawned, PlayerSpawned, UnloadLevel,
 };
 
 pub struct SharedReplicationPlugin;
@@ -62,8 +62,10 @@ impl Plugin for SharedReplicationPlugin {
         app.add_mapped_server_event::<Kill>(Channel::Ordered);
         app.add_mapped_server_event::<CubeSpawned>(Channel::Ordered);
         app.add_mapped_server_event::<NpcSpawned>(Channel::Ordered);
-        app.add_mapped_server_event::<LoadLevel>(Channel::Ordered);
         app.add_mapped_server_event::<PlayerSpawned>(Channel::Ordered);
         app.add_mapped_server_event::<EntityDied>(Channel::Ordered);
+
+        app.add_server_event::<UnloadLevel>(Channel::Ordered);
+        app.add_server_event::<LoadLevel>(Channel::Ordered);
     }
 }

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::f32::consts::PI;
 
-// use crate::player_character::PlayerModel;
+// use crate::gameplay::player_character::PlayerModel;
 
 pub struct FpsControllerPlugin;
 

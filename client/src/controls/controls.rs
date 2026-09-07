@@ -1,22 +1,18 @@
-use crate::actions::*;
 use crate::add_observers_run_if;
+use crate::controls::actions::*;
+use crate::controls::fps_controller::FpsCamera;
+use crate::controls::targeting::{Hovered, SELECT_RANGE, Selected, TargetingPlugin};
 use crate::events::{SpawnCube, SpawnNpc};
-use crate::fps_controller::FpsCamera;
-use crate::game_state::{GameState, ModalMenuState};
-use crate::hud::DataFrameVisible;
-use crate::networking::PendingLevelId;
-use crate::targeting::{Hovered, SELECT_RANGE, Selected, TargetingPlugin};
+use crate::ui::hud::DataFrameVisible;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions};
 use bevy_enhanced_input::prelude::{Press, *};
-use bevy_hanabi::ParticleEffect;
-use bevy_mod_xr::session::XrTrackingRoot;
-use bevy_quinnet::client::QuinnetClient;
 use bevy_replicon::prelude::ClientTriggerExt;
-use bevy_seedling::sample::SamplePlayer;
 use chill_bevy_console::console_closed;
 use shared::client_events::{AttackAttempt, KillAttempt};
+use shared::game_state::{GameState, ModalMenuState};
 use shared::player::Selectable;
+use shared::server_events::UnloadLevel;
 use std::f32::consts::PI;
 
 pub struct PlayerControlsPlugin;
@@ -80,60 +76,18 @@ fn spawn_npc(_: On<Start<SpawnNpcAction>>, mut commands: Commands) {
     commands.trigger(SpawnNpc);
 }
 
-fn main_menu(
-    _: On<Start<MainMenu>>,
-    commands: Commands,
-    client: ResMut<QuinnetClient>,
-    pending_level_id: ResMut<PendingLevelId>,
-    particle_effects: Query<Entity, With<ParticleEffect>>,
-    sample_players: Query<Entity, With<SamplePlayer>>,
-    xr_root: Query<Entity, With<XrTrackingRoot>>,
-) {
-    return_to_main_menu(
-        commands,
-        client,
-        pending_level_id,
-        particle_effects,
-        sample_players,
-        xr_root,
-    );
+fn main_menu(_: On<Start<MainMenu>>, commands: Commands) {
+    return_to_main_menu(commands);
 }
 
 /// Shared by the `MainMenu` action (Escape/Start, above), `modal_menu.rs`'s pause-modal "Main
 /// Menu" button, and its in-game VR wrist-panel equivalent — all three close the connection and
 /// drop the player back to `GameState::MainMenu` the same way, so this is factored out rather than
 /// duplicated across input surfaces.
-pub(crate) fn return_to_main_menu(
-    mut commands: Commands,
-    mut client: ResMut<QuinnetClient>,
-    mut pending_level_id: ResMut<PendingLevelId>,
-    particle_effects: Query<Entity, With<ParticleEffect>>,
-    sample_players: Query<Entity, With<SamplePlayer>>,
-    xr_root: Query<Entity, With<XrTrackingRoot>>,
-) {
-    for particle_effect in particle_effects {
-        commands.entity(particle_effect).despawn();
-    }
-    for sample_player in sample_players {
-        commands.entity(sample_player).despawn();
-    }
-    // `XrTrackingRoot` gets reparented onto the player's own `VrPlayspaceRig` once a player
-    // spawns (see `vr_controllers::on_player_spawned`) — which otherwise means it (and everything
-    // the VR session actually depends on: the tracked grip cubes, the lasers, any wrist-attached
-    // `quad_panel`) gets despawned right along with the player character when
-    // `DespawnOnExit(GameState::InGame)` fires below. `XrTrackingRoot` is `bevy_mod_xr`'s own core
-    // playspace anchor, not something game logic should ever destroy — doing so froze the VR view
-    // entirely while the desktop window kept working fine (confirmed by testing: the two
-    // rendering paths are otherwise independent). Detaching it here, before the state transition
-    // despawns the player (and so `VrPlayspaceRig`), keeps it alive to be re-parented onto the
-    // *next* player's own rig once one spawns again — `on_player_spawned` already does that
-    // unconditionally, regardless of whatever this entity's previous parent was.
-    for xr_root in &xr_root {
-        commands.entity(xr_root).remove::<ChildOf>();
-    }
-    client.close_all_connections();
-    pending_level_id.0 = None;
-    commands.set_state(GameState::MainMenu);
+pub(crate) fn return_to_main_menu(mut commands: Commands) {
+    commands.trigger(UnloadLevel {
+        next_state: GameState::MainMenu,
+    });
 }
 
 /// Opens/closes the pause modal (`modal_menu.rs`) — toggling rather than only-opening lets Tab

@@ -9,12 +9,13 @@ use fluent::FluentArgs;
 use futures_lite::StreamExt;
 use std::path::Path;
 
-use crate::animation::Animations;
-use crate::events::{LoadLevel, PlayAnimationLooping};
-use crate::hud::HudVisible;
-use crate::localization::localized;
-use crate::nameplate::NameplatesVisible;
-use crate::{events::RespawnPlayer, targeting::Selected};
+use crate::controls::targeting::Selected;
+use crate::events::PlayAnimationLooping;
+use crate::events::RespawnPlayer;
+use crate::presentation::animation::Animations;
+use crate::ui::hud::HudVisible;
+use crate::ui::localization::localized;
+use crate::ui::nameplate::NameplatesVisible;
 use shared::cube_spawner::Cube;
 use shared::npc_spawner::Npc;
 
@@ -178,9 +179,8 @@ fn load_level_cmd(
         return localized_output(&localization, "console-load-level-missing-id", &args);
     };
     if levels.contains(&format!("\"levels/{}\"", id)) {
-        commands.trigger(LoadLevel {
-            id: format!("levels/{}", id),
-        });
+        // TODO: Load level here.
+        todo!();
         let mut args = FluentArgs::new();
         args.set("id", id);
         localized_output(&localization, "console-load-level-loading", &args)

@@ -1,4 +1,4 @@
-use bevy::{asset::AssetPath, prelude::*};
+use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Required components matter here specifically because of replication: the client's mirror of
@@ -12,6 +12,4 @@ use serde::{Deserialize, Serialize};
 /// child has it — and left the whole subtree's visibility propagation inconsistent.
 #[derive(Component, Default, Serialize, Deserialize)]
 #[require(Transform, Visibility)]
-pub struct LevelRoot {
-    pub id: AssetPath<'static>,
-}
+pub struct LevelRoot;

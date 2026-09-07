@@ -4,8 +4,8 @@ use bevy::prelude::*;
 use bevy_mod_outline::{AsyncWorldInheritOutline, OutlinePlugin, OutlineVolume};
 use shared::player::Selectable;
 
-use crate::game_state::VRState;
-use crate::player_character::LocalPlayer;
+use crate::gameplay::player_character::LocalPlayer;
+use shared::game_state::VRState;
 
 pub struct TargetingPlugin;
 

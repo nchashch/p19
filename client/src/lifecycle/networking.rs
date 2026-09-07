@@ -14,7 +14,9 @@ use bevy_replicon::prelude::*;
 use bevy_replicon_quinnet::ChannelsConfigurationExt;
 use futures_lite::io::AsyncReadExt;
 use serde::Deserialize;
-use shared::client_events::LoadLevelRequest;
+use shared::game_state::GameState;
+
+use crate::events::{Connect, Disconnect};
 
 const SERVER_PORT: u16 = 6000;
 
@@ -22,12 +24,13 @@ pub struct NetworkingPlugin;
 
 impl Plugin for NetworkingPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PendingLevelId>();
         app.init_resource::<ServerAddress>();
         app.init_resource::<DefaultLevel>();
         app.add_systems(Startup, load_client_config);
         app.add_systems(OnEnter(ClientState::Connected), on_connected)
             .add_systems(OnEnter(ClientState::Disconnected), on_disconnected);
+        app.add_observer(on_connect_request);
+        app.add_observer(on_disconnect_request);
     }
 }
 
@@ -144,28 +147,27 @@ fn load_client_config(
     }
 }
 
-/// Set by `loading.rs`'s `load_level` once it's validated the requested level id exists locally
-/// and opened the connection (via `connect_to_server`, below) — consumed by `on_connected` once
-/// `ClientState::Connected` actually fires, so `LoadLevelRequest` is only ever sent once the
-/// connection is real, not queued into a connection that may still be establishing.
-///
-/// The connection is deliberately *not* opened at `Startup` any more: a client that connects
-/// eagerly to a server that already has a level loaded gets that `LevelRoot` replicated to it
-/// immediately, and `loading.rs`'s `spawn_level`/`on_level_ready` react to a replicated
-/// `LevelRoot` unconditionally (not gated on `GameState`) — so an eager connection used to skip
-/// the main menu entirely and drop the client straight into `InGame` before `Play` was ever
-/// pressed. Connecting only once `Play` is pressed (see `load_level`) makes that impossible.
-#[derive(Resource, Default)]
-pub struct PendingLevelId(pub Option<AssetPath<'static>>);
-
 /// Opens the connection to `addr`, unless one is already open or opening — safe to call every
 /// time `Play` is pressed, including a second press before the first connection attempt has
 /// resolved. Skips certificate verification since the server generates a self-signed cert — fine
 /// for this dev scaffold, not for a real deployment.
-pub fn connect_to_server(channels: &RepliconChannels, client: &mut QuinnetClient, addr: IpAddr) {
+pub fn on_connect_request(
+    _: On<Connect>,
+    channels: Res<RepliconChannels>,
+    server_address: Res<ServerAddress>,
+    mut client: ResMut<QuinnetClient>,
+) {
+    info!("on_connect_request");
     if client.is_connected() || client.is_connecting() {
         return;
     }
+    let Ok(addr) = server_address.0.trim().parse::<IpAddr>() else {
+        warn!(
+            "on_level_assets_loaded: {:?} is not a valid IP address",
+            server_address.0
+        );
+        return;
+    };
     client
         .open_connection(ClientConnectionConfiguration {
             addr_config: ClientAddrConfiguration::from_ips(
@@ -182,13 +184,27 @@ pub fn connect_to_server(channels: &RepliconChannels, client: &mut QuinnetClient
         .expect("client connection should open");
 }
 
-fn on_connected(mut pending: ResMut<PendingLevelId>, mut commands: Commands) {
-    info!("connected to server");
-    if let Some(id) = pending.0.take() {
-        commands.client_trigger(LoadLevelRequest { id });
-    }
+pub fn on_disconnect_request(_: On<Disconnect>, mut client: ResMut<QuinnetClient>) {
+    client.close_all_connections();
 }
 
-fn on_disconnected() {
+fn on_connected(mut commands: Commands) {
+    info!("connected to server");
+    commands.set_state(GameState::Lobby);
+}
+
+/// `ClientState::Disconnected` is `#[default]` (confirmed against `bevy_replicon`'s source), so
+/// this fires once on the very first frame too — before the client has ever tried to connect to
+/// anything, and before `GameState::AssetLoading`'s `LoadingState` has had any chance to finish.
+/// Without this guard, that spurious startup firing force-transitioned `GameState` straight to
+/// `MainMenu`, bypassing `LoadingState::continue_to_state(GameState::MainMenu)` entirely and
+/// panicking every `OnEnter(GameState::MainMenu)` system that needs `Res<CommonAssets>` (it
+/// doesn't exist yet). A real disconnect can only happen after `AssetLoading` has already
+/// finished — the client can't attempt a connection before reaching `MainMenu` — so gating on
+/// that is precise, not just a startup-only special case.
+fn on_disconnected(mut commands: Commands, game_state: Res<State<GameState>>) {
     info!("disconnected from server");
+    if !matches!(game_state.get(), GameState::AssetLoading) {
+        commands.set_state(GameState::MainMenu);
+    }
 }

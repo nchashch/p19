@@ -2,12 +2,16 @@ use bevy::input::gamepad::{GamepadAxisChangedEvent, GamepadButtonChangedEvent};
 use bevy::input::keyboard::KeyboardInput;
 use bevy::input::mouse::{MouseButtonInput, MouseMotion};
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 
-#[derive(States, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum VRState {
+#[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ServerState {
     #[default]
-    Desktop,
-    VR,
+    Lobby,
+    Loading,
+    // Server pause is for all players.
+    Paused,
+    InGame,
 }
 
 /// `AssetLoading` is the app's real starting state now, not `MainMenu` — `main.rs`'s
@@ -15,13 +19,23 @@ pub enum VRState {
 /// transition to `MainMenu` until `assets::CommonAssets` finishes loading, so nothing that reacts
 /// to `OnEnter(GameState::MainMenu)` (spawning the main menu scene, etc.) can run before every
 /// asset in that collection is ready.
-#[derive(States, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GameState {
     #[default]
     AssetLoading,
     MainMenu,
+    Lobby,
     Loading,
+    // A player can be "paused" while the server simulation is still running.
+    Paused,
     InGame,
+}
+
+#[derive(States, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum VRState {
+    #[default]
+    Desktop,
+    VR,
 }
 
 /// Whether the in-game pause/modal menu (`modal_menu.rs`) is up — a second, independent state

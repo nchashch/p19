@@ -1,12 +1,10 @@
-use crate::actions::{UiConfirm, UiNavigate};
 use crate::add_observers_run_if;
-use crate::assets::CommonAssets;
-use crate::events::LoadLevel;
-use crate::game_state::{GameState, VRState};
-use crate::hud::HudPlugin;
-use crate::networking::DefaultLevel;
-use crate::quad_panel::quad_panel;
-use crate::widgets::{Activate, Tooltip, WidgetsPlugin, button, panel};
+use crate::controls::actions::{UiConfirm, UiNavigate};
+use crate::events::Connect;
+use crate::lifecycle::assets::CommonAssets;
+use crate::ui::hud::HudPlugin;
+use crate::ui::quad_panel::quad_panel;
+use crate::ui::widgets::{Activate, Tooltip, WidgetsPlugin, button, panel};
 use bevy::{
     input_focus::{AutoFocus, InputFocus, directional_navigation::DirectionalNavigationPlugin},
     prelude::*,
@@ -16,6 +14,7 @@ use bevy_enhanced_input::prelude::{Press, *};
 use bevy_fluent::prelude::Locale;
 use bevy_xr_utils::tracking_utils::XrTrackedLeftGrip;
 use chill_bevy_console::console_closed;
+use shared::game_state::{GameState, VRState};
 use std::f32::consts::FRAC_PI_2;
 use unic_langid::{LanguageIdentifier, langid};
 
@@ -131,7 +130,7 @@ fn main_menu(common_assets: &CommonAssets) -> impl Scene {
             align_items: AlignItems::End,
             justify_content: JustifyContent::Start,
         }
-        Children [ main_menu_buttons(common_assets) ]
+        Children [ main_menu_buttons() ]
         WorldAssetRoot({common_assets.menu_background.clone()})
         DespawnOnExit::<GameState>(GameState::MainMenu)
     }
@@ -142,32 +141,32 @@ fn main_menu(common_assets: &CommonAssets) -> impl Scene {
 /// VR wrist-mounted `quad_panel`, not just a re-styled lookalike. Deliberately *not* including
 /// `main_menu()`'s fullscreen `Node`/`WorldAssetRoot` background — those only make sense for the
 /// desktop window, not a small texture on someone's wrist.
-pub(crate) fn main_menu_buttons(common_assets: &CommonAssets) -> impl Scene {
+pub(crate) fn main_menu_buttons() -> impl Scene {
     bsn! {
         panel(px(400), px(400))
         Children [
             (
-                button(px(200), px(50), "main-menu-play", common_assets.serif_font.clone())
-                Tooltip::new("main-menu-play-tooltip")
+                button(px(200), px(50), "main-menu-connect")
+                Tooltip::new("main-menu-connect-tooltip")
                 AutoFocus
-                on(play_button)
+                on(connect_button)
             ),
             (
-                button(px(200), px(50), "main-menu-options", common_assets.serif_font.clone())
+                button(px(200), px(50), "main-menu-options")
                 Tooltip::new("main-menu-options-tooltip")
                 on(stub_button)
             ),
             (
-                button(px(200), px(50), "main-menu-credits", common_assets.serif_font.clone())
+                button(px(200), px(50), "main-menu-credits")
                 Tooltip::new("main-menu-credits-tooltip")
                 on(stub_button)
             ),
             (
-                button(px(200), px(50), "main-menu-quit", common_assets.serif_font.clone())
+                button(px(200), px(50), "main-menu-quit")
                 Tooltip::new("main-menu-quit-tooltip")
                 on(quit_button)
             ),
-            language_picker(common_assets),
+            language_picker(),
         ]
     }
 }
@@ -199,17 +198,17 @@ struct LocaleOption(LanguageIdentifier);
 /// The "Language" button plus its (initially hidden) options popup. `position_type: Relative` on
 /// the wrapping `Node` is what lets the popup's own `position_type: Absolute` anchor directly below
 /// the button instead of relative to the whole screen.
-fn language_picker(common_assets: &CommonAssets) -> impl Scene {
+fn language_picker() -> impl Scene {
     bsn! {
         Node {
             position_type: PositionType::Relative,
         }
         Children [
             (
-                button(px(200), px(50), "main-menu-language", common_assets.serif_font.clone())
+                button(px(200), px(50), "main-menu-language")
                 on(toggle_language_menu)
             ),
-            language_options_panel(common_assets),
+            language_options_panel(),
         ]
     }
 }
@@ -220,7 +219,7 @@ fn language_picker(common_assets: &CommonAssets) -> impl Scene {
 /// when no message matches, which these labels never do in any locale. That's relied on
 /// intentionally here: a language picker should show every option in its own language regardless
 /// of which language is currently active, not translate "Русский" into whatever's selected now.
-fn language_options_panel(common_assets: &CommonAssets) -> impl Scene {
+fn language_options_panel() -> impl Scene {
     bsn! {
         LanguageOptionsPanel
         Visibility::Hidden
@@ -233,12 +232,12 @@ fn language_options_panel(common_assets: &CommonAssets) -> impl Scene {
         }
         Children [
             (
-                button(px(200), px(40), "English", common_assets.serif_font.clone())
+                button(px(200), px(40), "English")
                 LocaleOption(langid!("en-US"))
                 on(select_language)
             ),
             (
-                button(px(200), px(40), "Русский", common_assets.serif_font.clone())
+                button(px(200), px(40), "Русский")
                 LocaleOption(langid!("ru-RU"))
                 on(select_language)
             ),
@@ -328,7 +327,7 @@ fn spawn_vr_main_menu_wrist_panel(
         WRIST_PANEL_SIZE,
         WRIST_PANEL_TEXTURE_SIZE,
         WRIST_PANEL_TEXTURE_SIZE,
-        main_menu_buttons(&common_assets),
+        main_menu_buttons(),
     );
     commands.spawn((
         panel,
@@ -345,10 +344,8 @@ fn spawn_vr_main_menu_wrist_panel(
     ));
 }
 
-fn play_button(_event: On<Activate>, default_level: Res<DefaultLevel>, mut commands: Commands) {
-    commands.trigger(LoadLevel {
-        id: format!("levels/{}", default_level.0),
-    });
+fn connect_button(_event: On<Activate>, mut commands: Commands) {
+    commands.trigger(Connect);
 }
 
 /// "Options"/"Credits" — stub buttons that exist to be navigable, not functional yet.

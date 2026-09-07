@@ -7,8 +7,8 @@ use std::time::Duration;
 use shared::character_controller::{Character, Grounded, Idle};
 use shared::server_events::Attack;
 
-use crate::assets::CommonAssets;
 use crate::events::{AnimationFinished, PlayAnimationLooping, PlayAnimationOnce};
+use crate::lifecycle::assets::CommonAssets;
 
 pub struct PAnimationPlugin;
 

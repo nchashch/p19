@@ -14,9 +14,9 @@ use bevy_xr_utils::tracking_utils::{
 use shared::player::Selectable;
 use shared::server_events::PlayerSpawned;
 
-use crate::game_state::ModalMenuState;
-use crate::player_character::LocalPlayer;
-use crate::targeting::{Hovered, SELECT_RANGE, Selected};
+use crate::controls::targeting::{Hovered, SELECT_RANGE, Selected};
+use crate::gameplay::player_character::LocalPlayer;
+use shared::game_state::ModalMenuState;
 
 const SNAP_TURN_ANGLE: f32 = 15f32.to_radians();
 const SNAP_TURN_THRESHOLD: f32 = 0.6;

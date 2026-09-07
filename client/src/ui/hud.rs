@@ -1,9 +1,10 @@
-use crate::assets::CommonAssets;
-use crate::game_state::GameState;
-use crate::localization::localized;
-use crate::player_character::LocalPlayer;
-use crate::targeting::{Hovered, SELECT_RANGE, Selected};
-use crate::widgets::{PANEL_BORDER_COLOR, PANEL_COLOR, Tooltip, TooltipAbove, TooltipArg, panel};
+use crate::controls::targeting::{Hovered, SELECT_RANGE, Selected};
+use crate::gameplay::player_character::LocalPlayer;
+use crate::lifecycle::assets::CommonAssets;
+use crate::ui::localization::localized;
+use crate::ui::widgets::{
+    PANEL_BORDER_COLOR, PANEL_COLOR, Tooltip, TooltipAbove, TooltipArg, panel,
+};
 use bevy::{
     color::palettes::css::{WHITE, WHITE_SMOKE},
     prelude::*,
@@ -16,6 +17,7 @@ use bevy_fluent::prelude::Localization;
 use fluent::FluentArgs;
 use shared::character_controller::Grounded;
 use shared::combat::{ATTACK_RANGE, DAMAGE, GCD_DURATION, Gcd, HitPoints};
+use shared::game_state::GameState;
 
 /// The in-game HUD: the crosshair (always visible), the `DataFrame` debug panel (hidden by
 /// default, toggled by `Tab`/`GamepadButton::Select` — see `DataFrameVisible`), and the ability

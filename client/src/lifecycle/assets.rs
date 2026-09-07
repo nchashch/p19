@@ -43,7 +43,7 @@ use bevy::world_serialization::WorldAsset;
 use bevy_asset_loader::prelude::*;
 use bevy_seedling::sample::AudioSample;
 
-use crate::input_icons::SparrowAtlasManifest;
+use crate::ui::input_icons::SparrowAtlasManifest;
 
 #[derive(AssetCollection, Resource)]
 pub struct CommonAssets {
@@ -65,6 +65,10 @@ pub struct CommonAssets {
     /// The main menu's background scene (`ui.rs`'s `main_menu`).
     #[asset(key = "menu_background")]
     pub menu_background: Handle<WorldAsset>,
+
+    /// The lobby background scene.
+    #[asset(key = "menu_background")]
+    pub lobby_background: Handle<WorldAsset>,
 
     #[asset(key = "crunch")]
     pub crunch: Handle<AudioSample>,
@@ -102,4 +106,30 @@ pub struct LevelAssets {
     /// see this module's doc comment and `loading.rs::load_level`.
     #[asset(key = "level")]
     pub level: Handle<WorldAsset>,
+}
+
+/// Overrides Bevy's own built-in default font (`AssetId::<Font>::default()` — what any
+/// `TextFont`/`FontSource` left at its `#[default]` resolves to, e.g. `bevy_feathers` widgets or
+/// plain `Text` with no font set) with `CommonAssets.serif_font`, so the fallback matches this
+/// project's own UI font instead of Bevy's embedded FiraMono. `bevy_text::TextPlugin` (part of
+/// `DefaultPlugins`) seeds that same slot once, in its own `build()`, with the embedded font —
+/// this just overwrites it afterward with a real asset already in `Assets<Font>`.
+///
+/// Not a `Startup` system, despite the name suggesting one — `CommonAssets` doesn't exist until
+/// `GameState::AssetLoading`'s `LoadingState` finishes, well after `Startup` runs (same ordering
+/// constraint as `npc_ui_quad.rs`'s `setup_npc_ui_quad`, which hit exactly this as a real panic:
+/// `Res<CommonAssets>` "resource does not exist"). `OnEnter(GameState::MainMenu)` is the earliest
+/// point `Res<CommonAssets>` is guaranteed to exist.
+pub fn override_default_font(common_assets: Res<CommonAssets>, mut fonts: ResMut<Assets<Font>>) {
+    let Some(font) = fonts.get(&common_assets.serif_font).cloned() else {
+        // Shouldn't happen — every handle in `CommonAssets` is guaranteed fully loaded by the
+        // time the collection resource itself exists — but fail soft rather than panic/unwrap if
+        // that guarantee is ever violated.
+        warn!("override_default_font: CommonAssets.serif_font isn't loaded yet");
+        return;
+    };
+    // `AssetId::<Font>::default()` is always the `Uuid` variant (see `Handle<A>::default()`),
+    // and `Assets::insert`'s `Err` case only ever comes from the `Index` variant — this can't
+    // actually fail, so there's nothing meaningful to do with the `Result`.
+    let _ = fonts.insert(AssetId::<Font>::default(), font);
 }

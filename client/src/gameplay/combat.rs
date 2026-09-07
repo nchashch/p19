@@ -10,7 +10,10 @@ use shared::{
     server_events::{Attack, EntityDied, Kill},
 };
 
-use crate::{assets::CommonAssets, particles::CubeParticleEffect, targeting::Selected};
+use crate::{
+    controls::targeting::Selected, lifecycle::assets::CommonAssets,
+    presentation::particles::CubeParticleEffect,
+};
 
 pub struct CombatPlugin;
 

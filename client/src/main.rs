@@ -4,48 +4,29 @@ use bevy::feathers::{dark_theme::create_dark_theme, theme::UiTheme};
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy_asset_loader::prelude::*;
+use bevy_replicon::prelude::*;
 use bevy_replicon_quinnet::RepliconQuinnetPlugins;
 use bevy_seedling::prelude::*;
 use bevy_skein::SkeinPlugin;
 use shared::replication::SharedReplicationPlugin;
 
-use console::PConsolePlugin;
-use cube_spawner::CubeSpawnerPlugin;
-use fps_controller::FpsControllerPlugin;
-use game_state::{GameState, GameStatePlugin};
-use particles::ParticleEffectsPlugin;
-use player_character::PlayerCharacterPlugin;
+use controls::fps_controller::FpsControllerPlugin;
+use dev::console::PConsolePlugin;
+use gameplay::cube_spawner::CubeSpawnerPlugin;
+use gameplay::player_character::PlayerCharacterPlugin;
+use presentation::particles::ParticleEffectsPlugin;
+use shared::game_state::{GameState, GameStatePlugin};
 
 use bevy_mod_openxr::{add_xr_plugins, resources::OxrSessionConfig};
 use openxr::EnvironmentBlendMode;
 
-mod actions;
-mod animation;
-mod assets;
-mod camera;
-mod combat;
-mod console;
 mod controls;
-mod cube_spawner;
+mod dev;
 mod events;
-mod fps_controller;
-mod game_state;
-mod hud;
-mod input_icons;
-mod loading;
-mod localization;
-mod modal_menu;
-mod nameplate;
-mod networking;
-mod npc_spawner;
-mod npc_ui_quad;
-mod particles;
-mod player_character;
-mod quad_panel;
-mod targeting;
+mod gameplay;
+mod lifecycle;
+mod presentation;
 mod ui;
-mod vr_controllers;
-mod widgets;
 
 /// Registers each `$observer` with `$app`, gated behind `$condition` (e.g.
 /// `chill_bevy_console::console_closed`, to suppress gameplay observers while the
@@ -57,11 +38,13 @@ macro_rules! add_observers_run_if {
 }
 pub(crate) use add_observers_run_if;
 
+use crate::lifecycle::lobby::LobbyPlugin;
 use crate::{
-    animation::PAnimationPlugin, input_icons::InputIconsPlugin, loading::LoadingPlugin,
-    localization::LocalizationPlugin, modal_menu::ModalMenuPlugin, nameplate::NameplatePlugin,
-    npc_spawner::NpcSpawnerPlugin, npc_ui_quad::NpcUiQuadPlugin, quad_panel::QuadPanelPlugin,
-    vr_controllers::VrControllersPlugin,
+    controls::vr_controllers::VrControllersPlugin, gameplay::npc_spawner::NpcSpawnerPlugin,
+    lifecycle::loading::LoadingPlugin, presentation::animation::PAnimationPlugin,
+    ui::input_icons::InputIconsPlugin, ui::localization::LocalizationPlugin,
+    ui::modal_menu::ModalMenuPlugin, ui::nameplate::NameplatePlugin,
+    ui::npc_ui_quad::NpcUiQuadPlugin, ui::quad_panel::QuadPanelPlugin,
 };
 
 fn main() {
@@ -77,7 +60,7 @@ impl Plugin for Prototype19 {
         // `networking::load_client_config`, which reads the *rest* of `config.toml` the normal
         // way, via the `AssetServer`) could run. See `is_vr_enabled_presync`'s doc comment for why
         // this can't just reuse that later, `AssetServer`-based path.
-        let vr_enabled = networking::is_vr_enabled_presync();
+        let vr_enabled = lifecycle::networking::is_vr_enabled_presync();
 
         if vr_enabled {
             app.add_plugins(add_xr_plugins(
@@ -95,6 +78,7 @@ impl Plugin for Prototype19 {
             LocalizationPlugin,
             SeedlingPlugins,
             ParticleEffectsPlugin,
+            LobbyPlugin,
             SkeinPlugin::default(),
             // The server is authoritative for physics — the client only needs colliders and
             // spatial queries (`SpatialQuery` raycasts/shapecasts, e.g. `targeting.rs`'s hover
@@ -134,7 +118,7 @@ impl Plugin for Prototype19 {
                 // `JointPlugin`/`JointGraphPlugin<_>` are left inert rather than needing their own
                 // exception: nothing in this project ever spawns a joint.
                 .disable::<XpbdSolverPlugin>(),
-            bevy_replicon::prelude::RepliconPlugins,
+            RepliconPlugins,
             RepliconQuinnetPlugins,
             SharedReplicationPlugin,
             (
@@ -145,8 +129,8 @@ impl Plugin for Prototype19 {
                 FpsControllerPlugin,
                 GameStatePlugin { vr_enabled },
                 NameplatePlugin,
-                ui::PrototypeUiPlugin,
-                networking::NetworkingPlugin,
+                ui::ui::PrototypeUiPlugin,
+                lifecycle::networking::NetworkingPlugin,
                 ModalMenuPlugin,
                 QuadPanelPlugin,
                 InputIconsPlugin,
@@ -213,7 +197,7 @@ impl Plugin for Prototype19 {
                     .with_dynamic_assets_file::<StandardDynamicAssetCollection>(
                         "common_assets.assets.ron",
                     )
-                    .load_collection::<assets::CommonAssets>(),
+                    .load_collection::<lifecycle::assets::CommonAssets>(),
             )
             // No `.with_dynamic_assets_file(...)`/`.continue_to_state(...)` here, unlike
             // `AssetLoading` above — which `.ron` manifest to resolve `LevelAssets.level` against
@@ -223,8 +207,15 @@ impl Plugin for Prototype19 {
             // `GameState::Loading` waits for — see `loading.rs`'s `on_level_assets_loaded` doc
             // comment for the rest of that flow.
             .add_loading_state(
-                LoadingState::new(GameState::Loading).load_collection::<assets::LevelAssets>(),
+                LoadingState::new(GameState::Loading)
+                    .load_collection::<lifecycle::assets::LevelAssets>(),
             )
-            .add_systems(OnEnter(GameState::MainMenu), ui::spawn_main_menu);
+            .add_systems(
+                OnEnter(GameState::MainMenu),
+                (
+                    ui::ui::spawn_main_menu,
+                    lifecycle::assets::override_default_font,
+                ),
+            );
     }
 }

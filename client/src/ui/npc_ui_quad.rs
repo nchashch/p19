@@ -38,10 +38,10 @@ use bevy_xr_utils::{
     tracking_utils::{XrTrackedLeftGrip, XrTrackedRightGrip},
 };
 
-use crate::assets::CommonAssets;
-use crate::game_state::GameState;
-use crate::targeting::{SELECT_RANGE, Selected, screen_center_ray};
-use crate::vr_controllers::{LeftTriggerAction, RightTriggerAction, analog_just_pressed};
+use crate::controls::targeting::{SELECT_RANGE, Selected, screen_center_ray};
+use crate::controls::vr_controllers::{LeftTriggerAction, RightTriggerAction, analog_just_pressed};
+use crate::lifecycle::assets::CommonAssets;
+use shared::game_state::GameState;
 
 pub struct NpcUiQuadPlugin;
 

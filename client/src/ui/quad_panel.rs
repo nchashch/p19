@@ -33,8 +33,8 @@ use bevy_xr_utils::{
     tracking_utils::{XrTrackedLeftGrip, XrTrackedRightGrip},
 };
 
-use crate::targeting::screen_center_ray;
-use crate::vr_controllers::{LeftTriggerAction, RightTriggerAction, analog_press_edges};
+use crate::controls::targeting::screen_center_ray;
+use crate::controls::vr_controllers::{LeftTriggerAction, RightTriggerAction, analog_press_edges};
 
 pub struct QuadPanelPlugin;
 

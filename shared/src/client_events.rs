@@ -1,5 +1,5 @@
+use bevy::ecs::entity::MapEntities;
 use bevy::prelude::*;
-use bevy::{asset::AssetPath, ecs::entity::MapEntities};
 use serde::{Deserialize, Serialize};
 
 #[derive(EntityEvent, Serialize, Deserialize, Clone, MapEntities)]
@@ -27,7 +27,7 @@ pub struct SpawnNpcRequest {
 
 #[derive(Event, Serialize, Deserialize, Clone)]
 pub struct LoadLevelRequest {
-    pub id: AssetPath<'static>,
+    pub id: String,
 }
 
 #[derive(Event, Serialize, Deserialize, Clone)]
