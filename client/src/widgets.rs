@@ -23,8 +23,6 @@ impl Plugin for WidgetsPlugin {
     }
 }
 
-pub const SERIF_FONT: &str = "fonts/serif/IBMPlexSerif-Regular.ttf";
-
 pub const PANEL_BORDER_COLOR: Srgba = WHITE_SMOKE;
 pub const PANEL_COLOR: Srgba = DARK_SLATE_GRAY;
 const BUTTON_BORDER_COLOR: Srgba = WHITE_SMOKE;
@@ -59,8 +57,12 @@ pub fn panel(width: Val, height: Val) -> impl Scene {
 
 /// `label_key` is a Fluent message key (see `assets/locales/`), not display text — `LocalizedText`
 /// fills in the real label once localization is ready, using the key itself as the placeholder
-/// shown for the frame or two before that.
-pub fn button(width: Val, height: Val, label_key: &'static str) -> impl Scene {
+/// shown for the frame or two before that. `font` is an already-cloned `Handle<Font>` (from
+/// `CommonAssets.serif_font`), not `&CommonAssets` — `bsn!`'s generated `Scene` type must be
+/// `'static`, and a borrowed `&CommonAssets` parameter makes edition-2024's default
+/// return-position-`impl-Trait` lifetime capture pull that borrow's lifetime into `impl Scene`'s
+/// hidden type, which doesn't satisfy that. An owned `Handle<Font>` has no such lifetime to fight.
+pub fn button(width: Val, height: Val, label_key: &'static str, font: Handle<Font>) -> impl Scene {
     bsn! {
         Button
         // Makes the button a candidate for gamepad/keyboard directional navigation (see
@@ -84,7 +86,7 @@ pub fn button(width: Val, height: Val, label_key: &'static str) -> impl Scene {
             Text(label_key)
             LocalizedText(label_key)
             TextFont {
-                font: FontSourceTemplate::Handle(SERIF_FONT),
+                font: FontSourceTemplate::Handle(font),
                 font_size: px(BUTTON_TEXT_FONT_SIZE),
             }
             TextColor(BUTTON_TEXT_COLOR)

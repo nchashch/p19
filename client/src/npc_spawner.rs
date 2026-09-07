@@ -14,7 +14,13 @@ pub struct NpcSpawnerPlugin;
 impl Plugin for NpcSpawnerPlugin {
     fn build(&self, app: &mut App) {
         app.add_observer(request_spawn_npc);
-        app.add_systems(Update, decorate_npcs);
+        // `NpcUiQuad` doesn't exist until `OnEnter(GameState::MainMenu)` runs
+        // `npc_ui_quad::setup_npc_ui_quad` (needs `Res<CommonAssets>`, so it can't be `Startup`
+        // any more — see that system's own doc comment) — guarded so this doesn't panic on a
+        // hard `Res<NpcUiQuad>` validation failure during the brief `AssetLoading` window before
+        // that first runs. No NPC ever exists before `InGame` anyway, well after `MainMenu`, so
+        // this only ever skips frames that had nothing to decorate regardless.
+        app.add_systems(Update, decorate_npcs.run_if(resource_exists::<NpcUiQuad>));
     }
 }
 

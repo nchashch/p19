@@ -1,3 +1,4 @@
+use crate::assets::CommonAssets;
 use crate::controls::return_to_main_menu;
 use crate::game_state::{GameState, InputDeviceState, ModalMenuState, VRState};
 use crate::input_icons::{
@@ -8,7 +9,7 @@ use crate::localization::LocalizedText;
 use crate::networking::PendingLevelId;
 use crate::quad_panel::quad_panel;
 use crate::ui::menu_controls;
-use crate::widgets::{Activate, SERIF_FONT, button, panel};
+use crate::widgets::{Activate, button, panel};
 use bevy::color::palettes::css::WHITE;
 use bevy::input_focus::AutoFocus;
 use bevy::prelude::*;
@@ -68,11 +69,15 @@ fn spawn_modal_menu_controls(mut commands: Commands) {
 /// `Fn() -> impl SceneList`) since building the controls-tips rows needs `Res<InputIconAtlases>`
 /// to look up icons — see `input_icons.rs`. `CommandsSceneExt::spawn_scene_list` is the normal
 /// system-compatible way to spawn a `SceneList`, same underlying mechanism `.spawn()` wraps.
-fn spawn_modal_menu(mut commands: Commands, atlases: Res<InputIconAtlases>) {
-    commands.spawn_scene_list(bsn_list![modal_menu(&atlases)]);
+fn spawn_modal_menu(
+    mut commands: Commands,
+    atlases: Res<InputIconAtlases>,
+    common_assets: Res<CommonAssets>,
+) {
+    commands.spawn_scene_list(bsn_list![modal_menu(&atlases, &common_assets)]);
 }
 
-fn modal_menu(atlases: &InputIconAtlases) -> impl Scene {
+fn modal_menu(atlases: &InputIconAtlases, common_assets: &CommonAssets) -> impl Scene {
     bsn! {
         Node {
             width: percent(100),
@@ -83,8 +88,8 @@ fn modal_menu(atlases: &InputIconAtlases) -> impl Scene {
         BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6))
         DespawnOnExit::<ModalMenuState>(ModalMenuState::Open)
         Children [
-            controls_tips(atlases),
-            gamepad_controls_tips(atlases),
+            controls_tips(atlases, common_assets),
+            gamepad_controls_tips(atlases, common_assets),
             (
                 Node {
                     flex_direction: FlexDirection::Column,
@@ -94,11 +99,11 @@ fn modal_menu(atlases: &InputIconAtlases) -> impl Scene {
                 }
                 Children [
                     (
-                        button(px(320), px(120), "modal-menu-main-menu")
+                        button(px(320), px(120), "modal-menu-main-menu", common_assets.serif_font.clone())
                         on(main_menu_button)
                     ),
                     (
-                        button(px(320), px(120), "modal-menu-resume")
+                        button(px(320), px(120), "modal-menu-resume", common_assets.serif_font.clone())
                         AutoFocus
                         on(resume_button)
                     ),
@@ -141,12 +146,12 @@ struct VrInGameWristPanel;
 /// Same single-button content on every `quad_panel`, reusing `main_menu_button` directly — a VR
 /// player presses this exactly the way they'd press the pause modal's own "Main Menu" button,
 /// just without needing to open the pause modal first.
-fn in_game_wrist_menu() -> impl Scene {
+fn in_game_wrist_menu(common_assets: &CommonAssets) -> impl Scene {
     bsn! {
         panel(px(300), px(120))
         Children [
             (
-                button(px(240), px(70), "modal-menu-main-menu")
+                button(px(240), px(70), "modal-menu-main-menu", common_assets.serif_font.clone())
                 on(main_menu_button)
             ),
         ]
@@ -170,6 +175,7 @@ fn spawn_vr_in_game_wrist_panel(
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    common_assets: Res<CommonAssets>,
     left_grip: Query<Entity, With<XrTrackedLeftGrip>>,
     existing: Query<(), With<VrInGameWristPanel>>,
 ) {
@@ -189,7 +195,7 @@ fn spawn_vr_in_game_wrist_panel(
         IN_GAME_WRIST_PANEL_HEIGHT,
         IN_GAME_WRIST_PANEL_TEXTURE_WIDTH,
         IN_GAME_WRIST_PANEL_TEXTURE_HEIGHT,
-        in_game_wrist_menu(),
+        in_game_wrist_menu(&common_assets),
     );
     commands.spawn((
         panel,
@@ -284,7 +290,7 @@ const CONTROLS_TIPS_LABEL_FONT_SIZE: f32 = 16.0;
 /// `position_type: Absolute` (escaping `modal_menu()`'s centered flex flow) is what lets this sit
 /// at the top-left corner as a sibling of the centered button row instead of being squeezed into
 /// the same flex line.
-fn controls_tips(atlases: &InputIconAtlases) -> impl Scene {
+fn controls_tips(atlases: &InputIconAtlases, common_assets: &CommonAssets) -> impl Scene {
     bsn! {
         KeyboardMouseControlsTips
         Node {
@@ -304,17 +310,18 @@ fn controls_tips(atlases: &InputIconAtlases) -> impl Scene {
                     atlases,
                     &[KeyCode::KeyW, KeyCode::KeyA, KeyCode::KeyS, KeyCode::KeyD],
                     "hud-controls-move",
+                    common_assets,
                 ),
-                control_tip_icons(vec![mouse_move_icon(atlases)], "hud-controls-look"),
-                control_tip_keys(atlases, &[KeyCode::Space], "hud-controls-jump"),
-                control_tip_mouse_button(atlases, MouseButton::Left, "hud-controls-select"),
-                control_tip_mouse_button(atlases, MouseButton::Right, "hud-controls-deselect"),
-                control_tip_keys(atlases, &[KeyCode::KeyF], "hud-controls-attack"),
-                control_tip_keys(atlases, &[KeyCode::KeyT], "hud-controls-kill"),
-                control_tip_keys(atlases, &[KeyCode::KeyE], "hud-controls-spawn-cube"),
-                control_tip_keys(atlases, &[KeyCode::KeyR], "hud-controls-spawn-npc"),
-                control_tip_keys(atlases, &[KeyCode::Escape], "hud-controls-menu"),
-                control_tip_keys(atlases, &[KeyCode::Tab], "hud-controls-stats"),
+                control_tip_icons(vec![mouse_move_icon(atlases)], "hud-controls-look", common_assets),
+                control_tip_keys(atlases, &[KeyCode::Space], "hud-controls-jump", common_assets),
+                control_tip_mouse_button(atlases, MouseButton::Left, "hud-controls-select", common_assets),
+                control_tip_mouse_button(atlases, MouseButton::Right, "hud-controls-deselect", common_assets),
+                control_tip_keys(atlases, &[KeyCode::KeyF], "hud-controls-attack", common_assets),
+                control_tip_keys(atlases, &[KeyCode::KeyT], "hud-controls-kill", common_assets),
+                control_tip_keys(atlases, &[KeyCode::KeyE], "hud-controls-spawn-cube", common_assets),
+                control_tip_keys(atlases, &[KeyCode::KeyR], "hud-controls-spawn-npc", common_assets),
+                control_tip_keys(atlases, &[KeyCode::Escape], "hud-controls-menu", common_assets),
+                control_tip_keys(atlases, &[KeyCode::Tab], "hud-controls-stats", common_assets),
             ]
         ]
     }
@@ -325,7 +332,7 @@ fn controls_tips(atlases: &InputIconAtlases) -> impl Scene {
 /// `GamepadButton`s `controls.rs`'s `player_controls()` binds, instead of `KeyCode`s. Shown
 /// instead of `controls_tips` (never alongside it) once `InputDeviceState` says a gamepad is the
 /// active device — see `update_controls_tips_visibility`.
-fn gamepad_controls_tips(atlases: &InputIconAtlases) -> impl Scene {
+fn gamepad_controls_tips(atlases: &InputIconAtlases, common_assets: &CommonAssets) -> impl Scene {
     bsn! {
         GamepadControlsTips
         Node {
@@ -341,17 +348,17 @@ fn gamepad_controls_tips(atlases: &InputIconAtlases) -> impl Scene {
         Children[
             panel(px(300), px(600))
             Children [
-                control_tip_icons(vec![gamepad_move_stick_icon(atlases)], "hud-controls-move"),
-                control_tip_icons(vec![gamepad_look_stick_icon(atlases)], "hud-controls-look"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::South], "hud-controls-jump"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::RightThumb], "hud-controls-select"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::LeftThumb], "hud-controls-deselect"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::RightTrigger2], "hud-controls-attack"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::RightTrigger], "hud-controls-kill"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::LeftTrigger], "hud-controls-spawn-cube"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::LeftTrigger2], "hud-controls-spawn-npc"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::Start], "hud-controls-menu"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::Select], "hud-controls-stats"),
+                control_tip_icons(vec![gamepad_move_stick_icon(atlases)], "hud-controls-move", common_assets),
+                control_tip_icons(vec![gamepad_look_stick_icon(atlases)], "hud-controls-look", common_assets),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::South], "hud-controls-jump", common_assets),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::RightThumb], "hud-controls-select", common_assets),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::LeftThumb], "hud-controls-deselect", common_assets),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::RightTrigger2], "hud-controls-attack", common_assets),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::RightTrigger], "hud-controls-kill", common_assets),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::LeftTrigger], "hud-controls-spawn-cube", common_assets),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::LeftTrigger2], "hud-controls-spawn-npc", common_assets),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::Start], "hud-controls-menu", common_assets),
+                control_tip_gamepad_buttons(atlases, &[GamepadButton::Select], "hud-controls-stats", common_assets),
             ]
         ]
     }
@@ -363,12 +370,13 @@ fn control_tip_gamepad_buttons(
     atlases: &InputIconAtlases,
     buttons: &[GamepadButton],
     label_key: &'static str,
+    common_assets: &CommonAssets,
 ) -> impl Scene {
     let icons: Vec<_> = buttons
         .iter()
         .filter_map(|&button| gamepad_button_icon(atlases, button))
         .collect();
-    control_tip_icons(icons, label_key)
+    control_tip_icons(icons, label_key, common_assets)
 }
 
 /// Builds a `control_tip_icons` row directly from the `KeyCode`s a binding actually uses, via
@@ -379,12 +387,13 @@ fn control_tip_keys(
     atlases: &InputIconAtlases,
     keys: &[KeyCode],
     label_key: &'static str,
+    common_assets: &CommonAssets,
 ) -> impl Scene {
     let icons: Vec<_> = keys
         .iter()
         .filter_map(|&key| key_code_icon(atlases, key))
         .collect();
-    control_tip_icons(icons, label_key)
+    control_tip_icons(icons, label_key, common_assets)
 }
 
 /// Same idea as `control_tip_keys`, for the one mouse-button tip (`Select`) — not a `KeyCode`, so
@@ -393,9 +402,10 @@ fn control_tip_mouse_button(
     atlases: &InputIconAtlases,
     button: MouseButton,
     label_key: &'static str,
+    common_assets: &CommonAssets,
 ) -> impl Scene {
     let icons: Vec<_> = mouse_button_icon(atlases, button).into_iter().collect();
-    control_tip_icons(icons, label_key)
+    control_tip_icons(icons, label_key, common_assets)
 }
 
 /// One row: zero or more icon images side by side (e.g. `W A S D` as four separate `ImageNode`s,
@@ -403,8 +413,13 @@ fn control_tip_mouse_button(
 /// since a binding can use any number of keys, including zero if none of them mapped to an icon —
 /// the row then just shows the label on its own instead of disappearing entirely, so a gap in
 /// icon coverage stays visible/debuggable rather than silently dropping the whole tip.
-fn control_tip_icons(icons: Vec<Icon>, label_key: &'static str) -> impl Scene {
+fn control_tip_icons(
+    icons: Vec<Icon>,
+    label_key: &'static str,
+    common_assets: &CommonAssets,
+) -> impl Scene {
     let icons: Vec<_> = icons.into_iter().map(control_tip_icon).collect();
+    let font = common_assets.serif_font.clone();
     bsn! {
         Node {
             flex_direction: FlexDirection::Row,
@@ -418,7 +433,7 @@ fn control_tip_icons(icons: Vec<Icon>, label_key: &'static str) -> impl Scene {
                 Text(label_key)
                 LocalizedText(label_key)
                 TextFont {
-                    font: FontSourceTemplate::Handle(SERIF_FONT),
+                    font: FontSourceTemplate::Handle(font),
                     font_size: px(CONTROLS_TIPS_LABEL_FONT_SIZE),
                 }
                 TextColor(WHITE)

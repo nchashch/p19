@@ -38,21 +38,36 @@ use bevy_xr_utils::{
     tracking_utils::{XrTrackedLeftGrip, XrTrackedRightGrip},
 };
 
+use crate::assets::CommonAssets;
+use crate::game_state::GameState;
 use crate::targeting::{SELECT_RANGE, Selected, screen_center_ray};
 use crate::vr_controllers::{LeftTriggerAction, RightTriggerAction, analog_just_pressed};
-use crate::widgets::SERIF_FONT;
 
 pub struct NpcUiQuadPlugin;
 
 impl Plugin for NpcUiQuadPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<NpcUiQuadTarget>();
-        app.add_systems(Startup, setup_npc_ui_quad);
+        // Not `Startup` — needs `Res<CommonAssets>` for its `TextFont`, which doesn't exist until
+        // `GameState::AssetLoading`'s `LoadingState` finishes (see `assets.rs`), well after
+        // `Startup` runs. `MainMenu` always comes after that, and always before an NPC could
+        // possibly spawn (`InGame`-only) — but unlike `Startup`, `MainMenu` isn't a once-ever
+        // state (`return_to_main_menu` re-enters it), so this needs the `run_if` guard to stay a
+        // real one-time setup instead of spawning a second render-target camera/UI scene (with no
+        // despawn logic for the first one) on every trip back to the main menu.
+        app.add_systems(
+            OnEnter(GameState::MainMenu),
+            setup_npc_ui_quad.run_if(not(resource_exists::<NpcUiQuad>)),
+        );
         app.add_systems(
             Update,
             (
                 billboard_npc_ui_quads,
-                update_npc_ui_quad_hover_material,
+                // `NpcUiQuad` no longer exists during the brief `AssetLoading` window before the
+                // first `OnEnter(GameState::MainMenu)` runs `setup_npc_ui_quad` above — guarded,
+                // unlike the other systems here, since this is the only one that reads it
+                // directly (the rest only touch `NpcUiQuadMesh`/`NpcUiQuadTarget`).
+                update_npc_ui_quad_hover_material.run_if(resource_exists::<NpcUiQuad>),
                 update_npc_ui_quad_target,
                 update_npc_ui_quad_target_vr.run_if(openxr_session_running),
             ),
@@ -104,7 +119,9 @@ fn setup_npc_ui_quad(
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    common_assets: Res<CommonAssets>,
 ) {
+    let font = common_assets.serif_font.clone();
     let size = Extent3d {
         width: TEXTURE_SIZE,
         height: TEXTURE_SIZE,
@@ -149,7 +166,7 @@ fn setup_npc_ui_quad(
                     Text("NPC")
                     TextColor(WHITE_SMOKE)
                     TextFont {
-                        font: FontSourceTemplate::Handle(SERIF_FONT),
+                        font: FontSourceTemplate::Handle(font),
                         font_size: px(64),
                     }
                 ),

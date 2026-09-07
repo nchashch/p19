@@ -17,14 +17,11 @@ pub struct LoadingPlugin;
 
 impl Plugin for LoadingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            OnEnter(GameState::InGame),
-            crate::hud::in_game_scene.spawn(),
-        );
+        app.add_systems(OnEnter(GameState::InGame), crate::hud::spawn_in_game_scene);
         app.add_systems(OnEnter(GameState::InGame), initial_respawn);
         app.add_systems(
             Update,
-            on_level_assets_loaded.run_if(resource_added::<LevelAssets>),
+            on_level_assets_loaded.run_if(resource_exists_and_changed::<LevelAssets>),
         );
         app.add_observer(load_level);
         app.add_observer(spawn_level);
@@ -79,15 +76,33 @@ fn load_level(
 /// Reacts once `GameState::Loading`'s own `LoadingState` (see `main.rs`) has resolved
 /// `LevelAssets.level` against whichever manifest `load_level` just registered — i.e. once we
 /// finally know the level's real `.glb#SceneN` path, not just the `.ron` manifest that names it.
-/// `resource_added` (rather than e.g. `OnEnter` of some new state) is what detects this: `main.rs`
-/// deliberately doesn't give this `LoadingState` a `continue_to_state`, since resolving the
-/// manifest is just the first half of "loading a level" — `GameState::Loading` itself shouldn't
-/// end until the server round trip and the client's own local scene (`spawn_level`,
-/// `on_level_ready`) are done too. `bevy_asset_loader`'s `check_loading_collection` system
-/// re-`insert_resource`s `LevelAssets` (not just `init_resource`) every time this phase completes,
-/// including on a later re-entry into `GameState::Loading` for a different level — confirmed
-/// directly against its source — so `resource_added` correctly re-fires each time, not just the
-/// first time ever.
+/// `resource_exists_and_changed` (rather than e.g. `OnEnter` of some new state) is what detects
+/// this: `main.rs` deliberately doesn't give this `LoadingState` a `continue_to_state`, since
+/// resolving the manifest is just the first half of "loading a level" — `GameState::Loading`
+/// itself shouldn't end until the server round trip and the client's own local scene
+/// (`spawn_level`, `on_level_ready`) are done too.
+///
+/// **Must be `resource_exists_and_changed`, not `resource_added`** — confirmed the hard way (a
+/// real bug: a second `Play` press after returning to the main menu silently never sent a
+/// `LoadLevelRequest`, freezing the client in `GameState::Loading` forever).
+/// `bevy_asset_loader`'s `check_loading_collection` re-`insert_resource`s `LevelAssets` on every
+/// reload, but it's never *removed* in between — and `World::insert_resource` on an
+/// already-present resource goes through `Column::replace`/`SparseSet::insert`, which only bumps
+/// the *changed* tick, not *added* (that's stamped once, by `.initialize()`, only on the true
+/// absent-to-present transition — confirmed directly against `bevy_ecs`'s `bundle/info.rs` and
+/// `storage/table/column.rs`). So `resource_added::<LevelAssets>` is true exactly once, ever, for
+/// the whole app's lifetime — every subsequent reload updates the resource's content just fine,
+/// but never fires an observer gated on `resource_added`.
+///
+/// **And it can't be plain `resource_changed`** either, on its own or chained as a second
+/// `.run_if(...)` alongside `resource_exists` — `resource_changed::<T>` takes a hard `Res<T>`
+/// param, which fails validation (panics, by default) before `LevelAssets` exists at all the very
+/// first time. Chaining `.run_if(resource_exists::<T>).run_if(resource_changed::<T>)` doesn't
+/// protect against that either: each `.run_if(...)` is validated independently, so the second
+/// condition's hard `Res<T>` param still gets checked (and still panics) regardless of what the
+/// first one returned — there's no short-circuiting across separate `run_if` calls the way `&&`
+/// would short-circuit. `resource_exists_and_changed::<T>` avoids the whole problem by taking
+/// `Option<Res<T>>` internally and doing both checks in one condition.
 ///
 /// Same "already connected vs. need to connect first" branch `load_level` used to do directly —
 /// unchanged from before this was split into two steps, just now working off the level's actual

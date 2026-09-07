@@ -1,10 +1,9 @@
+use crate::assets::CommonAssets;
 use crate::game_state::GameState;
 use crate::localization::localized;
 use crate::player_character::LocalPlayer;
 use crate::targeting::{Hovered, SELECT_RANGE, Selected};
-use crate::widgets::{
-    PANEL_BORDER_COLOR, PANEL_COLOR, SERIF_FONT, Tooltip, TooltipAbove, TooltipArg, panel,
-};
+use crate::widgets::{PANEL_BORDER_COLOR, PANEL_COLOR, Tooltip, TooltipAbove, TooltipArg, panel};
 use bevy::{
     color::palettes::css::{WHITE, WHITE_SMOKE},
     prelude::*,
@@ -121,10 +120,18 @@ fn update_data_frame_visibility(
     }
 }
 
+/// A real system (not the usual `some_scene.spawn()` adapter, which only works for a zero-arg
+/// `Fn() -> impl SceneList`) since `data_frame()` needs `Res<CommonAssets>` for its `TextFont` —
+/// see `ui.rs`'s `spawn_main_menu` for the same pattern.
+pub fn spawn_in_game_scene(mut commands: Commands, common_assets: Res<CommonAssets>) {
+    commands.spawn_scene_list(in_game_scene(&common_assets));
+}
+
 // `hotbar()` is left out of the scene below (rather than deleted) while testing the minimalist
-// crosshair-only look — see `update_crosshair_gcd`. Add `hotbar(),` back to re-enable it.
-pub fn in_game_scene() -> impl SceneList {
-    bsn_list![data_frame(), crosshair()]
+// crosshair-only look — see `update_crosshair_gcd`. Add `hotbar(common_assets),` back to
+// re-enable it.
+fn in_game_scene(common_assets: &CommonAssets) -> impl SceneList {
+    bsn_list![data_frame(common_assets), crosshair()]
 }
 
 const CROSSHAIR_SIZE: f32 = 8.0;
@@ -189,7 +196,8 @@ fn crosshair() -> impl Scene {
     }
 }
 
-fn data_frame() -> impl Scene {
+fn data_frame(common_assets: &CommonAssets) -> impl Scene {
+    let font = common_assets.serif_font.clone();
     bsn! {
         DataFramePanel
         Visibility::Hidden
@@ -205,7 +213,7 @@ fn data_frame() -> impl Scene {
                 (
                     Text("")
                     TextFont {
-                        font: FontSourceTemplate::Handle(SERIF_FONT),
+                        font: FontSourceTemplate::Handle(font),
                     }
                     DataFrame
                 ),
@@ -221,7 +229,7 @@ const HOTBAR_BOTTOM_PADDING: f32 = 20.0;
 const ABILITY_LETTER_FONT_SIZE: f32 = 28.0;
 const HOTKEY_LETTER_FONT_SIZE: f32 = 14.0;
 
-fn hotbar() -> impl Scene {
+fn hotbar(common_assets: &CommonAssets) -> impl Scene {
     bsn! {
         HudElement
         Node {
@@ -237,13 +245,15 @@ fn hotbar() -> impl Scene {
             ability_slot(
                 "A", "f", "hud-attack-tooltip",
                 vec![("damage", DAMAGE.into()), ("range", ATTACK_RANGE.into())],
+                common_assets,
             ),
             ability_slot(
                 "K", "t", "hud-kill-tooltip",
                 vec![("range", ATTACK_RANGE.into())],
+                common_assets,
             ),
-            ability_slot("N", "r", "hud-spawn-npc-tooltip", vec![]),
-            ability_slot("C", "e", "hud-spawn-cube-tooltip", vec![]),
+            ability_slot("N", "r", "hud-spawn-npc-tooltip", vec![], common_assets),
+            ability_slot("C", "e", "hud-spawn-cube-tooltip", vec![], common_assets),
             hotbar_slot(), hotbar_slot(), hotbar_slot(), hotbar_slot(),
         ]
         DespawnOnExit::<GameState>(GameState::InGame)
@@ -277,7 +287,10 @@ fn ability_slot(
     hotkey_letter: &str,
     tooltip_key: &'static str,
     tooltip_args: Vec<(&'static str, TooltipArg)>,
+    common_assets: &CommonAssets,
 ) -> impl Scene {
+    let font = common_assets.serif_font.clone();
+    let hotkey_font = font.clone();
     bsn! {
         hotbar_slot()
         Tooltip::with_args(tooltip_key, tooltip_args)
@@ -286,7 +299,7 @@ fn ability_slot(
             (
                 Text(ability_letter)
                 TextFont {
-                    font: FontSourceTemplate::Handle(SERIF_FONT),
+                    font: FontSourceTemplate::Handle(font),
                     font_size: px(ABILITY_LETTER_FONT_SIZE),
                 }
                 TextColor(WHITE)
@@ -295,7 +308,7 @@ fn ability_slot(
             (
                 Text(hotkey_letter)
                 TextFont {
-                    font: FontSourceTemplate::Handle(SERIF_FONT),
+                    font: FontSourceTemplate::Handle(hotkey_font),
                     font_size: px(HOTKEY_LETTER_FONT_SIZE),
                 }
                 TextColor(WHITE_SMOKE)

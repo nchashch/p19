@@ -131,7 +131,7 @@ fn main_menu(common_assets: &CommonAssets) -> impl Scene {
             align_items: AlignItems::End,
             justify_content: JustifyContent::Start,
         }
-        Children [ main_menu_buttons() ]
+        Children [ main_menu_buttons(common_assets) ]
         WorldAssetRoot({common_assets.menu_background.clone()})
         DespawnOnExit::<GameState>(GameState::MainMenu)
     }
@@ -142,32 +142,32 @@ fn main_menu(common_assets: &CommonAssets) -> impl Scene {
 /// VR wrist-mounted `quad_panel`, not just a re-styled lookalike. Deliberately *not* including
 /// `main_menu()`'s fullscreen `Node`/`WorldAssetRoot` background — those only make sense for the
 /// desktop window, not a small texture on someone's wrist.
-pub(crate) fn main_menu_buttons() -> impl Scene {
+pub(crate) fn main_menu_buttons(common_assets: &CommonAssets) -> impl Scene {
     bsn! {
         panel(px(400), px(400))
         Children [
             (
-                button(px(200), px(50), "main-menu-play")
+                button(px(200), px(50), "main-menu-play", common_assets.serif_font.clone())
                 Tooltip::new("main-menu-play-tooltip")
                 AutoFocus
                 on(play_button)
             ),
             (
-                button(px(200), px(50), "main-menu-options")
+                button(px(200), px(50), "main-menu-options", common_assets.serif_font.clone())
                 Tooltip::new("main-menu-options-tooltip")
                 on(stub_button)
             ),
             (
-                button(px(200), px(50), "main-menu-credits")
+                button(px(200), px(50), "main-menu-credits", common_assets.serif_font.clone())
                 Tooltip::new("main-menu-credits-tooltip")
                 on(stub_button)
             ),
             (
-                button(px(200), px(50), "main-menu-quit")
+                button(px(200), px(50), "main-menu-quit", common_assets.serif_font.clone())
                 Tooltip::new("main-menu-quit-tooltip")
                 on(quit_button)
             ),
-            language_picker(),
+            language_picker(common_assets),
         ]
     }
 }
@@ -199,17 +199,17 @@ struct LocaleOption(LanguageIdentifier);
 /// The "Language" button plus its (initially hidden) options popup. `position_type: Relative` on
 /// the wrapping `Node` is what lets the popup's own `position_type: Absolute` anchor directly below
 /// the button instead of relative to the whole screen.
-fn language_picker() -> impl Scene {
+fn language_picker(common_assets: &CommonAssets) -> impl Scene {
     bsn! {
         Node {
             position_type: PositionType::Relative,
         }
         Children [
             (
-                button(px(200), px(50), "main-menu-language")
+                button(px(200), px(50), "main-menu-language", common_assets.serif_font.clone())
                 on(toggle_language_menu)
             ),
-            language_options_panel(),
+            language_options_panel(common_assets),
         ]
     }
 }
@@ -220,7 +220,7 @@ fn language_picker() -> impl Scene {
 /// when no message matches, which these labels never do in any locale. That's relied on
 /// intentionally here: a language picker should show every option in its own language regardless
 /// of which language is currently active, not translate "Русский" into whatever's selected now.
-fn language_options_panel() -> impl Scene {
+fn language_options_panel(common_assets: &CommonAssets) -> impl Scene {
     bsn! {
         LanguageOptionsPanel
         Visibility::Hidden
@@ -233,12 +233,12 @@ fn language_options_panel() -> impl Scene {
         }
         Children [
             (
-                button(px(200), px(40), "English")
+                button(px(200), px(40), "English", common_assets.serif_font.clone())
                 LocaleOption(langid!("en-US"))
                 on(select_language)
             ),
             (
-                button(px(200), px(40), "Русский")
+                button(px(200), px(40), "Русский", common_assets.serif_font.clone())
                 LocaleOption(langid!("ru-RU"))
                 on(select_language)
             ),
@@ -308,6 +308,7 @@ fn spawn_vr_main_menu_wrist_panel(
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    common_assets: Res<CommonAssets>,
     left_grip: Query<Entity, With<XrTrackedLeftGrip>>,
     existing: Query<(), With<VrMainMenuWristPanel>>,
 ) {
@@ -327,7 +328,7 @@ fn spawn_vr_main_menu_wrist_panel(
         WRIST_PANEL_SIZE,
         WRIST_PANEL_TEXTURE_SIZE,
         WRIST_PANEL_TEXTURE_SIZE,
-        main_menu_buttons(),
+        main_menu_buttons(&common_assets),
     );
     commands.spawn((
         panel,
