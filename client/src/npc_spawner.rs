@@ -23,7 +23,6 @@ fn request_spawn_npc(
     npc_spawner: Single<&GlobalTransform, With<NpcSpawner>>,
     mut commands: Commands,
 ) {
-    info!("requested npc spawn");
     commands.client_trigger(SpawnNpcRequest {
         transform: npc_spawner.compute_transform(),
     });

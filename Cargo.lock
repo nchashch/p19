@@ -631,7 +631,7 @@ dependencies = [
  "downcast-rs 2.0.2",
  "either",
  "petgraph",
- "ron",
+ "ron 0.12.1",
  "serde",
  "smallvec",
  "thiserror 2.0.18",
@@ -728,7 +728,7 @@ dependencies = [
  "futures-lite",
  "futures-util",
  "js-sys",
- "ron",
+ "ron 0.12.1",
  "serde",
  "stackfuture",
  "thiserror 2.0.18",
@@ -749,6 +749,7 @@ dependencies = [
  "bevy_app",
  "bevy_asset",
  "bevy_asset_loader_derive",
+ "bevy_common_assets",
  "bevy_ecs",
  "bevy_log",
  "bevy_platform",
@@ -756,6 +757,7 @@ dependencies = [
  "bevy_state",
  "bevy_utils",
  "path-slash",
+ "serde",
 ]
 
 [[package]]
@@ -856,6 +858,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_common_assets"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b9a9509ff29e5db89e1697c047fbbdc55208c8c3d07a494b013cc96814fcddb"
+dependencies = [
+ "anyhow",
+ "bevy_app",
+ "bevy_asset",
+ "bevy_reflect",
+ "ron 0.11.0",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "bevy_core_pipeline"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -926,7 +943,7 @@ dependencies = [
  "bevy_ui_render",
  "bevy_utils",
  "bevy_window",
- "ron",
+ "ron 0.12.1",
  "serde",
  "thiserror 2.0.18",
  "tracing",
@@ -1084,7 +1101,7 @@ dependencies = [
  "futures-lite",
  "indexmap",
  "intl-memoizer",
- "ron",
+ "ron 0.12.1",
  "serde",
  "serde_yaml",
  "thiserror 2.0.18",
@@ -1224,7 +1241,7 @@ dependencies = [
  "naga_oil",
  "rand 0.10.1",
  "rand_pcg",
- "ron",
+ "ron 0.12.1",
  "serde",
  "thiserror 2.0.18",
  "wgpu",
@@ -2380,7 +2397,7 @@ dependencies = [
  "bevy_transform",
  "bevy_utils",
  "derive_more",
- "ron",
+ "ron 0.12.1",
  "serde",
  "thiserror 2.0.18",
  "uuid",
@@ -6674,6 +6691,19 @@ dependencies = [
  "num-rational",
  "thiserror 2.0.18",
  "tracing",
+]
+
+[[package]]
+name = "ron"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db09040cc89e461f1a265139777a2bde7f8d8c67c4936f700c63ce3e2904d468"
+dependencies = [
+ "base64 0.22.1",
+ "bitflags 2.13.0",
+ "serde",
+ "serde_derive",
+ "unicode-ident",
 ]
 
 [[package]]

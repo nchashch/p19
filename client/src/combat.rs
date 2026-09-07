@@ -49,7 +49,6 @@ fn on_entity_died(
     mut selected: ResMut<Selected>,
     mut commands: Commands,
 ) {
-    info!("position: {:?}", died.position);
     commands.spawn(SamplePlayer::new(common_assets.crunch.clone()));
     commands.spawn((
         ParticleEffect::new(effect.0.clone()),

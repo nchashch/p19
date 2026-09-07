@@ -210,6 +210,9 @@ impl Plugin for Prototype19 {
             .add_loading_state(
                 LoadingState::new(GameState::AssetLoading)
                     .continue_to_state(GameState::MainMenu)
+                    .with_dynamic_assets_file::<StandardDynamicAssetCollection>(
+                        "common_assets.assets.ron",
+                    )
                     .load_collection::<assets::CommonAssets>(),
             )
             .add_systems(OnEnter(GameState::MainMenu), ui::spawn_main_menu);

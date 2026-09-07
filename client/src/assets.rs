@@ -5,6 +5,19 @@
 //! loaded), so every other module reads a pre-loaded `Handle`/lookup out of `Res<CommonAssets>`
 //! instead of calling `asset_server.load(...)` with a hardcoded path at the point of use.
 //!
+//! Every field below is `#[asset(key = "...")]`, not `#[asset(path = "...")]` — the actual paths
+//! live in `assets/common_assets.assets.ron`, a dynamic asset collection file (`main.rs` registers
+//! it via `.with_dynamic_assets_file::<StandardDynamicAssetCollection>(...)`, *before*
+//! `.load_collection::<CommonAssets>()`). This is a real, separately-tracked loading phase, not
+//! just a config file read: `bevy_asset_loader` loads and parses the `.ron` itself as a genuine
+//! asset first (`InternalLoadingState::LoadingDynamicAssetCollections`, confirmed directly against
+//! `loading_state.rs`), and only *then* resolves each `key` against the now-available table and
+//! issues the real loads (`StandardDynamicAsset::File { path } => asset_server.load_untyped(path)`)
+//! — the manifest itself never ends up as a live handle anywhere in `CommonAssets`, only the keys'
+//! resolved targets do. Every entry here happens to be a plain `File(path: "...")` — the RON format
+//! also supports `Image`/`Folder`/`Files`/`StandardMaterial`/`TextureAtlasLayout` variants with
+//! their own extra fields, none of which this collection currently needs.
+//!
 //! `LevelAssets` below is a separate, not-yet-wired-up sketch for the future per-level dynamic
 //! asset manifest (see the project's own design discussion on sharing a level-packaging mechanism
 //! between `client` and `server`) — it isn't touched by this module's loading state and has no
@@ -33,31 +46,31 @@ pub struct CommonAssets {
     /// `Handle<Gltf>`, since that's what `WorldAssetRoot` (Skein/world-serialization's headless-safe
     /// spawn mechanism) actually wraps; see `shared`/CLAUDE.md's "Server" section for why this
     /// path exists alongside plain GLTF loading at all.
-    #[asset(path = "models/Cube.glb#Scene0")]
+    #[asset(key = "cube_world")]
     pub cube_world: Handle<WorldAsset>,
     /// The player/NPC rig's world-asset scene (`npc_spawner.rs`, `player_character.rs`) — same
     /// `WorldAsset` reasoning as `cube_world`.
-    #[asset(path = "models/rig.glb#Scene0")]
+    #[asset(key = "rig_world")]
     pub rig_world: Handle<WorldAsset>,
     /// The *same* `rig.glb`, loaded again as a plain `Handle<Gltf>` — `animation.rs` needs this
     /// one specifically, to read `named_animations` out of `Res<Assets<Gltf>>` and build the
     /// shared `AnimationGraph`; `WorldAsset` doesn't expose that.
-    #[asset(path = "models/rig.glb")]
+    #[asset(key = "rig_gltf")]
     pub rig_gltf: Handle<Gltf>,
     /// The main menu's background scene (`ui.rs`'s `main_menu`).
-    #[asset(path = "models/MenuBackground.glb#Scene0")]
+    #[asset(key = "menu_background")]
     pub menu_background: Handle<WorldAsset>,
 
-    #[asset(path = "audio/crunch.wav")]
+    #[asset(key = "crunch")]
     pub crunch: Handle<AudioSample>,
-    #[asset(path = "audio/explosion.wav")]
+    #[asset(key = "explosion")]
     pub explosion: Handle<AudioSample>,
 
     /// See `scripts/hdri_to_skybox.py`'s doc comment for how this KTX2 cubemap is built.
-    #[asset(path = "skyboxes/night_sky_clean_bc6h.ktx2")]
+    #[asset(key = "skybox")]
     pub skybox: Handle<Image>,
 
-    #[asset(path = "fonts/serif/IBMPlexSerif-Regular.ttf")]
+    #[asset(key = "serif_font")]
     pub serif_font: Handle<Font>,
 
     /// Kenney's own pre-built texture atlas for the keyboard/mouse "Input Prompts" pack — a single
@@ -66,14 +79,14 @@ pub struct CommonAssets {
     /// pack's ~85 individual per-icon PNGs is deliberate — see `input_icons.rs`'s module doc
     /// comment for why building our own atlas at runtime from the individual files was dropped in
     /// favor of this.
-    #[asset(path = "textures/input_prompts/keyboard_mouse_sheet.png")]
+    #[asset(key = "keyboard_mouse_atlas_image")]
     pub keyboard_mouse_atlas_image: Handle<Image>,
-    #[asset(path = "textures/input_prompts/keyboard_mouse_sheet.xml")]
+    #[asset(key = "keyboard_mouse_atlas_manifest")]
     pub keyboard_mouse_atlas_manifest: Handle<SparrowAtlasManifest>,
     /// Same idea as `keyboard_mouse_atlas_image`/`_manifest`, for the Steam Deck button/stick pack.
-    #[asset(path = "textures/input_prompts/steam_deck_sheet.png")]
+    #[asset(key = "steam_deck_atlas_image")]
     pub steam_deck_atlas_image: Handle<Image>,
-    #[asset(path = "textures/input_prompts/steam_deck_sheet.xml")]
+    #[asset(key = "steam_deck_atlas_manifest")]
     pub steam_deck_atlas_manifest: Handle<SparrowAtlasManifest>,
 }
 
