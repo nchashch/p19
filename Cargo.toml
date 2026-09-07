@@ -29,7 +29,19 @@ bevy = { version = "0.19.0", default-features = true, features = [
 avian3d = { version = "0.7.0", features = ["simd", "serialize"] }
 bevy_skein = "0.6.0"
 bevy_enhanced_input = "0.26.0"
-bevy_asset_loader = { version = "0.27.0", features = ["standard_dynamic_assets"] }
+bevy_asset_loader = { version = "0.27.0", features = [
+	"standard_dynamic_assets",
+] }
+# For loading custom `.ron` (and other data-format) asset types directly, independent of
+# `bevy_asset_loader`'s own dynamic-asset manifests — see `RonAssetPlugin`. Pinned to the same
+# 0.17.0 `bevy_asset_loader` already pulls in transitively (it uses this crate internally for
+# `common_assets.assets.ron`/level manifests), so there's only ever one version in the dependency
+# graph. `default-features = false` since this crate has no `default` feature set of its own to
+# begin with — every format (`ron`, `json`, `yaml`, ...) is opt-in.
+bevy_common_assets = { version = "0.17.0", default-features = false, features = [
+	"toml",
+	"ron",
+] }
 bevy_hanabi = "0.19.0"
 bevy_replicon = "0.41.1"
 # `recv_channels` (a default feature) adds an alternate auto-dispatch receive path that
@@ -45,21 +57,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 polyanya = { path = "../polyanya" }
 rerecast = { path = "../rerecast/crates/rerecast" }
 bevy_mod_outline = { path = "../bevy_mod_outline" }
-# Vendored to fix a real reconnect bug: `RepliconQuinnetClientPlugin` registers
-# `set_connected`/`set_connecting`/`set_disconnected` as an unordered tuple in `PreUpdate`, all
-# writing to the same `NextState<ClientState>`. On a fast enough connection (confirmed on
-# loopback, especially a *second* connection in the same process — presumably faster than the
-# first since the OS/crypto context is already warmed up), `client_connecting` and
-# `client_just_connected` can both be true in the same frame; whichever of
-# `set_connecting`/`set_connected` happens to run last that frame wins, since `NextState` only
-# holds one pending value. If `set_connecting` wins, `ClientState` gets stuck reporting
-# `Connecting` forever — worse, `bevy_quinnet::client_just_connected`'s own internal `Local<bool>`
-# edge-detector already flipped to "connected" on the losing frame regardless of whose write won,
-# so it can never fire `set_connected` again for the rest of the process, even though the
-# underlying QUIC connection is genuinely fully connected. Symptom: `OnEnter(ClientState::Connected)`
-# silently stops firing on any reconnect after the first, while `bevy_quinnet`'s own low-level
-# "connection established" log line (unrelated to this broken edge-detector) still prints fine.
-bevy_replicon_quinnet = { path = "../bevy_replicon_quinnet" }
+bevy_replicon_quinnet = "0.20"
 bevy_vello = { path = "../bevy_vello" }
 bevy_seedling = { path = "../bevy_seedling", features = ["mp3"] }
 audionimbus = { path = "../audionimbus/audionimbus", features = [

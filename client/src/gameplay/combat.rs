@@ -11,7 +11,7 @@ use shared::{
 };
 
 use crate::{
-    controls::targeting::Selected, lifecycle::assets::CommonAssets,
+    assets::collections::CommonAssets, controls::targeting::Selected,
     presentation::particles::CubeParticleEffect,
 };
 

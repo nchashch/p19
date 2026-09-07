@@ -1,5 +1,5 @@
+use crate::assets::collections::LevelAssets;
 use crate::events::RespawnPlayer;
-use crate::lifecycle::assets::LevelAssets;
 use bevy::asset::AssetPath;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
@@ -50,7 +50,7 @@ pub fn initial_respawn(mut commands: Commands) {
     commands.trigger(RespawnPlayer);
 }
 
-/// `event.id` is a `.ron` dynamic-asset manifest (e.g. `"levels/Level.assets.ron"`), not a `.glb`
+/// `event.id` is a `.ron` dynamic-asset manifest (e.g. `"collections/Level.assets.ron"`), not a `.glb`
 /// path directly — see `assets::LevelAssets`'s doc comment for the two-key-resolution-phases
 /// mechanism this relies on. Checks the manifest file itself exists synchronously (same
 /// "validate right before committing" shape the old direct-`.glb` version used, just against a

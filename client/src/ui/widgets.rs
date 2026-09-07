@@ -1,4 +1,4 @@
-use crate::lifecycle::assets::CommonAssets;
+use crate::assets::collections::CommonAssets;
 use crate::ui::localization::{LocalizedText, localized};
 use bevy::{
     color::palettes::css::{DARK_SLATE_GRAY, SLATE_GRAY, WHITE, WHITE_SMOKE},

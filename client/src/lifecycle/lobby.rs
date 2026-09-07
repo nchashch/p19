@@ -1,7 +1,8 @@
 use bevy::prelude::*;
-use shared::game_state::GameState;
+use bevy_replicon::prelude::ClientTriggerExt;
+use shared::{client_events::LoadLevelRequest, game_state::GameState};
 
-use crate::{lifecycle::assets::CommonAssets, ui::lobby::lobby_ui};
+use crate::{assets::collections::CommonAssets, events::Play, ui::lobby::lobby_ui};
 
 pub struct LobbyPlugin;
 
@@ -11,7 +12,14 @@ impl Plugin for LobbyPlugin {
             OnEnter(GameState::Lobby),
             (spawn_lobby_menu, spawn_lobby_menu_controls),
         );
+        app.add_observer(on_play);
     }
+}
+
+pub fn on_play(_: On<Play>, mut commands: Commands) {
+    info!("play event received");
+    let id = "collections/Level.assets.ron".to_string();
+    commands.client_trigger(LoadLevelRequest { id });
 }
 
 /// A real system (not the usual `some_scene.spawn()` adapter, which only works for a zero-arg

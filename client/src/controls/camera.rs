@@ -6,7 +6,7 @@ use bevy::{
 };
 use bevy_mod_xr::camera::XrCamera;
 
-use crate::lifecycle::assets::CommonAssets;
+use crate::assets::collections::CommonAssets;
 
 /// Matches `main.rs`'s `ClearColor` — a fallback background for whatever the skybox doesn't
 /// cover (there's always a moment before `skyboxes/night_sky.ktx2` finishes streaming in where

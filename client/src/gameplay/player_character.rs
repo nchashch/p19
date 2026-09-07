@@ -1,9 +1,9 @@
 use crate::{
+    assets::collections::CommonAssets,
     controls::camera::{PlayerCameraPlugin, player_camera},
     controls::controls::{self, PlayerControlsPlugin},
     controls::fps_controller::FpsCamera,
     gameplay::combat::CombatPlugin,
-    lifecycle::assets::CommonAssets,
 };
 use bevy::prelude::*;
 use shared::game_state::GameState;

@@ -1,7 +1,7 @@
 use crate::add_observers_run_if;
+use crate::assets::collections::CommonAssets;
 use crate::controls::actions::{UiConfirm, UiNavigate};
 use crate::events::Connect;
-use crate::lifecycle::assets::CommonAssets;
 use crate::ui::hud::HudPlugin;
 use crate::ui::quad_panel::quad_panel;
 use crate::ui::widgets::{Activate, Tooltip, WidgetsPlugin, button, panel};

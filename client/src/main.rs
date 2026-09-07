@@ -4,6 +4,7 @@ use bevy::feathers::{dark_theme::create_dark_theme, theme::UiTheme};
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy_asset_loader::prelude::*;
+use bevy_common_assets::ron::RonAssetPlugin;
 use bevy_replicon::prelude::*;
 use bevy_replicon_quinnet::RepliconQuinnetPlugins;
 use bevy_seedling::prelude::*;
@@ -20,6 +21,8 @@ use shared::game_state::{GameState, GameStatePlugin};
 use bevy_mod_openxr::{add_xr_plugins, resources::OxrSessionConfig};
 use openxr::EnvironmentBlendMode;
 
+mod assets;
+mod config;
 mod controls;
 mod dev;
 mod events;
@@ -60,7 +63,7 @@ impl Plugin for Prototype19 {
         // `networking::load_client_config`, which reads the *rest* of `config.toml` the normal
         // way, via the `AssetServer`) could run. See `is_vr_enabled_presync`'s doc comment for why
         // this can't just reuse that later, `AssetServer`-based path.
-        let vr_enabled = lifecycle::networking::is_vr_enabled_presync();
+        let vr_enabled = config::is_vr_enabled_presync();
 
         if vr_enabled {
             app.add_plugins(add_xr_plugins(
@@ -79,6 +82,16 @@ impl Plugin for Prototype19 {
             SeedlingPlugins,
             ParticleEffectsPlugin,
             LobbyPlugin,
+            // Lets `assets::level::Level` (e.g. `assets/levels/start.level.ron`) be loaded
+            // directly as an asset, independent of `bevy_asset_loader`'s own dynamic-asset
+            // manifests — see that module's doc comment. A distinctive compound extension, same
+            // convention `bevy_asset_loader` itself uses for `"assets.ron"` (see
+            // `assets::collections`'s `common_assets.assets.ron`/`Level.assets.ron`) rather than
+            // bare `"ron"` — not just for symmetry: a bare `"ron"` registration only avoids
+            // ambiguity with other RON-based asset types as long as every call site stays
+            // explicitly typed (`AssetServer::load::<T>(path)`, never `load_untyped`). A
+            // distinctive extension per type sidesteps that structurally instead of relying on it.
+            RonAssetPlugin::<assets::level::Level>::new(&["level.ron"]),
             SkeinPlugin::default(),
             // The server is authoritative for physics — the client only needs colliders and
             // spatial queries (`SpatialQuery` raycasts/shapecasts, e.g. `targeting.rs`'s hover
@@ -195,9 +208,9 @@ impl Plugin for Prototype19 {
                 LoadingState::new(GameState::AssetLoading)
                     .continue_to_state(GameState::MainMenu)
                     .with_dynamic_assets_file::<StandardDynamicAssetCollection>(
-                        "common_assets.assets.ron",
+                        "collections/common_assets.assets.ron",
                     )
-                    .load_collection::<lifecycle::assets::CommonAssets>(),
+                    .load_collection::<assets::collections::CommonAssets>(),
             )
             // No `.with_dynamic_assets_file(...)`/`.continue_to_state(...)` here, unlike
             // `AssetLoading` above — which `.ron` manifest to resolve `LevelAssets.level` against
@@ -208,13 +221,13 @@ impl Plugin for Prototype19 {
             // comment for the rest of that flow.
             .add_loading_state(
                 LoadingState::new(GameState::Loading)
-                    .load_collection::<lifecycle::assets::LevelAssets>(),
+                    .load_collection::<assets::collections::LevelAssets>(),
             )
             .add_systems(
                 OnEnter(GameState::MainMenu),
                 (
                     ui::ui::spawn_main_menu,
-                    lifecycle::assets::override_default_font,
+                    assets::collections::override_default_font,
                 ),
             );
     }

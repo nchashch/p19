@@ -62,6 +62,7 @@ fn on_load_level_request(
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
+    info!("load level request received for {}", &request.id);
     let id = request.id.clone();
     if !asset_exists(&asset_server, &id) {
         info!("level {} doesn't exit", id);

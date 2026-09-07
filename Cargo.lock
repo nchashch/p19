@@ -870,6 +870,7 @@ dependencies = [
  "ron 0.11.0",
  "serde",
  "thiserror 2.0.18",
+ "toml 1.1.3+spec-1.1.0",
 ]
 
 [[package]]
@@ -1891,6 +1892,8 @@ dependencies = [
 [[package]]
 name = "bevy_replicon_quinnet"
 version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4359d8b0c52c5725e28fbbbb9586a0641d8bd8a71a5bd53e36e85135b54d6d9"
 dependencies = [
  "bevy",
  "bevy_quinnet",
@@ -2760,6 +2763,7 @@ dependencies = [
  "bevy",
  "bevy-steamworks",
  "bevy_asset_loader",
+ "bevy_common_assets",
  "bevy_enhanced_input",
  "bevy_fluent",
  "bevy_hanabi",
@@ -2786,7 +2790,7 @@ dependencies = [
  "rerecast",
  "serde",
  "shared",
- "toml",
+ "toml 0.9.12+spec-1.1.0",
  "unic-langid",
 ]
 
@@ -7135,6 +7139,7 @@ version = "0.1.0"
 dependencies = [
  "avian3d",
  "bevy",
+ "bevy_common_assets",
  "bevy_quinnet",
  "bevy_replicon",
  "bevy_replicon_quinnet",
@@ -7836,6 +7841,21 @@ dependencies = [
  "toml_parser",
  "toml_writer",
  "winnow 0.7.15",
+]
+
+[[package]]
+name = "toml"
+version = "1.1.3+spec-1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53c96ecdfa941c8fc4fcaed14f99ada8ebed502eef533015095a07e3301d4c3c"
+dependencies = [
+ "indexmap",
+ "serde_core",
+ "serde_spanned",
+ "toml_datetime 1.1.1+spec-1.1.0",
+ "toml_parser",
+ "toml_writer",
+ "winnow 1.0.3",
 ]
 
 [[package]]

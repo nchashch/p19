@@ -4,9 +4,9 @@ use shared::client_events::SpawnCubeRequest;
 use shared::cube_spawner::{Cube, CubeSpawner};
 use shared::level::LevelRoot;
 
+use crate::assets::collections::CommonAssets;
 use crate::controls::fps_controller::FpsCamera;
 use crate::events::SpawnCube;
-use crate::lifecycle::assets::CommonAssets;
 
 pub struct CubeSpawnerPlugin;
 

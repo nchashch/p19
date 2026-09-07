@@ -2,8 +2,8 @@ use bevy::{input_focus::AutoFocus, prelude::*};
 use shared::game_state::GameState;
 
 use crate::{
-    events::Disconnect,
-    lifecycle::assets::CommonAssets,
+    assets::collections::CommonAssets,
+    events::{Disconnect, Play},
     ui::widgets::{Activate, Tooltip, button, panel},
 };
 
@@ -41,7 +41,7 @@ fn lobby_buttons() -> impl Scene {
 }
 
 fn lobby_play_button(_: On<Activate>, mut commands: Commands) {
-    //
+    commands.trigger(Play);
 }
 
 fn lobby_main_menu_button(_: On<Activate>, mut commands: Commands) {

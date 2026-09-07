@@ -6,7 +6,7 @@
 //! instead of calling `asset_server.load(...)` with a hardcoded path at the point of use.
 //!
 //! Every field below is `#[asset(key = "...")]`, not `#[asset(path = "...")]` — the actual paths
-//! live in `assets/common_assets.assets.ron`, a dynamic asset collection file (`main.rs` registers
+//! live in `assets/collections/common_assets.assets.ron`, a dynamic asset collection file (`main.rs` registers
 //! it via `.with_dynamic_assets_file::<StandardDynamicAssetCollection>(...)`, *before*
 //! `.load_collection::<CommonAssets>()`). This is a real, separately-tracked loading phase, not
 //! just a config file read: `bevy_asset_loader` loads and parses the `.ron` itself as a genuine
@@ -38,6 +38,7 @@
 //! combination that produces what `bevy_fluent` actually needs, so `localization.rs` keeps its
 //! own manual `asset_server.load_folder("locales")` + polling instead.
 
+use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAsset;
 use bevy_asset_loader::prelude::*;
@@ -100,12 +101,26 @@ pub struct CommonAssets {
 }
 
 #[derive(AssetCollection, Resource)]
-pub struct LevelAssets {
-    /// The level's own world-asset scene. The manifest that resolves this key to a real
-    /// `.glb#SceneN` path is chosen at runtime, not baked into this struct or into `main.rs` —
-    /// see this module's doc comment and `loading.rs::load_level`.
-    #[asset(key = "level")]
-    pub level: Handle<WorldAsset>,
+pub struct PreloadCollection {
+    #[asset(key = "armature_rigs", collection(typed, mapped))]
+    pub armature_rigs: HashMap<AssetFileStem, Handle<Gltf>>,
+
+    #[asset(key = "world_rigs", collection(typed, mapped))]
+    pub world_rigs: HashMap<AssetFileStem, Handle<WorldAsset>>,
+
+    #[asset(key = "skyboxes", collection(typed, mapped))]
+    pub skyboxes: HashMap<AssetFileStem, Handle<Image>>,
+
+    #[asset(key = "audio", collection(typed, mapped))]
+    pub audio: HashMap<AssetFileStem, Handle<AudioSample>>,
+}
+
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+struct PreloadBeacon {
+    collections: Vec<String>, // e.g. "collections/levels/dungeon.assets.ron"
+    load_radius: f32,
+    unload_radius: f32,
 }
 
 /// Overrides Bevy's own built-in default font (`AssetId::<Font>::default()` — what any

@@ -33,7 +33,7 @@ use bevy::prelude::*;
 use quick_xml::events::Event;
 use quick_xml::reader::Reader as XmlReader;
 
-use crate::lifecycle::assets::CommonAssets;
+use crate::assets::collections::CommonAssets;
 use shared::game_state::GameState;
 
 pub struct InputIconsPlugin;

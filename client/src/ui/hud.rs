@@ -1,6 +1,6 @@
+use crate::assets::collections::CommonAssets;
 use crate::controls::targeting::{Hovered, SELECT_RANGE, Selected};
 use crate::gameplay::player_character::LocalPlayer;
-use crate::lifecycle::assets::CommonAssets;
 use crate::ui::localization::localized;
 use crate::ui::widgets::{
     PANEL_BORDER_COLOR, PANEL_COLOR, Tooltip, TooltipAbove, TooltipArg, panel,

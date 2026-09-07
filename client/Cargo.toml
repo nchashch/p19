@@ -24,6 +24,7 @@ avian3d.workspace = true
 bevy_skein.workspace = true
 bevy_enhanced_input.workspace = true
 bevy_asset_loader.workspace = true
+bevy_common_assets.workspace = true
 bevy_hanabi.workspace = true
 bevy_replicon.workspace = true
 bevy_replicon_quinnet.workspace = true

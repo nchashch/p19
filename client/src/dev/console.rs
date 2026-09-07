@@ -160,7 +160,7 @@ fn load_level_cmd(
     let mut levels = HashSet::new();
     let source = asset_server.get_source(AssetSourceId::Default).unwrap();
     let mut stream =
-        futures_lite::future::block_on(source.reader().read_directory(Path::new("levels")))
+        futures_lite::future::block_on(source.reader().read_directory(Path::new("collections")))
             .unwrap();
     while let Some(path) = futures_lite::future::block_on(stream.next()) {
         // Only list the `.ron` dynamic-asset manifests (see `assets::LevelAssets`), not the
@@ -178,7 +178,7 @@ fn load_level_cmd(
         args.set("levels", levels_list);
         return localized_output(&localization, "console-load-level-missing-id", &args);
     };
-    if levels.contains(&format!("\"levels/{}\"", id)) {
+    if levels.contains(&format!("\"collections/{}\"", id)) {
         // TODO: Load level here.
         todo!();
         let mut args = FluentArgs::new();
