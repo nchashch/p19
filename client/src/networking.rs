@@ -50,17 +50,17 @@ impl Default for ServerAddress {
     }
 }
 
-/// The level `ui.rs`'s `play_button` requests — just the `.glb` filename (e.g. `"Level.glb"`),
-/// not the full asset id; `play_button` still builds the actual `levels/{}#Scene0` id itself,
-/// since the `levels/` directory and the `#Scene0` GLTF scene label aren't things `config.toml`
-/// should need to know about. Config-driven for the same reason `ServerAddress` is — there's no
-/// UI to edit it either.
+/// The level `ui.rs`'s `play_button` requests — just the `.ron` dynamic-asset manifest's filename
+/// (e.g. `"Level.assets.ron"`, see `assets::LevelAssets`), not the full asset id; `play_button`
+/// still builds the actual `levels/{}` id itself, since the `levels/` directory isn't something
+/// `config.toml` should need to know about. Config-driven for the same reason `ServerAddress` is —
+/// there's no UI to edit it either.
 #[derive(Resource)]
 pub struct DefaultLevel(pub String);
 
 impl Default for DefaultLevel {
     fn default() -> Self {
-        Self("Level.glb".to_string())
+        Self("Level.assets.ron".to_string())
     }
 }
 

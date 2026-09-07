@@ -215,6 +215,16 @@ impl Plugin for Prototype19 {
                     )
                     .load_collection::<assets::CommonAssets>(),
             )
+            // No `.with_dynamic_assets_file(...)`/`.continue_to_state(...)` here, unlike
+            // `AssetLoading` above — which `.ron` manifest to resolve `LevelAssets.level` against
+            // isn't known until a level is actually chosen at runtime (`loading.rs::load_level`
+            // registers it into `DynamicAssetCollections<GameState>` right before transitioning
+            // into `Loading`), and resolving that manifest is only the first half of what
+            // `GameState::Loading` waits for — see `loading.rs`'s `on_level_assets_loaded` doc
+            // comment for the rest of that flow.
+            .add_loading_state(
+                LoadingState::new(GameState::Loading).load_collection::<assets::LevelAssets>(),
+            )
             .add_systems(OnEnter(GameState::MainMenu), ui::spawn_main_menu);
     }
 }

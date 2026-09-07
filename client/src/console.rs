@@ -162,7 +162,11 @@ fn load_level_cmd(
         futures_lite::future::block_on(source.reader().read_directory(Path::new("levels")))
             .unwrap();
     while let Some(path) = futures_lite::future::block_on(stream.next()) {
-        levels.insert(format!("{path:?}"));
+        // Only list the `.ron` dynamic-asset manifests (see `assets::LevelAssets`), not the
+        // `.glb` files they point at — those aren't valid ids to pass to `load_level` any more.
+        if path.extension().is_some_and(|ext| ext == "ron") {
+            levels.insert(format!("{path:?}"));
+        }
     }
     let mut levels_list = "".to_string();
     for level in &levels {
@@ -175,7 +179,7 @@ fn load_level_cmd(
     };
     if levels.contains(&format!("\"levels/{}\"", id)) {
         commands.trigger(LoadLevel {
-            id: format!("levels/{}#Scene0", id),
+            id: format!("levels/{}", id),
         });
         let mut args = FluentArgs::new();
         args.set("id", id);

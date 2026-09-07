@@ -346,7 +346,7 @@ fn spawn_vr_main_menu_wrist_panel(
 
 fn play_button(_event: On<Activate>, default_level: Res<DefaultLevel>, mut commands: Commands) {
     commands.trigger(LoadLevel {
-        id: format!("levels/{}#Scene0", default_level.0),
+        id: format!("levels/{}", default_level.0),
     });
 }
 

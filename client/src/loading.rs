@@ -1,8 +1,10 @@
+use crate::assets::LevelAssets;
 use crate::networking::{PendingLevelId, ServerAddress, connect_to_server};
 use crate::{events::RespawnPlayer, game_state::GameState};
 use bevy::asset::AssetPath;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
+use bevy_asset_loader::prelude::{DynamicAssetCollections, StandardDynamicAssetCollection};
 use bevy_quinnet::client::QuinnetClient;
 use bevy_replicon::prelude::{ClientTriggerExt, RepliconChannels};
 use shared::client_events::LoadLevelRequest;
@@ -20,6 +22,10 @@ impl Plugin for LoadingPlugin {
             crate::hud::in_game_scene.spawn(),
         );
         app.add_systems(OnEnter(GameState::InGame), initial_respawn);
+        app.add_systems(
+            Update,
+            on_level_assets_loaded.run_if(resource_added::<LevelAssets>),
+        );
         app.add_observer(load_level);
         app.add_observer(spawn_level);
     }
@@ -41,21 +47,22 @@ pub fn initial_respawn(mut commands: Commands) {
     commands.trigger(RespawnPlayer);
 }
 
+/// `event.id` is a `.ron` dynamic-asset manifest (e.g. `"levels/Level.assets.ron"`), not a `.glb`
+/// path directly — see `assets::LevelAssets`'s doc comment for the two-key-resolution-phases
+/// mechanism this relies on. Checks the manifest file itself exists synchronously (same
+/// "validate right before committing" shape the old direct-`.glb` version used, just against a
+/// different file) before registering it as `GameState::Loading`'s dynamic asset file and
+/// transitioning — a bad id fails here instead of entering `Loading` with a `LevelAssets` that
+/// will never resolve. The actual `LoadLevelRequest` — which still needs a concrete `.glb#SceneN`
+/// path, since that's what the server (and `spawn_level`, below) load — isn't sent here: it has
+/// to wait for `LevelAssets.level` to actually finish resolving against this manifest, which
+/// `on_level_assets_loaded` reacts to once `GameState::Loading`'s own `LoadingState` finishes.
 fn load_level(
     event: On<LoadLevel>,
     asset_server: Res<AssetServer>,
-    channels: Res<RepliconChannels>,
-    server_address: Res<ServerAddress>,
-    mut client: ResMut<QuinnetClient>,
-    mut pending_level_id: ResMut<PendingLevelId>,
-    mut commands: Commands,
+    mut dynamic_assets: ResMut<DynamicAssetCollections<GameState>>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
-    // `event.id` includes the GLTF scene label (e.g. "levels/Level.glb#Scene0") — strip it via
-    // `AssetPath` before checking, since the label isn't part of the file on disk. Check the
-    // reader directly rather than going through `AssetServer::load`, so a bad id fails
-    // synchronously here instead of transitioning into `Loading` with nothing that will ever
-    // fire `WorldInstanceReady` to get back out of it.
     let asset_path = AssetPath::parse(&event.id);
     let Ok(source) = asset_server.get_source(asset_path.source()) else {
         warn!("load_level: no asset source for {:?}", event.id);
@@ -65,22 +72,51 @@ fn load_level(
         warn!("load_level: {:?} not found ({err})", event.id);
         return;
     }
-    let id = asset_path.into_owned();
-    // The client only ever connects here, on `Play` — not eagerly at `Startup` — so the
-    // connection may still need to be opened, in which case the actual `LoadLevelRequest` has to
-    // wait for `ClientState::Connected` (see `networking.rs`'s `on_connected`) rather than being
-    // sent immediately. If already connected (e.g. a second `Play` press), send it right away —
-    // waiting on `OnEnter(ClientState::Connected)` again would hang forever, since that
-    // transition already happened and won't refire.
+    dynamic_assets.register_file::<StandardDynamicAssetCollection>(GameState::Loading, &event.id);
+    next_state.set(GameState::Loading);
+}
+
+/// Reacts once `GameState::Loading`'s own `LoadingState` (see `main.rs`) has resolved
+/// `LevelAssets.level` against whichever manifest `load_level` just registered — i.e. once we
+/// finally know the level's real `.glb#SceneN` path, not just the `.ron` manifest that names it.
+/// `resource_added` (rather than e.g. `OnEnter` of some new state) is what detects this: `main.rs`
+/// deliberately doesn't give this `LoadingState` a `continue_to_state`, since resolving the
+/// manifest is just the first half of "loading a level" — `GameState::Loading` itself shouldn't
+/// end until the server round trip and the client's own local scene (`spawn_level`,
+/// `on_level_ready`) are done too. `bevy_asset_loader`'s `check_loading_collection` system
+/// re-`insert_resource`s `LevelAssets` (not just `init_resource`) every time this phase completes,
+/// including on a later re-entry into `GameState::Loading` for a different level — confirmed
+/// directly against its source — so `resource_added` correctly re-fires each time, not just the
+/// first time ever.
+///
+/// Same "already connected vs. need to connect first" branch `load_level` used to do directly —
+/// unchanged from before this was split into two steps, just now working off the level's actual
+/// resolved id instead of the caller-supplied one.
+fn on_level_assets_loaded(
+    level_assets: Res<LevelAssets>,
+    asset_server: Res<AssetServer>,
+    channels: Res<RepliconChannels>,
+    server_address: Res<ServerAddress>,
+    mut client: ResMut<QuinnetClient>,
+    mut pending_level_id: ResMut<PendingLevelId>,
+    mut commands: Commands,
+) {
+    let Some(id) = asset_server
+        .get_path(level_assets.level.id())
+        .map(AssetPath::into_owned)
+    else {
+        warn!("on_level_assets_loaded: couldn't resolve LevelAssets.level's asset path");
+        return;
+    };
     if client.is_connected() {
         commands.client_trigger(LoadLevelRequest { id });
     } else {
-        // Same "validate right before committing" shape as the asset-id check above — a bad
-        // address fails here, synchronously, rather than opening `GameState::Loading` with a
+        // Same "validate right before committing" shape as `load_level`'s own checks — a bad
+        // address fails here, synchronously, rather than staying in `GameState::Loading` with a
         // connection attempt that's never going to succeed.
         let Ok(addr) = server_address.0.trim().parse::<IpAddr>() else {
             warn!(
-                "load_level: {:?} is not a valid IP address",
+                "on_level_assets_loaded: {:?} is not a valid IP address",
                 server_address.0
             );
             return;
@@ -88,7 +124,6 @@ fn load_level(
         pending_level_id.0 = Some(id);
         connect_to_server(&channels, &mut client, addr);
     }
-    next_state.set(GameState::Loading);
 }
 
 fn spawn_level(

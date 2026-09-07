@@ -18,10 +18,15 @@
 //! also supports `Image`/`Folder`/`Files`/`StandardMaterial`/`TextureAtlasLayout` variants with
 //! their own extra fields, none of which this collection currently needs.
 //!
-//! `LevelAssets` below is a separate, not-yet-wired-up sketch for the future per-level dynamic
-//! asset manifest (see the project's own design discussion on sharing a level-packaging mechanism
-//! between `client` and `server`) — it isn't touched by this module's loading state and has no
-//! consumers yet.
+//! `LevelAssets` below is a *separate* collection from `CommonAssets`, loaded through its own
+//! `LoadingState` scoped to `GameState::Loading` (see `main.rs`) rather than `AssetLoading` — its
+//! manifest isn't known at `main.rs`'s build time the way `common_assets.assets.ron` is, since
+//! which level to load is a runtime choice (`config.toml`'s `level`, a console `load_level`
+//! command, or eventually a level-select UI). `client/src/loading.rs`'s `load_level` registers the
+//! chosen `.ron` file into `DynamicAssetCollections<GameState>` for `GameState::Loading`
+//! immediately before transitioning into it, instead of it being fixed via
+//! `.with_dynamic_assets_file(...)` up front — see that module for the full flow, including why
+//! resolving `LevelAssets.level` doesn't yet mean the level itself is ready to play.
 //!
 //! Deliberately *not* included here: `locales/`'s `.ftl` files. `bevy_fluent`'s
 //! `LocalizationBuilder::build` needs the raw `Handle<LoadedFolder>` itself (to look up the
@@ -91,9 +96,10 @@ pub struct CommonAssets {
 }
 
 #[derive(AssetCollection, Resource)]
-struct LevelAssets {
+pub struct LevelAssets {
+    /// The level's own world-asset scene. The manifest that resolves this key to a real
+    /// `.glb#SceneN` path is chosen at runtime, not baked into this struct or into `main.rs` —
+    /// see this module's doc comment and `loading.rs::load_level`.
     #[asset(key = "level")]
-    level: Handle<Gltf>,
-    #[asset(key = "skybox")]
-    skybox: Handle<Image>,
+    pub level: Handle<WorldAsset>,
 }
