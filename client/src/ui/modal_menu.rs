@@ -12,7 +12,8 @@ use bevy::input_focus::AutoFocus;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions};
 use bevy_xr_utils::tracking_utils::XrTrackedLeftGrip;
-use shared::game_state::{GameState, InputDeviceState, ModalMenuState, VRState};
+use crate::controls::input_device::InputDeviceState;
+use shared::game_state::{GameState, ModalMenuState, VRState};
 use std::f32::consts::FRAC_PI_2;
 
 /// The in-game pause menu — see `game_state::ModalMenuState`. Opened/closed by

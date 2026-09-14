@@ -115,12 +115,32 @@ pub struct PreloadCollection {
     pub audio: HashMap<AssetFileStem, Handle<AudioSample>>,
 }
 
+// Add an `avian3d` collider to specify the trigger area.
 #[derive(Component, Reflect)]
 #[reflect(Component)]
-struct PreloadBeacon {
+struct UnloadTrigger {
     collections: Vec<String>, // e.g. "collections/levels/dungeon.assets.ron"
-    load_radius: f32,
-    unload_radius: f32,
+}
+
+// Add an `avian3d` collider to specify the trigger area.
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+struct LoadTrigger {
+    collections: Vec<String>, // e.g. "collections/levels/dungeon.assets.ron"
+}
+
+// Add an `avian3d` collider to specify the trigger area.
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+struct DespawnTrigger {
+    ids: Vec<String>,
+}
+
+// Add an `avian3d` collider to specify the trigger area.
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+struct SpawnTrigger {
+    ids: Vec<String>,
 }
 
 /// Overrides Bevy's own built-in default font (`AssetId::<Font>::default()` — what any

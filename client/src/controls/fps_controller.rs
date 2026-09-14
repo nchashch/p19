@@ -12,7 +12,8 @@ impl Plugin for FpsControllerPlugin {
 }
 
 // TODO: Move this to `shared` and replicate it, for animating other player models.
-#[derive(Component)]
+#[derive(Component, Reflect)]
+#[reflect(Component)]
 pub struct FpsCamera {
     pub direction: Vec3,
     pub pitch: f32,

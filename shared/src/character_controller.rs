@@ -73,11 +73,14 @@ fn on_jump_input(
 /// to prevent Avian from automatically applying the character's velocity to its position,
 /// since the character controller will handle movement manually using move-and-slide.
 #[derive(Component, Reflect, Default, Serialize, Deserialize)]
+#[reflect(Component)]
 #[require(
     RigidBody::Kinematic,
     CustomPositionIntegration,
     // We don't want to impart speculative collision impulses in this case
-    SpeculativeMargin(0.0)
+    SpeculativeMargin(0.0),
+    CharacterCollisions,
+    DesiredMotion,
 )]
 pub struct CharacterController;
 
@@ -90,7 +93,7 @@ pub struct Character;
 /// to physically collide with each other while each still collides normally with level geometry
 /// and props (which stay on the implicit `Default` layer, since nothing else in this codebase
 /// uses `CollisionLayers` yet).
-#[derive(PhysicsLayer, Default, Clone, Copy, Debug)]
+#[derive(PhysicsLayer, Default, Clone, Copy, Debug, Reflect, Serialize, Deserialize)]
 pub enum GameLayer {
     #[default]
     Default,
@@ -106,7 +109,8 @@ pub enum GameLayer {
 pub struct Idle;
 
 /// Component for configuring movement settings for a character controller.
-#[derive(Component)]
+#[derive(Component, Reflect)]
+#[reflect(Component)]
 pub struct CharacterMovementSettings {
     /// The acceleration used for character movement.
     pub acceleration: Scalar,
@@ -134,7 +138,8 @@ impl Default for CharacterMovementSettings {
 }
 
 /// Component for configuring ground detection for a character controller.
-#[derive(Component, Clone, Debug, Serialize, Deserialize)]
+#[derive(Component, Clone, Debug, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct GroundDetection {
     /// The maximum angle (in radians) where a surface is considered ground/ceiling
     /// relative to the up-direction. Outside of this angle, surfaces are considered walls.
@@ -144,7 +149,7 @@ pub struct GroundDetection {
     /// The maximum distance for ground detection.
     pub max_distance: Scalar,
     /// The shape cast collider used for ground detection.
-    pub cast_shape: Option<Collider>,
+    pub cast_shape: Option<ColliderConstructor>,
 }
 
 impl Default for GroundDetection {
@@ -215,8 +220,9 @@ fn update_grounded(
             mask: collision_layers.map_or(LayerMask::ALL, |layers| layers.filters),
             ..SpatialQueryFilter::from_excluded_entities([entity])
         };
+        let collider = Collider::try_from_constructor(collider.clone(), None).unwrap();
         let hit = spatial_query.cast_shape(
-            collider,
+            &collider,
             translation,
             rotation,
             global_transform.down(),

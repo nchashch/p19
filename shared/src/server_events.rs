@@ -9,7 +9,7 @@ use crate::game_state::GameState;
 ///
 /// `entity`/`attacker` are `#[entities]`-mapped — the server's ids get remapped to each client's
 /// local copy on receive, via `SharedReplicationPlugin`'s `add_mapped_server_event`.
-#[derive(EntityEvent, Serialize, Deserialize, MapEntities)]
+#[derive(EntityEvent, Serialize, Deserialize, MapEntities, Clone)]
 pub struct Attack {
     #[entities]
     pub entity: Entity,
@@ -17,36 +17,12 @@ pub struct Attack {
     pub attacker: Entity,
 }
 
-#[derive(Event, Serialize, Deserialize, MapEntities)]
+#[derive(Event, Serialize, Deserialize, MapEntities, Clone)]
 pub struct Kill {
     #[entities]
+    pub entity: Entity,
+    #[entities]
     pub killer: Entity,
-}
-
-/// Fires once a player entity is spawned.
-#[derive(EntityEvent, Serialize, Deserialize, MapEntities)]
-pub struct PlayerSpawned {
-    #[entities]
-    pub entity: Entity,
-}
-
-/// Fired once a cube has actually been spawned — the fact client-side presentation (model,
-/// selectability, despawn-on-menu) reacts to.
-#[derive(EntityEvent, Serialize, Deserialize, MapEntities)]
-pub struct CubeSpawned {
-    #[entities]
-    pub entity: Entity,
-}
-
-/// Fired once an NPC has actually been spawned — the fact client-side presentation (model,
-/// selectability, despawn-on-menu) reacts to. `facing_yaw` is the spawn-time random rotation,
-/// purely cosmetic (applied to the visual model only, not the authoritative `Transform`) — not
-/// `#[entities]`, since it isn't an id.
-#[derive(EntityEvent, Serialize, Deserialize, MapEntities)]
-pub struct NpcSpawned {
-    #[entities]
-    pub entity: Entity,
-    pub facing_yaw: f32,
 }
 
 #[derive(Event, Serialize, Deserialize)]
@@ -71,7 +47,7 @@ pub struct ServerInGame;
 /// since by the time this arrives the entity may already be gone via its own despawn replicating
 /// through — `entity` itself is still `#[entities]`-mapped, but only used for the best-effort
 /// "clear `Selected` if it pointed at whatever just died" check, not for placing the effect.
-#[derive(EntityEvent, Serialize, Deserialize, MapEntities)]
+#[derive(EntityEvent, Serialize, Deserialize, MapEntities, Clone)]
 pub struct EntityDied {
     #[entities]
     pub entity: Entity,

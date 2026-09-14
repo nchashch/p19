@@ -2,6 +2,11 @@ use bevy::ecs::entity::MapEntities;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
+#[derive(Event, Serialize, Deserialize, Clone)]
+pub struct Join {
+    pub name: String,
+}
+
 #[derive(EntityEvent, Serialize, Deserialize, Clone, MapEntities)]
 pub struct AttackAttempt {
     #[entities]

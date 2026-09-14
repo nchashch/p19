@@ -1,8 +1,9 @@
 use bevy::prelude::*;
-use bevy_replicon::prelude::ClientTriggerExt;
+use lightyear::prelude::*;
 use shared::client_events::SpawnCubeRequest;
 use shared::cube_spawner::{Cube, CubeSpawner};
 use shared::level::LevelRoot;
+use shared::replication::OrderedReliable;
 
 use crate::assets::collections::CommonAssets;
 use crate::controls::fps_controller::FpsCamera;
@@ -21,13 +22,13 @@ fn request_spawn_cube(
     _event: On<SpawnCube>,
     fps_camera: Query<&FpsCamera>,
     cube_spawner: Single<&GlobalTransform, With<CubeSpawner>>,
-    mut commands: Commands,
+    mut sender: Single<&mut MessageSender<SpawnCubeRequest>>,
 ) {
     let Ok(fps_camera) = fps_camera.single() else {
         return;
     };
     let aim_direction = Vec3::Z.rotate_x(fps_camera.pitch).rotate_y(fps_camera.yaw);
-    commands.client_trigger(SpawnCubeRequest {
+    sender.send::<OrderedReliable>(SpawnCubeRequest {
         transform: cube_spawner.compute_transform(),
         aim_direction,
     });

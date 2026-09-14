@@ -1,6 +1,5 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use bevy_replicon::prelude::*;
 
 use crate::character_controller::{
     Character, CharacterController, DesiredMotion, GroundDetection, Grounded, Idle,
@@ -13,59 +12,86 @@ use crate::cube_spawner::Cube;
 use crate::level::LevelRoot;
 use crate::npc_spawner::Npc;
 use crate::player::{PlayerCharacter, Selectable};
-use crate::server_events::{
-    Attack, CubeSpawned, EntityDied, Kill, LoadLevel, NpcSpawned, PlayerSpawned, UnloadLevel,
-};
+use crate::server_events::{Attack, EntityDied, Kill, LoadLevel, ServerInGame, UnloadLevel};
+
+use lightyear::prelude::*;
+
+/// The one channel every message in this project sends on — ordered and reliable, mirroring the
+/// single `Channel::Ordered` every `bevy_replicon`-era registration used uniformly before this
+/// migration. A zero-sized marker type — `Channel` has a blanket impl for every `Send + Sync +
+/// 'static` type, so no explicit `impl Channel for OrderedReliable` is needed (or allowed).
+/// Registered once below via `AppChannelExt::add_channel`.
+pub struct OrderedReliable;
 
 pub struct SharedReplicationPlugin;
 
 impl Plugin for SharedReplicationPlugin {
     fn build(&self, app: &mut App) {
-        app.replicate::<LevelRoot>();
-        app.replicate::<Transform>();
-        app.replicate::<PlayerCharacter>();
-        app.replicate::<Character>();
-        app.replicate::<CharacterController>();
-        app.replicate::<Name>();
-        app.replicate::<HitPoints>();
-        app.replicate::<Gcd>();
-        app.replicate::<GroundDetection>();
-        app.replicate::<Grounded>();
-        app.replicate::<Collider>();
-        app.replicate::<CollisionLayers>();
-        app.replicate::<DesiredMotion>();
-        app.replicate::<RigidBody>();
-        app.replicate::<LinearVelocity>();
-        app.replicate::<AngularVelocity>();
-        app.replicate::<Selectable>();
-        app.replicate::<Npc>();
-        app.replicate::<Idle>();
-        app.replicate::<Character>();
-        app.replicate::<LockedAxes>();
-        app.replicate::<LockedAxes>();
-        app.replicate::<Cube>();
-        app.replicate::<Dead>();
+        app.add_channel::<OrderedReliable>(ChannelSettings {
+            mode: ChannelMode::OrderedReliable(ReliableSettings::default()),
+            ..default()
+        });
 
-        // `_mapped_` variants: every event here carries at least one `Entity` field, and those
-        // ids are only meaningful once remapped from the sender's world to the receiver's —
-        // see the `#[entities]` attributes on each event type.
-        app.add_mapped_client_event::<AttackAttempt>(Channel::Ordered);
-        app.add_mapped_client_event::<KillAttempt>(Channel::Ordered);
+        app.component::<LevelRoot>().replicate();
+        app.component::<Transform>().replicate();
+        app.component::<PlayerCharacter>().replicate();
+        app.component::<Character>().replicate();
+        app.component::<CharacterController>().replicate();
+        app.component::<Name>().replicate();
+        app.component::<HitPoints>().replicate();
+        app.component::<Gcd>().replicate();
+        app.component::<GroundDetection>().replicate();
+        app.component::<Grounded>().replicate();
+        app.component::<Collider>().replicate();
+        app.component::<CollisionLayers>().replicate();
+        app.component::<DesiredMotion>().replicate();
+        app.component::<RigidBody>().replicate();
+        app.component::<LinearVelocity>().replicate();
+        app.component::<AngularVelocity>().replicate();
+        app.component::<Selectable>().replicate();
+        app.component::<Npc>().replicate();
+        app.component::<Idle>().replicate();
+        app.component::<Character>().replicate();
+        app.component::<LockedAxes>().replicate();
+        app.component::<LockedAxes>().replicate();
+        app.component::<Cube>().replicate();
+        app.component::<Dead>().replicate();
 
-        app.add_client_event::<SpawnCubeRequest>(Channel::Ordered);
-        app.add_client_event::<SpawnNpcRequest>(Channel::Ordered);
-        app.add_client_event::<LoadLevelRequest>(Channel::Ordered);
-        app.add_client_event::<Movement>(Channel::Ordered);
-        app.add_client_event::<Jump>(Channel::Ordered);
+        app.register_message::<AttackAttempt>()
+            .add_direction(NetworkDirection::ClientToServer)
+            .add_map_entities();
+        app.register_message::<KillAttempt>()
+            .add_direction(NetworkDirection::ClientToServer)
+            .add_map_entities();
 
-        app.add_mapped_server_event::<Attack>(Channel::Ordered);
-        app.add_mapped_server_event::<Kill>(Channel::Ordered);
-        app.add_mapped_server_event::<CubeSpawned>(Channel::Ordered);
-        app.add_mapped_server_event::<NpcSpawned>(Channel::Ordered);
-        app.add_mapped_server_event::<PlayerSpawned>(Channel::Ordered);
-        app.add_mapped_server_event::<EntityDied>(Channel::Ordered);
+        app.register_message::<SpawnCubeRequest>()
+            .add_direction(NetworkDirection::ClientToServer);
+        app.register_message::<SpawnNpcRequest>()
+            .add_direction(NetworkDirection::ClientToServer);
 
-        app.add_server_event::<UnloadLevel>(Channel::Ordered);
-        app.add_server_event::<LoadLevel>(Channel::Ordered);
+        app.register_message::<Movement>()
+            .add_direction(NetworkDirection::ClientToServer);
+        app.register_message::<Jump>()
+            .add_direction(NetworkDirection::ClientToServer);
+
+        app.register_message::<LoadLevelRequest>()
+            .add_direction(NetworkDirection::ClientToServer);
+
+        app.register_message::<Attack>()
+            .add_direction(NetworkDirection::ServerToClient)
+            .add_map_entities();
+        app.register_message::<Kill>()
+            .add_direction(NetworkDirection::ServerToClient)
+            .add_map_entities();
+        app.register_message::<EntityDied>()
+            .add_direction(NetworkDirection::ServerToClient)
+            .add_map_entities();
+
+        app.register_message::<UnloadLevel>()
+            .add_direction(NetworkDirection::ServerToClient);
+        app.register_message::<LoadLevel>()
+            .add_direction(NetworkDirection::ServerToClient);
+        app.register_message::<ServerInGame>()
+            .add_direction(NetworkDirection::ServerToClient);
     }
 }

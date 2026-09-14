@@ -1,5 +1,6 @@
 use bevy::prelude::*;
-use bevy_replicon::prelude::ClientTriggerExt;
+use lightyear::prelude::*;
+use shared::replication::OrderedReliable;
 use shared::{client_events::LoadLevelRequest, game_state::GameState};
 
 use crate::{assets::collections::CommonAssets, events::Play, ui::lobby::lobby_ui};
@@ -16,10 +17,10 @@ impl Plugin for LobbyPlugin {
     }
 }
 
-pub fn on_play(_: On<Play>, mut commands: Commands) {
+pub fn on_play(_: On<Play>, mut sender: Single<&mut MessageSender<LoadLevelRequest>>) {
     info!("play event received");
     let id = "collections/Level.assets.ron".to_string();
-    commands.client_trigger(LoadLevelRequest { id });
+    sender.send::<OrderedReliable>(LoadLevelRequest { id });
 }
 
 /// A real system (not the usual `some_scene.spawn()` adapter, which only works for a zero-arg

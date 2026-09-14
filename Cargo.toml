@@ -43,21 +43,11 @@ bevy_common_assets = { version = "0.17.0", default-features = false, features = 
 	"ron",
 ] }
 bevy_hanabi = "0.19.0"
-bevy_replicon = "0.41.1"
-# `recv_channels` (a default feature) adds an alternate auto-dispatch receive path that
-# `bevy_replicon_quinnet` doesn't use (it dequeues messages itself) — left off since nothing
-# else in this workspace needs it either.
-bevy_quinnet = { version = "0.21.0", default-features = false, features = [
-	"client",
-	"server",
-	"shared-client-id",
-] }
 serde = { version = "1.0.228", features = ["derive"] }
 
 polyanya = { path = "../polyanya" }
 rerecast = { path = "../rerecast/crates/rerecast" }
 bevy_mod_outline = { path = "../bevy_mod_outline" }
-bevy_replicon_quinnet = "0.20"
 bevy_vello = { path = "../bevy_vello" }
 bevy_seedling = { path = "../bevy_seedling", features = ["mp3"] }
 audionimbus = { path = "../audionimbus/audionimbus", features = [
@@ -66,6 +56,17 @@ audionimbus = { path = "../audionimbus/audionimbus", features = [
 ] }
 chill_bevy_console = "0.3.1"
 quick-xml = "0.42.0"
+# For hand-rolled `AssetLoader` impls that need `ron` directly (e.g. `CharacterAssetLoader`,
+# parsing to an intermediate string-path struct before resolving each field via
+# `LoadContext::load`) rather than going through `RonAssetPlugin`/`bevy_common_assets`. Pinned to
+# 0.12.1 specifically to reuse the version `bevy_asset`/`bevy_world_serialization` themselves
+# already resolve to (see `Cargo.lock`), not the older 0.11.0 `bevy_common_assets` pins for its
+# *own*, unrelated internal use — either avoids a third `ron` version entering the graph, but 0.12.1
+# piggybacks on a dependency edge that's already there for reasons unrelated to `bevy_common_assets`.
+ron = "0.12.1"
+
+lightyear = { version = "0.30.0", features = ["avian3d", "udp", "netcode"] }
+lightyear_avian3d = "0.30.0"
 
 # `gltf` (transitive, via `bevy`/`bevy_gltf`) is patched to a vendored fork with
 # https://github.com/gltf-rs/gltf/pull/467 applied, adding support for `KHR_texture_basisu`

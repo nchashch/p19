@@ -14,7 +14,8 @@ pub const ATTACK_RANGE: f32 = 10.0;
 
 /// Global cooldown shared by every ability (`Attack`, `Kill`, ...) — using any one of them starts
 /// it, and none of them can fire again until it finishes.
-#[derive(Component, Serialize, Deserialize)]
+#[derive(Component, Serialize, Deserialize, Reflect)]
+#[reflect(Component)]
 pub struct Gcd(pub Timer);
 
 pub const GCD_DURATION: f32 = 0.5;

@@ -61,7 +61,10 @@ pub fn player(player_name: String, position: Vec3) -> impl Bundle {
         CharacterCollisions::default(),
         GroundDetection {
             // Use a slightly smaller capsule for shape casts used for ground detection
-            cast_shape: Some(Collider::capsule(0.399, 1.0)),
+            cast_shape: Some(ColliderConstructor::Capsule {
+                height: 1.0,
+                radius: 0.399,
+            }),
             ..default()
         },
         Collider::capsule(0.4, 1.0),

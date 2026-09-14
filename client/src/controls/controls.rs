@@ -7,13 +7,15 @@ use crate::ui::hud::DataFrameVisible;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions};
 use bevy_enhanced_input::prelude::{Press, *};
-use bevy_replicon::prelude::ClientTriggerExt;
 use chill_bevy_console::console_closed;
 use shared::client_events::{AttackAttempt, KillAttempt};
 use shared::game_state::{GameState, ModalMenuState};
 use shared::player::Selectable;
+use shared::replication::OrderedReliable;
 use shared::server_events::UnloadLevel;
 use std::f32::consts::PI;
+
+use lightyear::prelude::*;
 
 pub struct PlayerControlsPlugin;
 
@@ -125,7 +127,7 @@ fn toggle_data_frame(
 fn on_movement(
     movement_event: On<Fire<Movement>>,
     fps_camera: Query<&FpsCamera>,
-    mut commands: Commands,
+    mut sender: Single<&mut MessageSender<shared::client_events::Movement>>,
 ) {
     let Ok(fps_camera) = fps_camera.single() else {
         return;
@@ -133,28 +135,24 @@ fn on_movement(
     let rotation = Rot2::radians(fps_camera.yaw);
     let rotated = rotation * movement_event.value;
 
-    commands.client_trigger(shared::client_events::Movement {
-        direction: Vec3::new(-rotated.x, 0.0, rotated.y),
-    });
-    commands.trigger(shared::client_events::Movement {
+    sender.send::<OrderedReliable>(shared::client_events::Movement {
         direction: Vec3::new(-rotated.x, 0.0, rotated.y),
     });
 }
 
-fn on_movement_stop(_: On<Complete<Movement>>, mut commands: Commands) {
-    commands.client_trigger(shared::client_events::Movement {
-        direction: Vec3::ZERO,
-    });
-    commands.trigger(shared::client_events::Movement {
+fn on_movement_stop(
+    _: On<Complete<Movement>>,
+    mut sender: Single<&mut MessageSender<shared::client_events::Movement>>,
+) {
+    sender.send::<OrderedReliable>(shared::client_events::Movement {
         direction: Vec3::ZERO,
     });
 }
 
 /// Translates the `bevy_enhanced_input` jump action into the input-library-agnostic
 /// `shared::character_controller::JumpInput` the controller actually runs on.
-fn on_jump(_: On<Fire<Jump>>, mut commands: Commands) {
-    commands.client_trigger(shared::client_events::Jump);
-    commands.trigger(shared::client_events::Jump);
+fn on_jump(_: On<Fire<Jump>>, mut sender: Single<&mut MessageSender<shared::client_events::Jump>>) {
+    sender.send::<OrderedReliable>(shared::client_events::Jump);
 }
 
 /// Marks the right-stick's `FpsCameraRotation` action entity (as opposed to the mouse-motion
@@ -209,18 +207,26 @@ fn deselect(_event: On<Fire<Deselect>>, mut selected: ResMut<Selected>) {
     selected.0 = None;
 }
 
-fn attack(_: On<Start<AttackAction>>, selected: Res<Selected>, mut commands: Commands) {
+fn attack(
+    _: On<Start<AttackAction>>,
+    selected: Res<Selected>,
+    mut sender: Single<&mut MessageSender<AttackAttempt>>,
+) {
     let Some(entity) = selected.0 else {
         return;
     };
-    commands.client_trigger(AttackAttempt { entity });
+    sender.send::<OrderedReliable>(AttackAttempt { entity });
 }
 
-fn kill(_: On<Start<KillAction>>, selected: Res<Selected>, mut commands: Commands) {
+fn kill(
+    _: On<Start<KillAction>>,
+    selected: Res<Selected>,
+    mut sender: Single<&mut MessageSender<KillAttempt>>,
+) {
     let Some(entity) = selected.0 else {
         return;
     };
-    commands.client_trigger(KillAttempt { entity });
+    sender.send::<OrderedReliable>(KillAttempt { entity });
 }
 
 pub fn player_controls() -> impl Bundle {

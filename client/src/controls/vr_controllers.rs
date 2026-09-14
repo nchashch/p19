@@ -3,7 +3,6 @@ use bevy::color::palettes::css::{AQUA, WHITE, YELLOW};
 use bevy::prelude::*;
 use bevy_mod_openxr::openxr_session_running;
 use bevy_mod_xr::session::XrTrackingRoot;
-use bevy_replicon::prelude::ClientTriggerExt;
 use bevy_xr_utils::actions::{
     ActionType, ActiveSet, XRUtilsAction, XRUtilsActionSet, XRUtilsActionState,
     XRUtilsActionSystems, XRUtilsBinding,
@@ -11,8 +10,9 @@ use bevy_xr_utils::actions::{
 use bevy_xr_utils::tracking_utils::{
     TrackingUtilitiesPlugin, XrTrackedLeftGrip, XrTrackedRightGrip, XrTrackedView,
 };
-use shared::player::Selectable;
-use shared::server_events::PlayerSpawned;
+use lightyear::prelude::*;
+use shared::player::{PlayerCharacter, Selectable};
+use shared::replication::OrderedReliable;
 
 use crate::controls::targeting::{Hovered, SELECT_RANGE, Selected};
 use crate::gameplay::player_character::LocalPlayer;
@@ -44,7 +44,6 @@ impl Plugin for VrControllersPlugin {
             TrackingUtilitiesPlugin,
             bevy_xr_utils::actions::XRUtilsActionsPlugin,
         ))
-        .add_observer(on_player_spawned)
         .add_systems(Startup, (spawn_controller_cubes, spawn_head_tracker))
         .add_systems(
             Startup,
@@ -57,6 +56,7 @@ impl Plugin for VrControllersPlugin {
         .add_systems(
             Update,
             (
+                on_player_spawned,
                 vr_locomotion
                     .run_if(openxr_session_running)
                     .run_if(chill_bevy_console::console_closed),
@@ -105,20 +105,35 @@ pub(crate) struct LeftTriggerAction;
 #[derive(Component)]
 pub(crate) struct RightTriggerAction;
 
+/// A plain polling `Update` system, not an `On<Add, Controlled>` observer — mirrors
+/// `player_character.rs`'s `on_player_spawned` (see its doc comment) and `combat.rs`'s
+/// `hide_dead`: a client that joins after the level/player characters already exist gets them via
+/// replication's initial full-state sync, which doesn't reliably fire per-component `Add`
+/// observers.
 fn on_player_spawned(
-    spawned: On<PlayerSpawned>,
-    xr_root: Single<Entity, With<XrTrackingRoot>>,
+    spawned: Query<Entity, (With<PlayerCharacter>, Added<Controlled>)>,
+    xr_root: Query<Entity, With<XrTrackingRoot>>,
     mut commands: Commands,
 ) {
-    let rig = commands
-        .spawn((
-            VrPlayspaceRig { yaw: 0.0 },
-            Transform::from_xyz(0.0, RIG_FLOOR_OFFSET, 0.0),
-            Visibility::default(),
-            ChildOf(spawned.entity),
-        ))
-        .id();
-    commands.entity(*xr_root).insert(ChildOf(rig));
+    // `Query::single` instead of a `Single<_>` param — this now runs unconditionally every
+    // `Update` (see the doc comment above), starting from app startup, and `XrTrackingRoot` isn't
+    // guaranteed to exist that early even under a real XR session (see `main.rs`'s own note on
+    // `VrControllersPlugin` about this exact entity). A `Single<_>` would fail param validation
+    // and panic the whole app in that window instead of just skipping the frame.
+    let Ok(xr_root) = xr_root.single() else {
+        return;
+    };
+    for entity in spawned {
+        let rig = commands
+            .spawn((
+                VrPlayspaceRig { yaw: 0.0 },
+                Transform::from_xyz(0.0, RIG_FLOOR_OFFSET, 0.0),
+                Visibility::default(),
+                ChildOf(entity),
+            ))
+            .id();
+        commands.entity(xr_root).insert(ChildOf(rig));
+    }
 }
 
 /// Marks the laser child spawned under `XrTrackedLeftGrip`/`XrTrackedRightGrip` — see
@@ -414,7 +429,7 @@ fn vr_locomotion(
     right_stick: Single<&XRUtilsActionState, With<RightStickAction>>,
     head: Single<&Transform, With<XrTrackedView>>,
     rig: Single<(&mut Transform, &mut VrPlayspaceRig), Without<XrTrackedView>>,
-    mut commands: Commands,
+    mut sender: Single<&mut MessageSender<shared::client_events::Movement>>,
     mut last_sent_direction: Local<Option<Vec3>>,
     mut snap_turn_active: Local<bool>,
 ) {
@@ -429,7 +444,7 @@ fn vr_locomotion(
         let rotated = Rot2::radians(rig.yaw) * stick;
         let direction = Vec3::new(-rotated.x, 0.0, rotated.y);
         if *last_sent_direction != Some(direction) {
-            commands.client_trigger(shared::client_events::Movement { direction });
+            sender.send::<OrderedReliable>(shared::client_events::Movement { direction });
             *last_sent_direction = Some(direction);
         }
     }

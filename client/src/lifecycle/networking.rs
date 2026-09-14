@@ -1,15 +1,11 @@
-//! Opens the QUIC (`bevy_quinnet`) connection to the authoritative server and logs replication
-//! state — a scaffold, not yet wired into any real gameplay presentation.
+//! Opens the UDP/netcode connection to the authoritative server (replacing the old
+//! QUIC/`bevy_quinnet` endpoint) and drives the post-connect state transition.
 
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use bevy::prelude::*;
-use bevy_quinnet::client::{
-    ClientConnectionConfiguration, ClientConnectionConfigurationDefaultables, QuinnetClient,
-    certificate::CertificateVerificationMode, connection::ClientAddrConfiguration,
-};
-use bevy_replicon::prelude::*;
-use bevy_replicon_quinnet::ChannelsConfigurationExt;
+use lightyear::prelude::*;
 use shared::game_state::GameState;
 
 use crate::config::load_client_config;
@@ -17,14 +13,20 @@ use crate::events::{Connect, Disconnect};
 
 const SERVER_PORT: u16 = 6000;
 
+/// Must match the server's `PROTOCOL_ID`/`PRIVATE_KEY` (`server::networking`) exactly — both
+/// sides need to agree on these bytes for a connect token to validate. See that module's doc
+/// comment for why this is hardcoded rather than generated per-run.
+const PROTOCOL_ID: u64 = 0;
+const PRIVATE_KEY: [u8; 32] = [0; 32];
+
 pub struct NetworkingPlugin;
 
 impl Plugin for NetworkingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ServerAddress>();
-        app.add_systems(Startup, load_client_config);
-        app.add_systems(OnEnter(ClientState::Connected), on_connected)
-            .add_systems(OnEnter(ClientState::Disconnected), on_disconnected);
+        app.add_systems(Startup, (load_client_config, spawn_client_link));
+        app.add_observer(on_connected);
+        app.add_observer(on_disconnected);
         app.add_observer(on_connect_request);
         app.add_observer(on_disconnect_request);
     }
@@ -49,62 +51,96 @@ impl Default for ServerAddress {
     }
 }
 
-/// Opens the connection to `addr`, unless one is already open or opening — safe to call every
-/// time `Play` is pressed, including a second press before the first connection attempt has
-/// resolved. Skips certificate verification since the server generates a self-signed cert — fine
-/// for this dev scaffold, not for a real deployment.
-pub fn on_connect_request(
+/// The client's own connection/link entity, spawned once at `Startup` and reused across every
+/// connect attempt (including a reconnect after returning to the main menu) — every other system
+/// that needs "my own connection" (e.g. `controls.rs`'s `Single<&mut MessageSender<T>>` queries)
+/// relies on there being exactly one such entity for the app's whole lifetime, so this must not be
+/// a fresh entity per connect. `on_connect_request` is what actually inserts `NetcodeClient`/
+/// `UdpIo`/etc. onto it and triggers `Connect`.
+#[derive(Resource)]
+struct ClientLink(Entity);
+
+fn spawn_client_link(mut commands: Commands) {
+    let entity = commands.spawn_empty().id();
+    commands.insert_resource(ClientLink(entity));
+}
+
+/// Opens the connection to `ServerAddress`, unless one is already open or opening — safe to call
+/// every time `Play` is pressed, including a second press before the first connection attempt has
+/// resolved. Uses a dummy all-zero netcode key, same as the server's `PRIVATE_KEY` — fine for this
+/// dev/LAN scaffold, not for a real deployment (see `server::networking`'s doc comment).
+fn on_connect_request(
     _: On<Connect>,
-    channels: Res<RepliconChannels>,
+    link: Res<ClientLink>,
     server_address: Res<ServerAddress>,
-    mut client: ResMut<QuinnetClient>,
-) {
+    status: Query<(Has<lightyear::prelude::Connected>, Has<lightyear::prelude::Connecting>)>,
+    mut commands: Commands,
+) -> Result {
     info!("on_connect_request");
-    if client.is_connected() || client.is_connecting() {
-        return;
+    if let Ok((connected, connecting)) = status.get(link.0)
+        && (connected || connecting)
+    {
+        return Ok(());
     }
     let Ok(addr) = server_address.0.trim().parse::<IpAddr>() else {
         warn!(
-            "on_level_assets_loaded: {:?} is not a valid IP address",
+            "on_connect_request: {:?} is not a valid IP address",
             server_address.0
         );
-        return;
+        return Ok(());
     };
-    client
-        .open_connection(ClientConnectionConfiguration {
-            addr_config: ClientAddrConfiguration::from_ips(
-                addr,
-                SERVER_PORT,
-                IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-                0,
-            ),
-            cert_mode: CertificateVerificationMode::SkipVerification,
-            defaultables: ClientConnectionConfigurationDefaultables {
-                send_channels_cfg: channels.client_configs(),
-            },
-        })
-        .expect("client connection should open");
+    let server_addr = SocketAddr::new(addr, SERVER_PORT);
+    // Only needs to be unique per running client instance, not cryptographically random — this is
+    // a dev/LAN scaffold (see `PROTOCOL_ID`/`PRIVATE_KEY` above), not a real deployment.
+    let client_id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos() as u64)
+        .unwrap_or_default();
+    let netcode_client = client::NetcodeClient::new(
+        Authentication::Manual {
+            server_addr,
+            client_id,
+            private_key: PRIVATE_KEY,
+            protocol_id: PROTOCOL_ID,
+        },
+        client::NetcodeConfig {
+            client_timeout_secs: 3,
+            token_expire_secs: -1,
+            ..default()
+        },
+    )?;
+    commands.entity(link.0).insert((
+        lightyear::prelude::Client,
+        ReplicationReceiver,
+        LocalAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)),
+        PeerAddr(server_addr),
+        netcode_client,
+        UdpIo::default(),
+    ));
+    commands.trigger(lightyear::prelude::Connect { entity: link.0 });
+    Ok(())
 }
 
-pub fn on_disconnect_request(_: On<Disconnect>, mut client: ResMut<QuinnetClient>) {
-    client.close_all_connections();
+fn on_disconnect_request(_: On<Disconnect>, link: Res<ClientLink>, mut commands: Commands) {
+    commands.trigger(lightyear::prelude::Disconnect { entity: link.0 });
 }
 
-fn on_connected(mut commands: Commands) {
+fn on_connected(_: On<Add, lightyear::prelude::Connected>, mut commands: Commands) {
     info!("connected to server");
     commands.set_state(GameState::Lobby);
 }
 
-/// `ClientState::Disconnected` is `#[default]` (confirmed against `bevy_replicon`'s source), so
-/// this fires once on the very first frame too — before the client has ever tried to connect to
-/// anything, and before `GameState::AssetLoading`'s `LoadingState` has had any chance to finish.
-/// Without this guard, that spurious startup firing force-transitioned `GameState` straight to
-/// `MainMenu`, bypassing `LoadingState::continue_to_state(GameState::MainMenu)` entirely and
-/// panicking every `OnEnter(GameState::MainMenu)` system that needs `Res<CommonAssets>` (it
-/// doesn't exist yet). A real disconnect can only happen after `AssetLoading` has already
-/// finished — the client can't attempt a connection before reaching `MainMenu` — so gating on
-/// that is precise, not just a startup-only special case.
-fn on_disconnected(mut commands: Commands, game_state: Res<State<GameState>>) {
+/// `Disconnected` is a required component of `NetcodeClient`, so this also fires once the very
+/// first time `on_connect_request` inserts `NetcodeClient` (before the connection has actually
+/// succeeded or failed) — mirrors the old `bevy_replicon`-era `ClientState::Disconnected` being
+/// `#[default]` and firing on the very first frame. Harmless: at that point `GameState` is already
+/// `MainMenu` (that's the only place `Connect` is ever triggered from), so `set_state` below is a
+/// redundant no-op, not a wrong transition.
+fn on_disconnected(
+    _: On<Add, lightyear::prelude::Disconnected>,
+    mut commands: Commands,
+    game_state: Res<State<GameState>>,
+) {
     info!("disconnected from server");
     if !matches!(game_state.get(), GameState::AssetLoading) {
         commands.set_state(GameState::MainMenu);

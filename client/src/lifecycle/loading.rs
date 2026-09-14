@@ -1,4 +1,3 @@
-use crate::assets::collections::LevelAssets;
 use crate::events::RespawnPlayer;
 use bevy::asset::AssetPath;
 use bevy::prelude::*;
@@ -6,7 +5,6 @@ use bevy::world_serialization::WorldInstanceReady;
 use bevy_asset_loader::prelude::{DynamicAssetCollections, StandardDynamicAssetCollection};
 use bevy_hanabi::ParticleEffect;
 use bevy_mod_xr::session::XrTrackingRoot;
-use bevy_quinnet::client::QuinnetClient;
 use bevy_seedling::sample::SamplePlayer;
 use shared::game_state::GameState;
 use shared::level::LevelRoot;
@@ -21,10 +19,6 @@ impl Plugin for LoadingPlugin {
             crate::ui::hud::spawn_in_game_scene,
         );
         app.add_systems(OnEnter(GameState::InGame), initial_respawn);
-        app.add_systems(
-            Update,
-            on_level_assets_loaded.run_if(resource_exists_and_changed::<LevelAssets>),
-        );
         app.add_observer(unload_level);
         app.add_observer(load_level);
     }
@@ -84,7 +78,6 @@ fn load_level(
 fn unload_level(
     event: On<UnloadLevel>,
     mut commands: Commands,
-    mut client: ResMut<QuinnetClient>,
     particle_effects: Query<Entity, With<ParticleEffect>>,
     sample_players: Query<Entity, With<SamplePlayer>>,
     xr_root: Query<Entity, With<XrTrackingRoot>>,
@@ -109,7 +102,7 @@ fn unload_level(
     for xr_root in &xr_root {
         commands.entity(xr_root).remove::<ChildOf>();
     }
-    client.close_all_connections();
+    commands.trigger(crate::events::Disconnect);
     commands.set_state(event.next_state.clone());
 }
 

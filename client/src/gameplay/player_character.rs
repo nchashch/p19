@@ -6,10 +6,11 @@ use crate::{
     gameplay::combat::CombatPlugin,
 };
 use bevy::prelude::*;
+use lightyear::prelude::Controlled;
+use shared::cube_spawner::CubeSpawner;
 use shared::game_state::GameState;
 use shared::npc_spawner::NpcSpawner;
 use shared::player::PlayerCharacter;
-use shared::{cube_spawner::CubeSpawner, server_events::PlayerSpawned};
 
 pub struct PlayerCharacterPlugin;
 
@@ -17,8 +18,7 @@ impl Plugin for PlayerCharacterPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((CombatPlugin, PlayerControlsPlugin, PlayerCameraPlugin));
 
-        app.add_observer(on_player_spawned);
-        app.add_systems(Update, decorate_other_players);
+        app.add_systems(Update, (on_player_spawned, decorate_other_players));
     }
 }
 
@@ -59,39 +59,57 @@ pub fn decorate_other_players(
     }
 }
 
-/// The player's own `PlayerCharacter` entity, as told to us by the server via `PlayerSpawned` —
-/// not derived by querying `With<PlayerCharacter>`, since once other players are connected there
-/// can be several such entities replicated in and nothing about them locally distinguishes
-/// "mine" from "someone else's."
+/// The player's own `PlayerCharacter` entity, identified via `lightyear::prelude::Controlled` —
+/// the client automatically gets this marker on its local copy of whichever entity the server
+/// tagged `ControlledBy { owner: <that client's connection entity> }` (see
+/// `server::networking::spawn_player_for_client`). Not derived by querying `With<PlayerCharacter>`
+/// alone, since once other players are connected there can be several such entities replicated in
+/// and nothing about them locally distinguishes "mine" from "someone else's" beyond `Controlled`.
 #[derive(Resource, Deref, Clone, Copy)]
 pub struct LocalPlayer(pub Option<Entity>);
 
-pub fn on_player_spawned(
-    spawned: On<PlayerSpawned>,
+/// A plain polling `Update` system, not an `On<Add, Controlled>` observer — mirrors
+/// `combat.rs`'s `hide_dead` for the same reason (see its doc comment): a client that joins after
+/// the level/player characters already exist gets them via replication's initial full-state sync,
+/// which doesn't reliably fire per-component `Add` observers the way a live single-component
+/// insert during an ongoing session does. `Added<Controlled>` (a query filter, backed by the
+/// component's own change-detection tick) doesn't have that problem.
+///
+/// `common_assets` is `Option<Res<_>>`, not a bare `Res<_>`, for the same reason
+/// `decorate_other_players` right below needs it: with no `Single`/state gate of its own, this
+/// now starts running from app startup — before `GameState::AssetLoading` finishes and inserts
+/// `CommonAssets` — same as that system's own doc comment already explains.
+fn on_player_spawned(
+    spawned: Query<Entity, (With<PlayerCharacter>, Added<Controlled>)>,
     mut commands: Commands,
-    common_assets: Res<CommonAssets>,
+    common_assets: Option<Res<CommonAssets>>,
 ) {
-    commands.insert_resource(LocalPlayer(Some(spawned.entity)));
-    commands
-        .entity(spawned.entity)
-        .insert(DespawnOnExit(GameState::InGame))
-        .with_children(|parent| {
-            parent.spawn(controls::player_controls());
-            parent
-                // `Visibility::default()` on these two plain transform-anchor entities matters
-                // for the same reason `PlayerCharacter`'s `#[require(Visibility)]` does (see
-                // `shared::player`) — without it, the chain from `Player` down to the camera
-                // (which does have `Visibility`, via `Camera3d`) breaks here instead, producing
-                // the same `bevy_app::hierarchy` B0004 warning one link further down.
-                .spawn((Transform::from_xyz(0., 0.5, 0.), Visibility::default()))
-                .with_children(|parent| {
-                    parent
-                        .spawn((FpsCamera::new(), Transform::IDENTITY, Visibility::default()))
-                        .with_children(|parent| {
-                            parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), CubeSpawner));
-                            parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), NpcSpawner));
-                            parent.spawn(player_camera(&common_assets));
-                        });
-                });
-        });
+    let Some(common_assets) = common_assets else {
+        return;
+    };
+    for entity in spawned {
+        commands.insert_resource(LocalPlayer(Some(entity)));
+        commands
+            .entity(entity)
+            .insert(DespawnOnExit(GameState::InGame))
+            .with_children(|parent| {
+                parent.spawn(controls::player_controls());
+                parent
+                    // `Visibility::default()` on these two plain transform-anchor entities matters
+                    // for the same reason `PlayerCharacter`'s `#[require(Visibility)]` does (see
+                    // `shared::player`) — without it, the chain from `Player` down to the camera
+                    // (which does have `Visibility`, via `Camera3d`) breaks here instead, producing
+                    // the same `bevy_app::hierarchy` B0004 warning one link further down.
+                    .spawn((Transform::from_xyz(0., 0.5, 0.), Visibility::default()))
+                    .with_children(|parent| {
+                        parent
+                            .spawn((FpsCamera::new(), Transform::IDENTITY, Visibility::default()))
+                            .with_children(|parent| {
+                                parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), CubeSpawner));
+                                parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), NpcSpawner));
+                                parent.spawn(player_camera(&common_assets));
+                            });
+                    });
+            });
+    }
 }

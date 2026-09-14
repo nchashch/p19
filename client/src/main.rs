@@ -1,17 +1,18 @@
 use avian3d::prelude::*;
-use bevy::ecs::schedule::{LogLevel, ScheduleBuildSettings};
 use bevy::feathers::{dark_theme::create_dark_theme, theme::UiTheme};
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy_asset_loader::prelude::*;
 use bevy_common_assets::ron::RonAssetPlugin;
-use bevy_replicon::prelude::*;
-use bevy_replicon_quinnet::RepliconQuinnetPlugins;
 use bevy_seedling::prelude::*;
 use bevy_skein::SkeinPlugin;
+use lightyear::prelude::*;
+use lightyear_avian3d::plugin::{AvianReplicationMode, LightyearAvianPlugin};
 use shared::replication::SharedReplicationPlugin;
+use std::time::Duration;
 
 use controls::fps_controller::FpsControllerPlugin;
+use controls::input_device::InputDevicePlugin;
 use dev::console::PConsolePlugin;
 use gameplay::cube_spawner::CubeSpawnerPlugin;
 use gameplay::player_character::PlayerCharacterPlugin;
@@ -91,48 +92,57 @@ impl Plugin for Prototype19 {
             // ambiguity with other RON-based asset types as long as every call site stays
             // explicitly typed (`AssetServer::load::<T>(path)`, never `load_untyped`). A
             // distinctive extension per type sidesteps that structurally instead of relying on it.
-            RonAssetPlugin::<assets::level::Level>::new(&["level.ron"]),
+            // Grouped into a nested tuple purely to stay under Bevy's top-level `add_plugins`
+            // tuple-arity limit — `RonAssetPlugin<Controller>` pushed the outer tuple past it.
+            // No relationship between the two beyond that; nest further plugins here too rather
+            // than growing the outer tuple again.
+            (
+                RonAssetPlugin::<assets::level::Level>::new(&["level.ron"]),
+                // Same distinctive-extension reasoning as `Level` above — `assets::controller::Controller`
+                // (e.g. `assets/controllers/player.controller.ron`) is a plain data asset, loaded
+                // independent of `bevy_asset_loader`'s dynamic-asset manifests.
+                RonAssetPlugin::<assets::controller::Controller>::new(&["controller.ron"]),
+            ),
             SkeinPlugin::default(),
-            // The server is authoritative for physics — the client only needs colliders and
-            // spatial queries (`SpatialQuery` raycasts/shapecasts, e.g. `targeting.rs`'s hover
-            // raycast and `character_controller.rs`'s grounding shape-casts), not to actually
-            // simulate anything itself. Disabling just the solver-related plugins (as opposed to
-            // e.g. `Time::<Physics>::pause()`, which would also stop broad/narrow-phase from
-            // running and leave spatial queries stale against moving colliders) keeps collision
-            // detection and `Position`/`Rotation` <-> `Transform` sync running every frame, while
-            // nothing is left to apply forces or resolve contacts locally. One visible
-            // consequence: `RigidBody::Dynamic` cubes/NPCs no longer predict their own motion
-            // between replication ticks — they only move when a new server `Transform` arrives —
-            // unlike `PlayerCharacter` movement, which stays smooth since it's driven directly by
-            // `character_controller.rs`'s kinematic move-and-slide, not the solver.
+            // Full Avian simulation runs client-side now, same as the server — the client is no
+            // longer just holding colliders for spatial queries while waiting on replicated
+            // `Transform`s. The server remains authoritative (`LightyearAvianPlugin` below
+            // reconciles local simulation against the replicated `Position`/`Rotation` it
+            // receives), but `RigidBody::Dynamic` cubes/NPCs now predict their own motion locally
+            // between replication ticks instead of only moving when a new server `Transform`
+            // arrives, and `PlayerCharacter` movement is unaffected either way since it's driven
+            // directly by `character_controller.rs`'s kinematic move-and-slide, not the solver.
             //
-            // Deliberately *not* also disabling `SolverBodyPlugin`/`IslandPlugin`/
-            // `IslandSleepingPlugin`, despite the "solver" naming — confirmed by testing, not
-            // theory: disabling `SolverBodyPlugin` crashed `update_moved_collider_aabbs` with an
-            // index-out-of-bounds panic, because the collider tree that spatial queries depend on
-            // indexes into a `SolverBody`-tracked slot for every awake dynamic/kinematic body —
-            // it's shared per-body bookkeeping the broad-phase relies on, not solving itself.
-            // `IntegratorPlugin`/`SolverPlugin`/`CcdPlugin` are the actual force/contact/sweep
-            // resolution steps, and disabling only those was enough to stop local motion
-            // prediction without touching that bookkeeping. Also not disabling
-            // `JointPlugin`/`JointGraphPlugin<_>` — nothing in this project ever spawns a joint,
-            // so those stay registered but inert (no joint entities for them to act on) rather
-            // than needing their own disable calls.
+            // `PhysicsTransformPlugin`/`PhysicsInterpolationPlugin` are disabled because
+            // `LightyearAvianPlugin` takes over `Position`/`Rotation` <-> `Transform`
+            // synchronization and frame interpolation itself — running both at once is exactly
+            // the footgun `lightyear_avian3d`'s own docs warn against (see its module doc
+            // comment), not something specific to this project. Mirrors `server/src/main.rs`'s
+            // identical `PhysicsPlugins` setup.
             PhysicsPlugins::default()
                 .build()
-                .disable::<IntegratorPlugin>()
-                .disable::<SolverPlugin>()
-                .disable::<CcdPlugin>()
-                // `XpbdSolverPlugin` (from the `xpbd_joints` feature, on by default) has its own
-                // joint-motor warm-start systems that unconditionally read the `SolverConfig`
-                // resource `SolverPlugin` normally provides — confirmed by testing: without also
-                // disabling this, startup panicked with "Resource does not exist: SolverConfig"
-                // even with zero joints ever spawned. Safe to disable outright for the same reason
-                // `JointPlugin`/`JointGraphPlugin<_>` are left inert rather than needing their own
-                // exception: nothing in this project ever spawns a joint.
-                .disable::<XpbdSolverPlugin>(),
-            RepliconPlugins,
-            RepliconQuinnetPlugins,
+                .disable::<PhysicsTransformPlugin>()
+                .disable::<PhysicsInterpolationPlugin>(),
+            // `PredictionPlugin` is on by default but unconditionally assumes one of lightyear's
+            // own input plugins (`lightyear_inputs_native`/`_bei`/`_leafwing`, none of which this
+            // project uses — `Movement`/`Jump` are sent as plain `MessageSender` messages, not
+            // through lightyear's input-replication system) has already initialized
+            // `LastConfirmedInput`. Without that, `reset_input_rollback_tracker` panics
+            // ("Resource does not exist: LastConfirmedInput") the moment a connection starts.
+            // Disabling it outright matches this project's deliberate "no client-side prediction
+            // yet" design (see CLAUDE.md's top-of-file gap note) rather than wiring up an input
+            // protocol this project doesn't otherwise need.
+            client::ClientPlugins {
+                tick_duration: Duration::from_secs_f32(1.0 / 60.0),
+            }
+            .build()
+            .disable::<lightyear::prediction::plugin::PredictionPlugin>(),
+            LightyearAvianPlugin {
+                replication_mode: AvianReplicationMode::Position {
+                    sync_to_transform: false,
+                }, // default
+                ..default()
+            },
             SharedReplicationPlugin,
             (
                 CubeSpawnerPlugin,
@@ -141,6 +151,7 @@ impl Plugin for Prototype19 {
                 PlayerCharacterPlugin,
                 FpsControllerPlugin,
                 GameStatePlugin { vr_enabled },
+                InputDevicePlugin,
                 NameplatePlugin,
                 ui::ui::PrototypeUiPlugin,
                 lifecycle::networking::NetworkingPlugin,
@@ -149,35 +160,6 @@ impl Plugin for Prototype19 {
                 InputIconsPlugin,
             ),
         ));
-
-        // `PhysicsSchedulePlugin` (added above, inside `PhysicsPlugins`) configures
-        // `PhysicsSchedule` with `ambiguity_detection: LogLevel::Error` — appropriate when the
-        // full solver stack is present, since Avian's own plugins rely on each other's system
-        // sets to establish a total order. With several of those solver plugins disabled above,
-        // that ordering chain has gaps, and Bevy now reports ~50 systems as ambiguous relative to
-        // each other (panicking at schedule-build time rather than just warning, because of the
-        // `Error` level). Every ambiguity in that list is between joint-related systems (this
-        // project never spawns a joint), collider-hierarchy systems (no compound/child colliders
-        // here — colliders live directly on the root rigid-body entity), or `trigger_collision_events`
-        // (nothing here reads Avian's `CollisionStarted`/`CollisionEnded` — `character_controller.rs`
-        // tracks its own `CharacterCollisions` from shape-casts instead) — none of which this
-        // project's systems actually race on. Relaxing back to `Warn` (Bevy's own schedule
-        // default) accepts that, instead of manually chaining ~50 system pairs by hand.
-        app.edit_schedule(PhysicsSchedule, |schedule| {
-            schedule.set_build_settings(ScheduleBuildSettings {
-                ambiguity_detection: LogLevel::Warn,
-                ..default()
-            });
-        });
-
-        // `IntegratorPlugin` (disabled above) is normally what initializes the `Gravity`
-        // resource — confirmed by testing: without this, `IslandSleepingPlugin`'s
-        // `resource_changed::<Gravity>` run condition (checking whether to re-evaluate sleeping
-        // thresholds) panicked at startup with "Resource does not exist: Gravity", even though
-        // nothing here actually reads `Gravity` for real integration anymore. `Gravity` is just
-        // inert data (a `Vector` newtype with a `Default`), not tied to any system of its own, so
-        // this is a safe, minimal stand-in rather than re-enabling `IntegratorPlugin` itself.
-        app.init_resource::<Gravity>();
 
         // `OxrSessionConfig`/`HandGizmosPlugin`/`VrControllersPlugin` are all meaningless (and, for
         // `VrControllersPlugin`, actively broken — its `Startup`/`On<PlayerSpawned>` systems use
@@ -211,17 +193,6 @@ impl Plugin for Prototype19 {
                         "collections/common_assets.assets.ron",
                     )
                     .load_collection::<assets::collections::CommonAssets>(),
-            )
-            // No `.with_dynamic_assets_file(...)`/`.continue_to_state(...)` here, unlike
-            // `AssetLoading` above — which `.ron` manifest to resolve `LevelAssets.level` against
-            // isn't known until a level is actually chosen at runtime (`loading.rs::load_level`
-            // registers it into `DynamicAssetCollections<GameState>` right before transitioning
-            // into `Loading`), and resolving that manifest is only the first half of what
-            // `GameState::Loading` waits for — see `loading.rs`'s `on_level_assets_loaded` doc
-            // comment for the rest of that flow.
-            .add_loading_state(
-                LoadingState::new(GameState::Loading)
-                    .load_collection::<assets::collections::LevelAssets>(),
             )
             .add_systems(
                 OnEnter(GameState::MainMenu),

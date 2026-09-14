@@ -1,8 +1,9 @@
 use bevy::prelude::*;
-use bevy_replicon::prelude::ClientTriggerExt;
+use lightyear::prelude::*;
 use shared::client_events::SpawnNpcRequest;
 use shared::level::LevelRoot;
 use shared::npc_spawner::{Npc, NpcSpawner};
+use shared::replication::OrderedReliable;
 
 use crate::assets::collections::CommonAssets;
 use crate::events::SpawnNpc;
@@ -27,9 +28,9 @@ impl Plugin for NpcSpawnerPlugin {
 fn request_spawn_npc(
     _event: On<SpawnNpc>,
     npc_spawner: Single<&GlobalTransform, With<NpcSpawner>>,
-    mut commands: Commands,
+    mut sender: Single<&mut MessageSender<SpawnNpcRequest>>,
 ) {
-    commands.client_trigger(SpawnNpcRequest {
+    sender.send::<OrderedReliable>(SpawnNpcRequest {
         transform: npc_spawner.compute_transform(),
     });
 }

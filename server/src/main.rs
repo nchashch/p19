@@ -1,9 +1,11 @@
+use std::time::Duration;
+
 use avian3d::prelude::*;
 use bevy::image::{CompressedImageFormatSupport, CompressedImageFormats};
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
-use bevy_replicon::prelude::*;
-use bevy_replicon_quinnet::RepliconQuinnetPlugins;
+use lightyear::avian3d::plugin::{AvianReplicationMode, LightyearAvianPlugin};
+use lightyear::prelude::*;
 use shared::character_controller::CharacterControllerPlugin;
 use shared::replication::SharedReplicationPlugin;
 
@@ -33,9 +35,21 @@ fn main() {
                 file_path: "../client/assets".to_string(),
                 ..default()
             },
-            PhysicsPlugins::default(),
-            RepliconPlugins,
-            RepliconQuinnetPlugins,
+            PhysicsPlugins::default()
+                .build()
+                .disable::<PhysicsTransformPlugin>()
+                .disable::<PhysicsInterpolationPlugin>(),
+            server::ServerPlugins {
+                tick_duration: Duration::from_secs_f32(1.0 / 60.0),
+            },
+            LightyearAvianPlugin {
+                replication_mode: AvianReplicationMode::Position {
+                    sync_to_transform: false,
+                }, // default
+                ..default()
+            },
+            // RepliconPlugins,
+            // RepliconQuinnetPlugins,
             SharedReplicationPlugin,
             ServerCombatPlugin,
             ServerSpawnPlugin,
@@ -55,7 +69,7 @@ fn main() {
             ),
             networking::NetworkingPlugin,
         ))
-        .init_state::<ServerState>()
+        // .init_state::<ServerState>()
         // avian3d's collider cache reads `AssetEvent<Mesh>` (for mesh-derived colliders) even
         // though the server never renders — normally registered by rendering plugins the headless
         // server doesn't have, so it needs registering directly instead. `Image` needs the same
