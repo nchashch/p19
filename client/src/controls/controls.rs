@@ -12,7 +12,6 @@ use shared::client_events::{AttackAttempt, KillAttempt};
 use shared::game_state::{GameState, ModalMenuState};
 use shared::player::Selectable;
 use shared::replication::OrderedReliable;
-use shared::server_events::UnloadLevel;
 use std::f32::consts::PI;
 
 use lightyear::prelude::*;
@@ -87,9 +86,7 @@ fn main_menu(_: On<Start<MainMenu>>, commands: Commands) {
 /// drop the player back to `GameState::MainMenu` the same way, so this is factored out rather than
 /// duplicated across input surfaces.
 pub(crate) fn return_to_main_menu(mut commands: Commands) {
-    commands.trigger(UnloadLevel {
-        next_state: GameState::MainMenu,
-    });
+    todo!();
 }
 
 /// Opens/closes the pause modal (`modal_menu.rs`) — toggling rather than only-opening lets Tab

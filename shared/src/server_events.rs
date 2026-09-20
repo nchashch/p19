@@ -1,8 +1,6 @@
+use bevy::ecs::entity::MapEntities;
 use bevy::prelude::*;
-use bevy::{asset::AssetPath, ecs::entity::MapEntities};
 use serde::{Deserialize, Serialize};
-
-use crate::game_state::GameState;
 
 /// Fired once an `AttackAttempt` is confirmed in range and damage has been applied — this is the
 /// fact client-side presentation (animation, sound) reacts to, not `AttackAttempt` itself.
@@ -24,30 +22,6 @@ pub struct Kill {
     #[entities]
     pub killer: Entity,
 }
-
-#[derive(Event, Serialize, Deserialize)]
-pub struct UnloadLevel {
-    pub next_state: GameState,
-}
-
-#[derive(Event, Serialize, Deserialize)]
-pub struct LoadLevel {
-    pub asset_path: AssetPath<'static>,
-}
-
-#[derive(Event, Serialize, Deserialize)]
-pub struct LoadRig {
-    pub transform: Transform,
-    pub asset_path: AssetPath<'static>,
-}
-
-#[derive(Event, Serialize, Deserialize)]
-pub struct LoadSkybox {
-    pub asset_path: AssetPath<'static>,
-}
-
-#[derive(Event, Serialize, Deserialize)]
-pub struct ServerInGame;
 
 /// Fired once a character's `HitPoints` actually reach zero in combat, right before the server
 /// despawns it — the fact client-side presentation (death sound, particle effect) reacts to,

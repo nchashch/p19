@@ -5,16 +5,15 @@ use crate::character_controller::{
     Character, CharacterController, DesiredMotion, GroundDetection, Grounded, Idle,
 };
 use crate::client_events::{
-    AttackAttempt, Jump, KillAttempt, LoadLevelRequest, Movement, SpawnCubeRequest, SpawnNpcRequest,
+    AttackAttempt, InGameRequest, Jump, KillAttempt, LoadLevelRequest, LobbyRequest, Movement,
+    SpawnCubeRequest, SpawnNpcRequest,
 };
 use crate::combat::{Dead, Gcd, HitPoints};
 use crate::cube_spawner::Cube;
 use crate::level::{LevelRoot, Levels};
 use crate::npc_spawner::Npc;
 use crate::player::{PlayerCharacter, Selectable};
-use crate::server_events::{
-    Attack, EntityDied, Kill, LoadLevel, LoadRig, LoadSkybox, ServerInGame, UnloadLevel,
-};
+use crate::server_events::{Attack, EntityDied, Kill};
 
 use lightyear::prelude::*;
 
@@ -75,6 +74,10 @@ impl Plugin for SharedReplicationPlugin {
 
         app.register_message::<LoadLevelRequest>()
             .add_direction(NetworkDirection::ClientToServer);
+        app.register_message::<InGameRequest>()
+            .add_direction(NetworkDirection::ClientToServer);
+        app.register_message::<LobbyRequest>()
+            .add_direction(NetworkDirection::ClientToServer);
 
         app.register_message::<Attack>()
             .add_direction(NetworkDirection::ServerToClient)
@@ -85,16 +88,5 @@ impl Plugin for SharedReplicationPlugin {
         app.register_message::<EntityDied>()
             .add_direction(NetworkDirection::ServerToClient)
             .add_map_entities();
-
-        app.register_message::<UnloadLevel>()
-            .add_direction(NetworkDirection::ServerToClient);
-        app.register_message::<LoadLevel>()
-            .add_direction(NetworkDirection::ServerToClient);
-        app.register_message::<LoadRig>()
-            .add_direction(NetworkDirection::ServerToClient);
-        app.register_message::<LoadSkybox>()
-            .add_direction(NetworkDirection::ServerToClient);
-        app.register_message::<ServerInGame>()
-            .add_direction(NetworkDirection::ServerToClient);
     }
 }

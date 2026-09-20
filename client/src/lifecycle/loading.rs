@@ -4,7 +4,6 @@ use bevy_mod_xr::session::XrTrackingRoot;
 use bevy_seedling::sample::SamplePlayer;
 use shared::assets::level::ClientWorldAsset;
 use shared::game_state::GameState;
-use shared::server_events::UnloadLevel;
 
 pub struct LoadingPlugin;
 
@@ -18,7 +17,6 @@ impl Plugin for LoadingPlugin {
             Update,
             spawn_client_world_assets.run_if(in_state(GameState::InGame)),
         );
-        app.add_observer(unload_level);
     }
 }
 
@@ -33,8 +31,7 @@ fn spawn_client_world_assets(
     }
 }
 
-fn unload_level(
-    event: On<UnloadLevel>,
+fn clear_effects(
     mut commands: Commands,
     particle_effects: Query<Entity, With<ParticleEffect>>,
     sample_players: Query<Entity, With<SamplePlayer>>,
@@ -60,6 +57,4 @@ fn unload_level(
     for xr_root in &xr_root {
         commands.entity(xr_root).remove::<ChildOf>();
     }
-    commands.trigger(crate::events::Disconnect);
-    commands.set_state(event.next_state.clone());
 }

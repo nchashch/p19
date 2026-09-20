@@ -12,7 +12,7 @@ use bevy::{
 use bevy_fluent::prelude::Localization;
 use fluent_content::Content;
 use lightyear::prelude::MessageSender;
-use shared::client_events::LoadLevelRequest;
+use shared::client_events::{InGameRequest, LoadLevelRequest};
 use shared::game_state::GameState;
 use shared::level::Levels;
 use shared::replication::OrderedReliable;
@@ -76,8 +76,8 @@ fn lobby_buttons() -> impl Scene {
     ]
 }
 
-fn lobby_play_button(_: On<Activate>, mut commands: Commands) {
-    commands.trigger(Play);
+fn lobby_play_button(_: On<Activate>, mut sender: Single<&mut MessageSender<InGameRequest>>) {
+    sender.send::<OrderedReliable>(InGameRequest);
 }
 
 fn lobby_main_menu_button(_: On<Activate>, mut commands: Commands) {

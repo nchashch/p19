@@ -6,18 +6,14 @@ use bevy::gltf::GltfLoaderSettings;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
 use lightyear::prelude::*;
-use shared::assets::asset_exists;
 use shared::assets::level::Level;
-use shared::client_events::Join;
-use shared::replication::OrderedReliable;
-use shared::server_events::ServerInGame;
+use shared::client_events::{InGameRequest, LobbyRequest};
 use shared::{
     character_controller::{JumpInput, MovementInput},
     client_events::{Jump, LoadLevelRequest, Movement},
     game_state::ServerState,
     level::LevelRoot,
     player::{PlayerCharacterSpawner, player},
-    server_events::LoadLevel,
 };
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
@@ -46,7 +42,7 @@ impl Plugin for NetworkingPlugin {
             .add_observer(on_client_disconnected);
         app.add_systems(
             Update,
-            (movement, jump, join).run_if(in_state(ServerState::InGame)),
+            (movement, jump, in_game_request).run_if(in_state(ServerState::InGame)),
         );
         app.add_systems(Update, load_level_request);
     }
@@ -80,12 +76,10 @@ fn load_level_request(
     receivers: Query<(Entity, &mut MessageReceiver<LoadLevelRequest>)>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
-    mut sender: ServerMultiMessageSender,
-    server: Single<&Server>,
     levels: Res<Assets<Level>>,
     game_room: Res<GameRoom>,
 ) -> Result {
-    for (entity, mut receiver) in receivers {
+    for (_entity, mut receiver) in receivers {
         for request in receiver.receive() {
             let asset_path = request.asset_path.clone();
 
@@ -130,11 +124,6 @@ fn load_level_request(
                 .with_children(|parent| {
                     parent.spawn(WorldAssetRoot(model)).observe(on_level_ready);
                 });
-            sender.send::<LoadLevel, OrderedReliable>(
-                &LoadLevel { asset_path },
-                &server,
-                &NetworkTarget::All,
-            )?;
         }
     }
     Ok(())
@@ -144,23 +133,16 @@ fn on_level_ready(
     _ready: On<WorldInstanceReady>,
     server_state: Res<State<ServerState>>,
     mut commands: Commands,
-    mut sender: ServerMultiMessageSender,
-    server: Single<&Server>,
 ) -> Result {
     if !matches!(server_state.get(), ServerState::Loading) {
         return Ok(());
     }
     commands.set_state(ServerState::InGame);
-    sender.send::<ServerInGame, OrderedReliable>(&ServerInGame, &server, &NetworkTarget::All)?;
-    // The client's own connection entity *is* its player character (see `on_movement`/`on_jump`
-    // above, which resolve straight off `ClientId::entity()`) — no separate client->player
-    // mapping needed. Only clients already connected when the level finishes loading get a
-    // character this way; one connecting later would need its own spawn path, not added here.
     Ok(())
 }
 
-fn join(
-    receivers: Query<(Entity, &mut MessageReceiver<Join>)>,
+fn in_game_request(
+    receivers: Query<(Entity, &mut MessageReceiver<InGameRequest>)>,
     player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
     mut commands: Commands,
 ) {
@@ -169,7 +151,7 @@ fn join(
             if let Ok(player_spawner_transform) = player_spawner.single() {
                 spawn_player_for_client(
                     entity,
-                    request.name,
+                    "Player Name".to_string(),
                     player_spawner_transform.translation,
                     &mut commands,
                 );

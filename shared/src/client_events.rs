@@ -3,9 +3,10 @@ use bevy::{asset::AssetPath, ecs::entity::MapEntities};
 use serde::{Deserialize, Serialize};
 
 #[derive(Event, Serialize, Deserialize, Clone)]
-pub struct Join {
-    pub name: String,
-}
+pub struct InGameRequest;
+
+#[derive(Event, Serialize, Deserialize, Clone)]
+pub struct LobbyRequest;
 
 #[derive(EntityEvent, Serialize, Deserialize, Clone, MapEntities)]
 pub struct AttackAttempt {
