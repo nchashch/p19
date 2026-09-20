@@ -33,7 +33,6 @@ impl Plugin for SharedReplicationPlugin {
         });
 
         app.component::<LevelRoot>().replicate();
-        app.component::<Transform>().replicate();
         app.component::<PlayerCharacter>().replicate();
         app.component::<Character>().replicate();
         app.component::<CharacterController>().replicate();
@@ -45,15 +44,10 @@ impl Plugin for SharedReplicationPlugin {
         app.component::<Collider>().replicate();
         app.component::<CollisionLayers>().replicate();
         app.component::<DesiredMotion>().replicate();
-        app.component::<RigidBody>().replicate();
-        app.component::<LinearVelocity>().replicate();
-        app.component::<AngularVelocity>().replicate();
         app.component::<Selectable>().replicate();
         app.component::<Npc>().replicate();
         app.component::<Idle>().replicate();
         app.component::<Character>().replicate();
-        app.component::<LockedAxes>().replicate();
-        app.component::<LockedAxes>().replicate();
         app.component::<Cube>().replicate();
         app.component::<Dead>().replicate();
 

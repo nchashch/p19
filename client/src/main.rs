@@ -83,26 +83,16 @@ impl Plugin for Prototype19 {
             SeedlingPlugins,
             ParticleEffectsPlugin,
             LobbyPlugin,
-            // Lets `assets::level::Level` (e.g. `assets/levels/start.level.ron`) be loaded
-            // directly as an asset, independent of `bevy_asset_loader`'s own dynamic-asset
-            // manifests — see that module's doc comment. A distinctive compound extension, same
-            // convention `bevy_asset_loader` itself uses for `"assets.ron"` (see
+            // Same distinctive-extension reasoning as `Level` above — `assets::controller::Controller`
+            // (e.g. `assets/controllers/player.controller.ron`) is a plain data asset, loaded
+            // independent of `bevy_asset_loader`'s dynamic-asset manifests. A distinctive compound
+            // extension, same convention `bevy_asset_loader` itself uses for `"assets.ron"` (see
             // `assets::collections`'s `common_assets.assets.ron`/`Level.assets.ron`) rather than
             // bare `"ron"` — not just for symmetry: a bare `"ron"` registration only avoids
             // ambiguity with other RON-based asset types as long as every call site stays
             // explicitly typed (`AssetServer::load::<T>(path)`, never `load_untyped`). A
             // distinctive extension per type sidesteps that structurally instead of relying on it.
-            // Grouped into a nested tuple purely to stay under Bevy's top-level `add_plugins`
-            // tuple-arity limit — `RonAssetPlugin<Controller>` pushed the outer tuple past it.
-            // No relationship between the two beyond that; nest further plugins here too rather
-            // than growing the outer tuple again.
-            (
-                RonAssetPlugin::<assets::level::Level>::new(&["level.ron"]),
-                // Same distinctive-extension reasoning as `Level` above — `assets::controller::Controller`
-                // (e.g. `assets/controllers/player.controller.ron`) is a plain data asset, loaded
-                // independent of `bevy_asset_loader`'s dynamic-asset manifests.
-                RonAssetPlugin::<assets::controller::Controller>::new(&["controller.ron"]),
-            ),
+            RonAssetPlugin::<assets::controller::Controller>::new(&["controller.ron"]),
             SkeinPlugin::default(),
             // Full Avian simulation runs client-side now, same as the server — the client is no
             // longer just holding colliders for spatial queries while waiting on replicated
@@ -186,6 +176,13 @@ impl Plugin for Prototype19 {
                 ..default()
             })
             .register_type::<ColliderConstructor>()
+            // `assets::level::Level` (e.g. `assets/levels/start.level.ron`) now resolves
+            // `model`/`skybox` into real handles via `LoadContext`, which `RonAssetPlugin`'s plain
+            // `serde` deserialization can't give it — see `LevelAssetLoader`'s doc comment.
+            .init_asset::<assets::level::Level>()
+            .register_asset_loader(assets::level::LevelAssetLoader)
+            .init_asset::<assets::character::Character>()
+            .register_asset_loader(assets::character::CharacterAssetLoader)
             .add_loading_state(
                 LoadingState::new(GameState::AssetLoading)
                     .continue_to_state(GameState::MainMenu)

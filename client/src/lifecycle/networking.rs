@@ -121,8 +121,26 @@ fn on_connect_request(
     Ok(())
 }
 
+/// Triggers **both** `Disconnect` (the connection/netcode layer — sends a disconnect packet so
+/// the server also cleans up its `ClientOf` entity promptly) and `Unlink` (the IO/`Link` layer —
+/// closes the actual UDP socket and removes `Linked`). These are two separate layers in lightyear
+/// and neither implies the other: confirmed by tracing `NetcodeClientPlugin`'s `Disconnect`
+/// handler (`lightyear_netcode`'s `client_plugin.rs`), which only calls `client.inner.disconnect()`
+/// and inserts `Disconnected` — nothing on the client side observes that to trigger `Unlink` in
+/// turn. Triggering `Disconnect` alone left `Linked` permanently stuck on `ClientLink`'s entity
+/// (it's never despawned, see that resource's doc comment) — the next `on_connect_request` then
+/// inserted a fresh `UdpIo::default()` (`socket: None`) onto an entity `LinkStart`'s bind handler
+/// refuses to touch because it requires `Without<Linked>`, so the stale `Linked` marker never got
+/// a real socket rebound under it. `lightyear_udp::UdpPlugin::receive` matches on `(Linked,
+/// UdpIo)` alone and unconditionally unwraps `UdpIo::socket` — the observed crash
+/// ("`Option::unwrap()` on a `None` value" in `lightyear_udp`) on a second `Connect` after
+/// returning to the main menu.
 fn on_disconnect_request(_: On<Disconnect>, link: Res<ClientLink>, mut commands: Commands) {
     commands.trigger(lightyear::prelude::Disconnect { entity: link.0 });
+    commands.trigger(Unlink {
+        entity: link.0,
+        reason: UnlinkReason::UserRequested(None),
+    });
 }
 
 fn on_connected(_: On<Add, lightyear::prelude::Connected>, mut commands: Commands) {
