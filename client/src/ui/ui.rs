@@ -3,12 +3,25 @@ use crate::assets::collections::CommonAssets;
 use crate::controls::actions::{UiConfirm, UiNavigate};
 use crate::events::Connect;
 use crate::ui::hud::HudPlugin;
+use crate::ui::localization::LocalizedText;
 use crate::ui::quad_panel::quad_panel;
-use crate::ui::widgets::{Activate, Tooltip, WidgetsPlugin, button, panel};
+use crate::ui::selector;
+use crate::ui::widgets::{Activate as LegacyActivate, Tooltip, WidgetsPlugin};
 use bevy::{
-    input_focus::{AutoFocus, InputFocus, directional_navigation::DirectionalNavigationPlugin},
+    ecs::system::EntityCommands,
+    feathers::{
+        controls::{ButtonVariant, FeathersButton},
+        theme::{ThemeBackgroundColor, ThemeBorderColor, ThemedText},
+        tokens,
+    },
+    input_focus::{
+        AutoFocus, InputFocus, InputFocusVisible,
+        directional_navigation::DirectionalNavigationPlugin,
+    },
+    math::CompassOctant,
     prelude::*,
-    ui::auto_directional_navigation::AutoDirectionalNavigator,
+    ui::auto_directional_navigation::{AutoDirectionalNavigation, AutoDirectionalNavigator},
+    ui_widgets::Activate,
 };
 use bevy_enhanced_input::prelude::{Press, *};
 use bevy_fluent::prelude::Locale;
@@ -16,28 +29,35 @@ use bevy_xr_utils::tracking_utils::XrTrackedLeftGrip;
 use chill_bevy_console::console_closed;
 use shared::game_state::{GameState, VRState};
 use std::f32::consts::FRAC_PI_2;
-use unic_langid::{LanguageIdentifier, langid};
+use unic_langid::langid;
 
 pub struct PrototypeUiPlugin;
 
 impl Plugin for PrototypeUiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((WidgetsPlugin, HudPlugin, DirectionalNavigationPlugin));
+        app.add_plugins((
+            WidgetsPlugin,
+            HudPlugin,
+            DirectionalNavigationPlugin,
+            selector::SelectorPlugin,
+        ));
         app.add_input_context::<MenuControls>();
-        app.init_resource::<LanguageMenuOpen>();
-        app.add_systems(
-            OnEnter(GameState::MainMenu),
-            (spawn_menu_controls, reset_language_menu),
-        );
+        app.init_resource::<UiNavigateHold>();
+        app.add_systems(OnEnter(GameState::MainMenu), spawn_menu_controls);
         app.add_systems(
             Update,
             (
-                update_language_options_visibility,
+                seed_language_options,
+                seed_options_menu,
+                repeat_ui_navigate_while_held.run_if(console_closed),
                 spawn_vr_main_menu_wrist_panel
                     .run_if(in_state(GameState::MainMenu).and_then(in_state(VRState::VR))),
             ),
         );
         add_observers_run_if!(app, console_closed, on_ui_navigate, on_ui_confirm);
+        app.add_observer(on_ui_navigate_complete);
+        app.add_observer(apply_selected_language);
+        app.add_observer(apply_selected_option);
     }
 }
 
@@ -100,17 +120,142 @@ pub(crate) fn menu_controls() -> impl Bundle {
     )
 }
 
-/// Moves `InputFocus` one step in the pushed direction — fires once per push (`Start`, not
-/// `Fire`), since a stick held over the dead zone shouldn't keep re-navigating every frame.
-fn on_ui_navigate(navigate: On<Start<UiNavigate>>, mut navigator: AutoDirectionalNavigator) {
-    if let Ok(direction) = Dir2::new(navigate.value) {
-        let _ = navigator.navigate(direction.into());
+/// Delay, in seconds, before a held `UiNavigate` direction (gamepad stick/D-pad, keyboard arrows)
+/// starts auto-repeating — see `UiNavigateHold`/`repeat_ui_navigate_while_held`.
+const UI_NAVIGATE_HOLD_DELAY: f32 = 0.4;
+
+/// Interval, in seconds, between auto-repeat steps once past `UI_NAVIGATE_HOLD_DELAY` —
+/// deliberately much shorter than the initial delay, for "quickly scrolling" once it kicks in.
+const UI_NAVIGATE_REPEAT_INTERVAL: f32 = 0.08;
+
+/// Tracks a currently-held `UiNavigate` direction for press-and-hold auto-repeat. `None` while
+/// nothing is held. Seeded by `on_ui_navigate` on the initial press (with `next_repeat` set to
+/// `UI_NAVIGATE_HOLD_DELAY`), advanced and consumed by `repeat_ui_navigate_while_held`, and
+/// cleared by `on_ui_navigate_complete` on release. A resource rather than `Local` state on either
+/// system, since `Start`/`Complete` (observers) and the repeat timer (a plain `Update` system)
+/// need to share it across three separate systems.
+#[derive(Resource, Default)]
+struct UiNavigateHold {
+    direction: Option<CompassOctant>,
+    /// Seconds remaining until the next auto-repeat step.
+    next_repeat: f32,
+}
+
+/// Moves `InputFocus` one step in `octant`, including a `selector` popup's paginated-window
+/// fallback (`selector::selector_navigate_fallback`) — shared between `on_ui_navigate` (the
+/// initial press) and `repeat_ui_navigate_while_held` (auto-repeat while held) so both go through
+/// identical logic.
+///
+/// Also sets `InputFocusVisible`, same as `bevy_input_focus`'s own `handle_tab_navigation` does
+/// for literal Tab presses — confirmed by tracing `bevy_feathers::focus`'s `FocusIndicator`
+/// system: it gates the focus-ring outline on `InputFocusVisible`, which is otherwise *only* ever
+/// flipped `true` by Tab-key handling (and `false` by a mouse click) inside `bevy_input_focus`
+/// itself. Nothing about `AutoDirectionalNavigator`-driven navigation (this project's own gamepad/
+/// arrow-key path) touches it, so without this, focus genuinely moves — confirmed by logging
+/// `InputFocus` across a whole traversal — but the ring never renders, reading as "navigation
+/// doesn't work" even though it does.
+fn navigate_step(
+    octant: CompassOctant,
+    navigator: &mut AutoDirectionalNavigator,
+    focus_visible: &mut InputFocusVisible,
+    parents: &Query<&ChildOf>,
+    slots: &Query<&selector::SelectorSlot>,
+    selectors: &mut Query<(&mut selector::SelectorWindowStart, &selector::SelectorEntries)>,
+) {
+    if navigator.navigate(octant).is_ok() {
+        focus_visible.0 = true;
+        return;
+    }
+    let Some(focus) = navigator.input_focus() else {
+        return;
+    };
+    if selector::selector_navigate_fallback(octant, focus, parents, slots, selectors) {
+        focus_visible.0 = true;
     }
 }
 
-/// "Presses" whichever UI element currently holds `InputFocus` — see `widgets::Activate`.
+fn on_ui_navigate(
+    navigate: On<Start<UiNavigate>>,
+    mut navigator: AutoDirectionalNavigator,
+    mut focus_visible: ResMut<InputFocusVisible>,
+    parents: Query<&ChildOf>,
+    slots: Query<&selector::SelectorSlot>,
+    mut selectors: Query<(&mut selector::SelectorWindowStart, &selector::SelectorEntries)>,
+    mut hold: ResMut<UiNavigateHold>,
+) {
+    let Ok(direction) = Dir2::new(navigate.value) else {
+        return;
+    };
+    let octant: CompassOctant = direction.into();
+    navigate_step(
+        octant,
+        &mut navigator,
+        &mut focus_visible,
+        &parents,
+        &slots,
+        &mut selectors,
+    );
+    hold.direction = Some(octant);
+    hold.next_repeat = UI_NAVIGATE_HOLD_DELAY;
+}
+
+/// Clears the held-direction state on release. Deliberately registered *ungated* (see
+/// `main.rs`'s `add_observers_run_if!` convention doc comment) — if this were gated behind
+/// `console_closed` and the console opened while a direction was held, the `Complete` event could
+/// fire while suppressed, leaving `UiNavigateHold` stuck as `Some` and the repeat system
+/// spuriously auto-repeating navigation the player already released.
+fn on_ui_navigate_complete(_complete: On<Complete<UiNavigate>>, mut hold: ResMut<UiNavigateHold>) {
+    hold.direction = None;
+}
+
+/// Auto-repeats `UiNavigateHold`'s currently-held direction after `UI_NAVIGATE_HOLD_DELAY`, then
+/// every `UI_NAVIGATE_REPEAT_INTERVAL` — "hold down/up to quickly scroll" (a selector popup in
+/// particular, though this applies to any `AutoDirectionalNavigation` target). A plain `Update`
+/// system rather than reacting to `Fire<UiNavigate>` (which would fire every frame the input
+/// stays active): the hold/release edges alone (`on_ui_navigate`/`on_ui_navigate_complete`) are
+/// enough to know *whether* a direction is held, and timing the repeats here keeps that timing
+/// logic in one place rather than re-deriving it from a continuous stream of `Fire` events.
+fn repeat_ui_navigate_while_held(
+    time: Res<Time>,
+    mut hold: ResMut<UiNavigateHold>,
+    mut navigator: AutoDirectionalNavigator,
+    mut focus_visible: ResMut<InputFocusVisible>,
+    parents: Query<&ChildOf>,
+    slots: Query<&selector::SelectorSlot>,
+    mut selectors: Query<(&mut selector::SelectorWindowStart, &selector::SelectorEntries)>,
+) {
+    let Some(octant) = hold.direction else {
+        return;
+    };
+    hold.next_repeat -= time.delta_secs();
+    if hold.next_repeat > 0.0 {
+        return;
+    }
+    navigate_step(
+        octant,
+        &mut navigator,
+        &mut focus_visible,
+        &parents,
+        &slots,
+        &mut selectors,
+    );
+    hold.next_repeat = UI_NAVIGATE_REPEAT_INTERVAL;
+}
+
+/// "Presses" whichever UI element currently holds `InputFocus` — bridges gamepad/keyboard confirm
+/// to both button systems in play: `widgets::Activate` (`LegacyActivate` here) for the
+/// hand-rolled `widgets::button()` used by the HUD and the pause modal, and `bevy::ui_widgets`'s
+/// own `Activate` for the `FeathersButton`-based main menu (see `main_menu_buttons()`). Firing
+/// both unconditionally is simplest and safe for every current handler *except* one: pressing the
+/// literal Enter key (bound to `UiConfirm` alongside gamepad South) double-fires a focused
+/// `FeathersButton`'s `Activate` — once here, once natively via `bevy_ui_widgets`' own
+/// `button_on_key_event`, which already reacts to Enter/Space independent of this bridge. Every
+/// main-menu handler is idempotent against that except `selector::toggle_selector`'s bool flip,
+/// which would cancel back out on literal-Enter presses specifically (gamepad South and mouse
+/// clicks are unaffected). Worth a real fix if that's ever more than a curiosity.
 fn on_ui_confirm(_confirm: On<Start<UiConfirm>>, focus: Res<InputFocus>, mut commands: Commands) {
     if let Some(entity) = focus.get() {
+        commands.trigger(LegacyActivate { entity });
         commands.trigger(Activate { entity });
     }
 }
@@ -141,28 +286,53 @@ fn main_menu(common_assets: &CommonAssets) -> impl Scene {
 /// VR wrist-mounted `quad_panel`, not just a re-styled lookalike. Deliberately *not* including
 /// `main_menu()`'s fullscreen `Node`/`WorldAssetRoot` background — those only make sense for the
 /// desktop window, not a small texture on someone's wrist.
+///
+/// Uses `bevy::feathers` (`FeathersButton`, theme tokens) in place of this project's own
+/// hand-rolled `widgets::panel()`/`widgets::button()`. Hover/press/disabled color states, the
+/// focus ring, and the pointer cursor all come from feathers for free (`bevy_feathers::controls::
+/// button`'s `update_button_styles` + `focus::FocusIndicator`) instead of this project's own
+/// `hover_button`/`out_button`/`update_button_focus`. `widgets.rs` itself is untouched — `hud.rs`
+/// and `modal_menu.rs` still use it — so this only affects the main menu (and its VR wrist-panel
+/// copy). `AutoDirectionalNavigation` still needs adding by hand per button: `FeathersButton`
+/// doesn't include it, since gamepad/keyboard D-pad navigation (`MenuControls`, above) is this
+/// project's own thing, not a `bevy_feathers` concept.
+///
+/// "Options" and "Language" are both `selector` popups (`client/src/ui/selector.rs`) now, not
+/// plain buttons — see `options_picker()`/`language_picker()`.
 pub(crate) fn main_menu_buttons() -> impl Scene {
     bsn! {
-        panel(px(400), px(400))
+        Node {
+            width: px(400),
+            height: px(400),
+            border: px(1),
+            border_radius: px(3),
+            margin: UiRect::axes(px(50), px(50)),
+            align_items: AlignItems::Start,
+            justify_content: JustifyContent::Start,
+            flex_direction: FlexDirection::Column,
+            row_gap: px(10),
+            padding: px(10),
+        }
+        ThemeBorderColor(tokens::GROUP_BODY_BORDER)
+        ThemeBackgroundColor(tokens::WINDOW_BG)
         Children [
             (
-                button(px(200), px(50), "main-menu-connect")
+                menu_button("main-menu-connect", ButtonVariant::Primary)
+                selector::LockedWhileSelectorOpen
                 Tooltip::new("main-menu-connect-tooltip")
                 AutoFocus
                 on(connect_button)
             ),
+            options_picker(),
             (
-                button(px(200), px(50), "main-menu-options")
-                Tooltip::new("main-menu-options-tooltip")
-                on(stub_button)
-            ),
-            (
-                button(px(200), px(50), "main-menu-credits")
+                menu_button("main-menu-credits", ButtonVariant::default())
+                selector::LockedWhileSelectorOpen
                 Tooltip::new("main-menu-credits-tooltip")
                 on(stub_button)
             ),
             (
-                button(px(200), px(50), "main-menu-quit")
+                menu_button("main-menu-quit", ButtonVariant::default())
+                selector::LockedWhileSelectorOpen
                 Tooltip::new("main-menu-quit-tooltip")
                 on(quit_button)
             ),
@@ -171,108 +341,201 @@ pub(crate) fn main_menu_buttons() -> impl Scene {
     }
 }
 
-/// Whether the language options popup (below) is showing — a plain resource rather than a
-/// `States` type since this is a small, purely-cosmetic toggle local to one panel, not something
-/// anything else needs to branch on (see `game_state.rs`'s states for the "worth a states machine"
-/// bar this doesn't clear). Reset on every `OnEnter(GameState::MainMenu)` so a menu left open
-/// before leaving (e.g. hitting `Play` without picking a language) doesn't reappear pre-opened the
-/// next time the main menu spawns fresh.
-#[derive(Resource, Default)]
-struct LanguageMenuOpen(bool);
-
-fn reset_language_menu(mut open: ResMut<LanguageMenuOpen>) {
-    open.0 = false;
+/// A `FeathersButton` sized/labeled for this menu — `label_key` is a Fluent message key (see
+/// `assets/locales/`), routed through this project's own `LocalizedText` exactly like the old
+/// `widgets::button()` did (feathers has no localization concept of its own). `ThemedText` is
+/// what makes the label actually pick up `FeathersButton`'s themed text color/font — it's a
+/// propagation target, not automatic (see `bevy_feathers::theme`'s `HierarchyPropagatePlugin`
+/// registrations). Only `width` is overridden on top of `@FeathersButton`'s own `Node` (mirrors
+/// `bevy_feathers::controls::button::FeathersToolButton`'s identical partial-override shape) —
+/// height is left at feathers' own `size::ROW_HEIGHT` rather than forcing the old fixed 50px.
+fn menu_button(label_key: &'static str, variant: ButtonVariant) -> impl Scene {
+    bsn! {
+        @FeathersButton {
+            @variant: {variant},
+        }
+        AutoDirectionalNavigation
+        Node {
+            width: px(200),
+        }
+        Children [(
+            Text(label_key)
+            LocalizedText(label_key)
+            ThemedText
+        )]
+    }
 }
 
-/// Tags the options popup so `update_language_options_visibility` can find it without needing to
-/// thread an entity reference through from `toggle_language_menu`.
+/// Which locale a language-selector row switches to (see `apply_selected_language`) — inserted
+/// onto whichever slot entity currently shows a given language by that option's own
+/// `selector::SelectorOption::payload` closure (see `language_options`), not set once at spawn
+/// time: `client/src/ui/selector.rs`'s slots are fixed, reused entities whose content gets rebound
+/// as its paginated window scrolls.
 #[derive(Component, Clone, Default)]
-struct LanguageOptionsPanel;
+struct LocaleOption(unic_langid::LanguageIdentifier);
 
-/// Which locale a language-option button switches to — read directly off the entity `Activate`
-/// fires on (see `select_language`), the same "look up a component on `activate.entity`" pattern
-/// `input_icons.rs`'s `PendingIcon` uses for a similar per-entity-payload problem.
+/// Tags the wrapper around `[toggle button, selector popup]` for the language picker, so
+/// `seed_language_options` can find *this* selector specifically (as opposed to
+/// `options_picker()`'s) to hand it its real option list — see `selector::set_selector_options`'s
+/// own doc comment for why seeding has to be a separate step from spawning.
 #[derive(Component, Clone, Default)]
-struct LocaleOption(LanguageIdentifier);
+struct LanguagePicker;
 
-/// The "Language" button plus its (initially hidden) options popup. `position_type: Relative` on
-/// the wrapping `Node` is what lets the popup's own `position_type: Absolute` anchor directly below
-/// the button instead of relative to the whole screen.
+/// The "Language" button plus its (initially empty/hidden) selector popup. `position_type:
+/// Relative` on the wrapping `Node` is what lets the popup's own `position_type: Absolute` anchor
+/// directly to the right of the button instead of relative to the whole screen — see
+/// `selector::selector_popup`'s own doc comment for the exact positioning.
 fn language_picker() -> impl Scene {
     bsn! {
+        LanguagePicker
         Node {
             position_type: PositionType::Relative,
         }
         Children [
             (
-                button(px(200), px(50), "main-menu-language")
-                on(toggle_language_menu)
+                menu_button("main-menu-language", ButtonVariant::default())
+                selector::LockedWhileSelectorOpen
+                on(selector::toggle_selector)
             ),
-            language_options_panel(),
+            selector::selector_popup(),
         ]
     }
 }
 
-/// Each option's label is the language's own name in its own script (`"English"`, `"Русский"`),
-/// deliberately *not* run through a real localization key — `button()` always attaches
-/// `LocalizedText`, but `localized()` (see `localization.rs`) falls back to the raw key string
-/// when no message matches, which these labels never do in any locale. That's relied on
-/// intentionally here: a language picker should show every option in its own language regardless
-/// of which language is currently active, not translate "Русский" into whatever's selected now.
-fn language_options_panel() -> impl Scene {
+/// The full set of selectable languages. Each option's label is the language's own name in its
+/// own script (`"English"`, `"Русский"`), deliberately *not* run through a real localization key
+/// (`selector`'s row slots skip `LocalizedText` entirely, for the same reason the original
+/// language-only popup did — a slot's label changes at runtime as the window scrolls, and
+/// `LocalizedText`'s own sync system would fight that). A language picker should show every
+/// option in its own language regardless of which language is currently active, not translate
+/// "Русский" into whatever's selected now.
+///
+/// The many duplicate "English" entries are this project's own test data for exercising the
+/// paginated window against a long list — swap this out for the real language set once that
+/// testing is done.
+fn language_options() -> Vec<selector::SelectorOption> {
+    let mut options: Vec<selector::SelectorOption> = (0..28)
+        .map(|_| selector::SelectorOption {
+            label: "English".to_string(),
+            payload: Box::new(|entity: &mut EntityCommands| {
+                entity.insert(LocaleOption(langid!("en-US")));
+            }),
+        })
+        .collect();
+    options.push(selector::SelectorOption {
+        label: "Русский".to_string(),
+        payload: Box::new(|entity: &mut EntityCommands| {
+            entity.insert(LocaleOption(langid!("ru-RU")));
+        }),
+    });
+    options
+}
+
+/// Hands the language selector its real option list once it exists — see
+/// `selector::set_selector_options`'s own doc comment for why this has to be a separate,
+/// post-spawn step rather than a parameter to `selector::selector_popup()` directly.
+fn seed_language_options(
+    mut commands: Commands,
+    wrappers: Query<&Children, Added<LanguagePicker>>,
+    panels: Query<Entity, With<selector::Selector>>,
+) {
+    for children in &wrappers {
+        if let Some(panel) = children.iter().find(|&entity| panels.contains(entity)) {
+            selector::set_selector_options(&mut commands, panel, language_options());
+        }
+    }
+}
+
+/// Reacts to a language actually being picked — reads `LocaleOption` straight off
+/// `selected.entity`, same "resolve identity from the entity an event fires on" pattern the old,
+/// language-specific `select_language` already used, just now behind `selector::UiSelected`
+/// instead of a bespoke `Activate` handler. No-ops for any other selector's `UiSelected` (e.g.
+/// `options_picker()`'s stub rows, which carry `OptionChoice`, not `LocaleOption`) — the payload
+/// component itself is what disambiguates which selector this event came from.
+fn apply_selected_language(
+    selected: On<selector::UiSelected>,
+    options: Query<&LocaleOption>,
+    mut locale: ResMut<Locale>,
+) {
+    if let Ok(option) = options.get(selected.entity) {
+        locale.requested = option.0.clone();
+    }
+}
+
+/// Tags the wrapper around `[toggle button, selector popup]` for the stub "Options" picker — see
+/// `LanguagePicker`'s doc comment for why this exists (letting `seed_options_menu` find *this*
+/// selector specifically).
+#[derive(Component, Clone, Default)]
+struct OptionsPicker;
+
+/// The "Options" button plus its (initially empty/hidden) selector popup — the same
+/// `selector::selector_popup()` widget `language_picker()` uses, with stub content instead of a
+/// real setting (there isn't one yet — see `stub_options`).
+fn options_picker() -> impl Scene {
     bsn! {
-        LanguageOptionsPanel
-        Visibility::Hidden
+        OptionsPicker
         Node {
-            position_type: PositionType::Absolute,
-            top: percent(100),
-            left: px(0),
-            flex_direction: FlexDirection::Column,
-            row_gap: px(4),
+            position_type: PositionType::Relative,
         }
         Children [
             (
-                button(px(200), px(40), "English")
-                LocaleOption(langid!("en-US"))
-                on(select_language)
+                menu_button("main-menu-options", ButtonVariant::default())
+                selector::LockedWhileSelectorOpen
+                Tooltip::new("main-menu-options-tooltip")
+                on(selector::toggle_selector)
             ),
-            (
-                button(px(200), px(40), "Русский")
-                LocaleOption(langid!("ru-RU"))
-                on(select_language)
-            ),
+            selector::selector_popup(),
         ]
     }
 }
 
-fn toggle_language_menu(_: On<Activate>, mut open: ResMut<LanguageMenuOpen>) {
-    open.0 = !open.0;
+/// Payload for the stub "Options" selector's rows — just a display label for now
+/// (`apply_selected_option` only logs it), not a real setting. Exists mainly to prove
+/// `selector.rs`'s generic widget actually works for something other than `LocaleOption` — swap
+/// for real settings once there are any.
+#[derive(Component, Clone, Default)]
+struct OptionChoice(String);
+
+fn stub_options() -> Vec<selector::SelectorOption> {
+    [
+        "Stub Option A",
+        "Stub Option B",
+        "Stub Option C",
+        "Stub Option D",
+        "Stub Option E",
+        "Stub Option F",
+    ]
+    .into_iter()
+    .map(|label| selector::SelectorOption {
+        label: label.to_string(),
+        payload: Box::new(move |entity: &mut EntityCommands| {
+            entity.insert(OptionChoice(label.to_string()));
+        }),
+    })
+    .collect()
 }
 
-fn select_language(
-    activate: On<Activate>,
-    options: Query<&LocaleOption>,
-    mut locale: ResMut<Locale>,
-    mut open: ResMut<LanguageMenuOpen>,
+/// Hands the "Options" selector its stub option list once it exists — see
+/// `seed_language_options`'s identical shape and `selector::set_selector_options`'s own doc
+/// comment for why this has to be a separate, post-spawn step.
+fn seed_options_menu(
+    mut commands: Commands,
+    wrappers: Query<&Children, Added<OptionsPicker>>,
+    panels: Query<Entity, With<selector::Selector>>,
 ) {
-    let Ok(option) = options.get(activate.entity) else {
-        return;
-    };
-    locale.requested = option.0.clone();
-    open.0 = false;
+    for children in &wrappers {
+        if let Some(panel) = children.iter().find(|&entity| panels.contains(entity)) {
+            selector::set_selector_options(&mut commands, panel, stub_options());
+        }
+    }
 }
 
-fn update_language_options_visibility(
-    open: Res<LanguageMenuOpen>,
-    mut panels: Query<&mut Visibility, With<LanguageOptionsPanel>>,
-) {
-    let visibility = if open.0 {
-        Visibility::Visible
-    } else {
-        Visibility::Hidden
-    };
-    for mut panel_visibility in &mut panels {
-        *panel_visibility = visibility;
+/// "Not implemented yet" — matches `stub_button`'s existing spirit, just naming which stub option
+/// was actually picked. No-ops for any other selector's `UiSelected` (see
+/// `apply_selected_language`'s identical reasoning).
+fn apply_selected_option(selected: On<selector::UiSelected>, options: Query<&OptionChoice>) {
+    if let Ok(choice) = options.get(selected.entity) {
+        info!("selected option: {} (not implemented yet)", choice.0);
     }
 }
 
@@ -348,7 +611,7 @@ fn connect_button(_event: On<Activate>, mut commands: Commands) {
     commands.trigger(Connect);
 }
 
-/// "Options"/"Credits" — stub buttons that exist to be navigable, not functional yet.
+/// "Credits" — a stub button that exists to be navigable, not functional yet.
 fn stub_button(_event: On<Activate>) {
     info!("not implemented yet");
 }

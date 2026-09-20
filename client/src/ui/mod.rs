@@ -6,5 +6,6 @@ pub mod modal_menu;
 pub mod nameplate;
 pub mod npc_ui_quad;
 pub mod quad_panel;
+pub mod selector;
 pub mod ui;
 pub mod widgets;

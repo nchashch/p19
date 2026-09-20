@@ -188,7 +188,8 @@ fn on_server_started(_started: On<Add, server::Started>) {
     info!("listening for clients on 0.0.0.0:{PORT}");
 }
 
-fn on_authorized_client_connected(add: On<Add, server::ClientOf>) {
+fn on_authorized_client_connected(add: On<Add, server::ClientOf>, mut commands: Commands) {
+    commands.entity(add.entity).insert(ReplicationSender);
     info!("authorized client `{}` connected", add.entity);
 }
 
