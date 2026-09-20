@@ -8,6 +8,7 @@ use bevy::world_serialization::WorldInstanceReady;
 use lightyear::prelude::*;
 use shared::assets::level::Level;
 use shared::client_events::{InGameRequest, LobbyRequest};
+use shared::replication::ClientInGame;
 use shared::{
     character_controller::{JumpInput, MovementInput},
     client_events::{Jump, LoadLevelRequest, Movement},
@@ -144,17 +145,20 @@ fn on_level_ready(
 fn in_game_request(
     receivers: Query<(Entity, &mut MessageReceiver<InGameRequest>)>,
     player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
+    game_room: Res<GameRoom>,
     mut commands: Commands,
 ) {
     for (entity, mut receiver) in receivers {
-        for request in receiver.receive() {
+        for _request in receiver.receive() {
             if let Ok(player_spawner_transform) = player_spawner.single() {
                 spawn_player_for_client(
                     entity,
                     "Player Name".to_string(),
                     player_spawner_transform.translation,
+                    game_room.0,
                     &mut commands,
                 );
+                info!("player components inserted");
             }
         }
     }
@@ -165,14 +169,18 @@ fn in_game_request(
 /// entity is theirs via a targeted `PlayerSpawned`, so client-side code doesn't have to guess
 /// which of the (possibly several, once other players are connected) replicated
 /// `PlayerCharacter` entities is its own.
-fn spawn_player_for_client(client_entity: Entity, name: String, at: Vec3, commands: &mut Commands) {
+fn spawn_player_for_client(
+    client_entity: Entity,
+    name: String,
+    at: Vec3,
+    room: RoomId,
+    commands: &mut Commands,
+) {
     commands.entity(client_entity).insert((
         player(name, at),
         Replicate::to_clients(NetworkTarget::All),
-        ControlledBy {
-            owner: client_entity,
-            lifetime: Lifetime::Persistent,
-        },
+        Rooms::single(room),
+        ClientInGame,
     ));
 }
 

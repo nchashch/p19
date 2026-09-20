@@ -1,5 +1,6 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use crate::character_controller::{
     Character, CharacterController, DesiredMotion, GroundDetection, Grounded, Idle,
@@ -36,6 +37,7 @@ impl Plugin for SharedReplicationPlugin {
 
         app.component::<LevelRoot>().replicate();
         app.component::<Levels>().replicate();
+        app.component::<ClientInGame>().replicate();
 
         app.component::<PlayerCharacter>().replicate();
         app.component::<Character>().replicate();
@@ -90,3 +92,6 @@ impl Plugin for SharedReplicationPlugin {
             .add_map_entities();
     }
 }
+
+#[derive(Component, Serialize, Deserialize)]
+pub struct ClientInGame;

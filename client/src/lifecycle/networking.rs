@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use bevy::prelude::*;
 use lightyear::prelude::*;
 use shared::game_state::GameState;
+use shared::replication::ClientInGame;
 
 use crate::config::load_client_config;
 use crate::events::{Connect, Disconnect};
@@ -29,6 +30,23 @@ impl Plugin for NetworkingPlugin {
         app.add_observer(on_disconnected);
         app.add_observer(on_connect_request);
         app.add_observer(on_disconnect_request);
+        app.add_observer(on_in_game);
+        app.add_observer(on_out_of_game);
+    }
+}
+
+fn on_in_game(add: On<Add, ClientInGame>, link: Res<ClientLink>, mut commands: Commands) {
+    info!("ClientInGame observed");
+    if link.0 == add.entity {
+        info!("client is now in game");
+        commands.set_state(GameState::InGame);
+    }
+}
+
+fn on_out_of_game(add: On<Remove, ClientInGame>, link: Res<ClientLink>, mut commands: Commands) {
+    if link.0 == add.entity {
+        info!("client is now out of game");
+        commands.set_state(GameState::Lobby);
     }
 }
 

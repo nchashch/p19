@@ -23,13 +23,16 @@ use lightyear::prelude::*;
 /// The single room every in-game entity currently belongs to. Only `LevelRoot` is tagged with
 /// this directly (see `networking.rs`'s `load_level_request`) — everything parented under it
 /// (level geometry, cubes, NPCs — see `spawn.rs`) inherits membership automatically via
-/// `HierarchySendPlugin::<ChildOf>`'s cascade, no per-entity tagging needed.
+/// `HierarchySendPlugin::<ChildOf>`'s cascade, no per-entity tagging needed. Also inserted onto a
+/// client's own connection entity once it's actually spawning into the game (see
+/// `networking.rs`'s `spawn_player_for_client`).
 ///
-/// Not yet used to gate *client* membership — nothing currently inserts this room onto a
-/// client's own connection entity (unlike `LobbyRoom`, below, which every client does join), so
-/// nothing is actually hidden from anyone via this room yet. It only gives `LevelRoot` a real
-/// room to belong to, so the cascade itself can be built and observed before deciding how a
-/// client actually joins/leaves it (lobby vs. in-game).
+/// Server-only, deliberately: `Rooms` (the component this gates) is never replicated to a client
+/// — room membership is server-side interest-management bookkeeping that decides what the server
+/// *sends*, not client-visible state — so this type has no reason to live in `shared`. It briefly
+/// did, to make a client-side `On<Add, Rooms>` observer compile; reverted once it became clear
+/// that observer could never actually fire client-side (the client's own ECS world never contains
+/// a `Rooms` component on anything), so the compiling-but-dead code wasn't worth keeping.
 #[derive(Resource, Clone, Copy)]
 pub struct GameRoom(pub RoomId);
 

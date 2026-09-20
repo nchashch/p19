@@ -19,7 +19,7 @@ use shared::replication::OrderedReliable;
 
 use crate::{
     assets::collections::CommonAssets,
-    events::{Disconnect, Play},
+    events::Disconnect,
     ui::{
         selector,
         ui::menu_button,
@@ -77,6 +77,7 @@ fn lobby_buttons() -> impl Scene {
 }
 
 fn lobby_play_button(_: On<Activate>, mut sender: Single<&mut MessageSender<InGameRequest>>) {
+    info!("InGameRequest sent");
     sender.send::<OrderedReliable>(InGameRequest);
 }
 
