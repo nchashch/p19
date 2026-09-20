@@ -3,7 +3,11 @@ use lightyear::prelude::*;
 use shared::replication::OrderedReliable;
 use shared::{client_events::LoadLevelRequest, game_state::GameState};
 
-use crate::{assets::collections::CommonAssets, events::Play, ui::lobby::lobby_ui};
+use crate::{
+    assets::collections::CommonAssets,
+    events::Play,
+    ui::lobby::{apply_selected_level, lobby_ui, sync_level_options},
+};
 
 pub struct LobbyPlugin;
 
@@ -13,14 +17,16 @@ impl Plugin for LobbyPlugin {
             OnEnter(GameState::Lobby),
             (spawn_lobby_menu, spawn_lobby_menu_controls),
         );
+        app.add_systems(Update, sync_level_options);
         app.add_observer(on_play);
+        app.add_observer(apply_selected_level);
     }
 }
 
 pub fn on_play(_: On<Play>, mut sender: Single<&mut MessageSender<LoadLevelRequest>>) {
     info!("play event received");
-    let id = "collections/Level.assets.ron".to_string();
-    sender.send::<OrderedReliable>(LoadLevelRequest { id });
+    let asset_path = "levels/spawn.level.ron".into();
+    sender.send::<OrderedReliable>(LoadLevelRequest { asset_path });
 }
 
 /// A real system (not the usual `some_scene.spawn()` adapter, which only works for a zero-arg

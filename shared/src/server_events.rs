@@ -1,5 +1,5 @@
-use bevy::ecs::entity::MapEntities;
 use bevy::prelude::*;
+use bevy::{asset::AssetPath, ecs::entity::MapEntities};
 use serde::{Deserialize, Serialize};
 
 use crate::game_state::GameState;
@@ -32,7 +32,18 @@ pub struct UnloadLevel {
 
 #[derive(Event, Serialize, Deserialize)]
 pub struct LoadLevel {
-    pub id: String,
+    pub asset_path: AssetPath<'static>,
+}
+
+#[derive(Event, Serialize, Deserialize)]
+pub struct LoadRig {
+    pub transform: Transform,
+    pub asset_path: AssetPath<'static>,
+}
+
+#[derive(Event, Serialize, Deserialize)]
+pub struct LoadSkybox {
+    pub asset_path: AssetPath<'static>,
 }
 
 #[derive(Event, Serialize, Deserialize)]

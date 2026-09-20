@@ -10,6 +10,8 @@ avian3d.workspace = true
 noiz.workspace = true
 lightyear.workspace = true
 serde.workspace = true
+ron.workspace = true
+bevy_asset_loader.workspace = true
 # Not used directly — present purely to force Cargo's feature unification. `bevy_gltf`
 # (crates.io, transitive) depends on `gltf` with `default-features = false` and an explicit
 # feature list that doesn't include `KHR_texture_basisu`, so without a dependent somewhere in the

@@ -73,7 +73,10 @@ fn on_connect_request(
     _: On<Connect>,
     link: Res<ClientLink>,
     server_address: Res<ServerAddress>,
-    status: Query<(Has<lightyear::prelude::Connected>, Has<lightyear::prelude::Connecting>)>,
+    status: Query<(
+        Has<lightyear::prelude::Connected>,
+        Has<lightyear::prelude::Connecting>,
+    )>,
     mut commands: Commands,
 ) -> Result {
     info!("on_connect_request");
@@ -104,7 +107,7 @@ fn on_connect_request(
             protocol_id: PROTOCOL_ID,
         },
         client::NetcodeConfig {
-            client_timeout_secs: 3,
+            client_timeout_secs: -1,
             token_expire_secs: -1,
             ..default()
         },

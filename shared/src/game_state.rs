@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ServerState {
     #[default]
+    Startup,
     Lobby,
     Loading,
     // Server pause is for all players.

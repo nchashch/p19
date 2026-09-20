@@ -1,6 +1,6 @@
 use crate::add_observers_run_if;
 use crate::assets::collections::CommonAssets;
-use crate::controls::actions::{UiConfirm, UiNavigate};
+use crate::controls::actions::{UiConfirm, UiConfirmEnter, UiNavigate};
 use crate::events::Connect;
 use crate::ui::hud::HudPlugin;
 use crate::ui::localization::LocalizedText;
@@ -54,7 +54,13 @@ impl Plugin for PrototypeUiPlugin {
                     .run_if(in_state(GameState::MainMenu).and_then(in_state(VRState::VR))),
             ),
         );
-        add_observers_run_if!(app, console_closed, on_ui_navigate, on_ui_confirm);
+        add_observers_run_if!(
+            app,
+            console_closed,
+            on_ui_navigate,
+            on_ui_confirm,
+            on_ui_confirm_enter
+        );
         app.add_observer(on_ui_navigate_complete);
         app.add_observer(apply_selected_language);
         app.add_observer(apply_selected_option);
@@ -97,24 +103,36 @@ pub(crate) fn menu_controls() -> impl Bundle {
                 },
                 Bindings::spawn(Axial::left_stick()),
             ));
+            // `require_reset` on both: without it, confirming a button that causes `MenuControls`
+            // itself to despawn-and-respawn on the very same input (e.g. `modal_menu.rs`'s "Main
+            // Menu" button, closing the modal and dropping straight into a fresh main-menu
+            // `MenuControls` with `Play` auto-focused) reads the still-held South/Enter as a
+            // brand-new press on the new context's own `Press` condition (a fresh component, so
+            // it has no memory of the input already being down) and immediately activates
+            // whatever's newly focused. `require_reset` is `bevy_enhanced_input`'s built-in fix
+            // for exactly this: it tracks the physical binding globally (not per-context), so a
+            // still-held button stays ignored across a context respawn until it's actually
+            // released. See `ActionSettings::require_reset`'s doc comment.
+            //
+            // Two separate actions, not one bound to both inputs — see `UiConfirm`'s own doc
+            // comment for why: `on_ui_confirm`/`on_ui_confirm_enter` need to react differently.
             context.spawn((
                 Action::<UiConfirm>::new(),
-                // Without this, confirming a button that causes `MenuControls` itself to
-                // despawn-and-respawn on the very same input (e.g. `modal_menu.rs`'s "Main Menu"
-                // button, closing the modal and dropping straight into a fresh main-menu
-                // `MenuControls` with `Play` auto-focused) reads the still-held South/Enter as a
-                // brand-new press on the new context's own `Press` condition (a fresh component,
-                // so it has no memory of the input already being down) and immediately activates
-                // whatever's newly focused. `require_reset` is `bevy_enhanced_input`'s built-in
-                // fix for exactly this: it tracks the physical binding globally (not per-context),
-                // so a still-held button stays ignored across a context respawn until it's
-                // actually released. See `ActionSettings::require_reset`'s doc comment.
                 ActionSettings {
                     require_reset: true,
                     ..default()
                 },
                 Press::new(1.0),
-                bindings![GamepadButton::South, KeyCode::Enter],
+                bindings![GamepadButton::South],
+            ));
+            context.spawn((
+                Action::<UiConfirmEnter>::new(),
+                ActionSettings {
+                    require_reset: true,
+                    ..default()
+                },
+                Press::new(1.0),
+                bindings![KeyCode::Enter],
             ));
         })),
     )
@@ -251,21 +269,42 @@ fn repeat_ui_navigate_while_held(
     hold.next_repeat = UI_NAVIGATE_REPEAT_INTERVAL;
 }
 
-/// "Presses" whichever UI element currently holds `InputFocus` — bridges gamepad/keyboard confirm
-/// to both button systems in play: `widgets::Activate` (`LegacyActivate` here) for the
-/// hand-rolled `widgets::button()` used by the HUD and the pause modal, and `bevy::ui_widgets`'s
-/// own `Activate` for the `FeathersButton`-based main menu (see `main_menu_buttons()`). Firing
-/// both unconditionally is simplest and safe for every current handler *except* one: pressing the
-/// literal Enter key (bound to `UiConfirm` alongside gamepad South) double-fires a focused
-/// `FeathersButton`'s `Activate` — once here, once natively via `bevy_ui_widgets`' own
-/// `button_on_key_event`, which already reacts to Enter/Space independent of this bridge. Every
-/// main-menu handler is idempotent against that except `selector::toggle_selector`'s bool flip,
-/// which would cancel back out on literal-Enter presses specifically (gamepad South and mouse
-/// clicks are unaffected). Worth a real fix if that's ever more than a curiosity.
+/// "Presses" whichever UI element currently holds `InputFocus`, for gamepad South specifically —
+/// see `on_ui_confirm_enter` for the literal-Enter counterpart and why they're two separate
+/// handlers now, not one. Fires both `widgets::Activate` (`LegacyActivate` here, for the
+/// hand-rolled `widgets::button()` used by the HUD and the pause modal) and `bevy::ui_widgets`'s
+/// own `Activate` (for the `FeathersButton`-based main menu/lobby/selector popups) — safe to fire
+/// both unconditionally here: `bevy_ui_widgets` has no native gamepad handling at all (confirmed
+/// by reading `bevy_ui_widgets::button`'s source — it only reacts to `KeyCode::Enter`/`Space` and
+/// pointer events), so there's no second path for a gamepad press to collide with.
 fn on_ui_confirm(_confirm: On<Start<UiConfirm>>, focus: Res<InputFocus>, mut commands: Commands) {
     if let Some(entity) = focus.get() {
         commands.trigger(LegacyActivate { entity });
         commands.trigger(Activate { entity });
+    }
+}
+
+/// The literal-Enter counterpart to `on_ui_confirm` — fires only `LegacyActivate`, deliberately
+/// *not* the real `bevy::ui_widgets::Activate`. `bevy_ui_widgets`'s own `button_on_key_event`
+/// already reacts to a focused `FeathersButton`'s Enter/Space natively, so synthesizing a second
+/// real `Activate` here double-fired it on every Enter press. That used to be harmless for a
+/// plain toggle (the same entity just re-ran its own idempotent handler a second time), but is a
+/// real bug for `selector::toggle_selector` specifically: it moves `InputFocus` into the popup as
+/// a side effect of the *first* fire, so the *second*, native fire — which reads focus fresh —
+/// landed on the row that focus had just moved to instead of re-hitting the toggle button,
+/// immediately selecting and closing the popup on the very press that opened it. Confirmed via
+/// user testing: one Enter press on "Options" opened the popup, then that same press logged a
+/// stub option as selected and closed it again. `LegacyActivate` still needs firing
+/// unconditionally here — the hand-rolled `widgets::button()` (HUD, pause modal) carries none of
+/// `bevy_ui_widgets`'s own marker components, so it never receives that native path regardless of
+/// which key was pressed, and still needs this bridge for Enter to do anything at all.
+fn on_ui_confirm_enter(
+    _confirm: On<Start<UiConfirmEnter>>,
+    focus: Res<InputFocus>,
+    mut commands: Commands,
+) {
+    if let Some(entity) = focus.get() {
+        commands.trigger(LegacyActivate { entity });
     }
 }
 
@@ -412,29 +451,38 @@ fn language_picker() -> impl Scene {
 }
 
 /// The full set of selectable languages. Each option's label is the language's own name in its
-/// own script (`"English"`, `"Русский"`), deliberately *not* run through a real localization key
-/// (`selector`'s row slots skip `LocalizedText` entirely, for the same reason the original
-/// language-only popup did — a slot's label changes at runtime as the window scrolls, and
-/// `LocalizedText`'s own sync system would fight that). A language picker should show every
-/// option in its own language regardless of which language is currently active, not translate
-/// "Русский" into whatever's selected now.
+/// own script (`"English"`, `"Русский"`, `"日本語"`), deliberately *not* run through a real
+/// localization key (`selector`'s row slots skip `LocalizedText` entirely, for the same reason
+/// the original language-only popup did — a slot's label changes at runtime as the window
+/// scrolls, and `LocalizedText`'s own sync system would fight that). A language picker should
+/// show every option in its own language regardless of which language is currently active, not
+/// translate "日本語" into whatever's selected now.
 ///
-/// The many duplicate "English" entries are this project's own test data for exercising the
-/// paginated window against a long list — swap this out for the real language set once that
-/// testing is done.
+/// `ja-JP` in particular exists to exercise CJK rendering — see `client/assets/locales/ja-JP/`'s
+/// real translations. Worth knowing before trusting what it looks like: the client's own UI font
+/// (`CommonAssets.serif_font`, IBM Plex Serif) covers Latin/Cyrillic only, so this relies on
+/// `bevy`'s `system_font_discovery` feature (added to the workspace `Cargo.toml` alongside this)
+/// falling back to a CJK-capable font already installed on the machine running the client — real,
+/// but machine-dependent verification, not a shipped-game font solution. Bundling an actual CJK
+/// font asset is the real fix if this needs to work on a machine without one installed.
 fn language_options() -> Vec<selector::SelectorOption> {
-    let mut options: Vec<selector::SelectorOption> = (0..28)
-        .map(|_| selector::SelectorOption {
-            label: "English".to_string(),
-            payload: Box::new(|entity: &mut EntityCommands| {
-                entity.insert(LocaleOption(langid!("en-US")));
-            }),
-        })
-        .collect();
+    let mut options = vec![];
+    options.push(selector::SelectorOption {
+        label: "English".to_string(),
+        payload: Box::new(|entity: &mut EntityCommands| {
+            entity.insert(LocaleOption(langid!("en-US")));
+        }),
+    });
     options.push(selector::SelectorOption {
         label: "Русский".to_string(),
         payload: Box::new(|entity: &mut EntityCommands| {
             entity.insert(LocaleOption(langid!("ru-RU")));
+        }),
+    });
+    options.push(selector::SelectorOption {
+        label: "日本語".to_string(),
+        payload: Box::new(|entity: &mut EntityCommands| {
+            entity.insert(LocaleOption(langid!("ja-JP")));
         }),
     });
     options

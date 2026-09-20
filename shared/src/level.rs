@@ -1,5 +1,7 @@
-use bevy::prelude::*;
+use bevy::{asset::AssetPath, prelude::*};
 use serde::{Deserialize, Serialize};
+
+use crate::assets::level::Level;
 
 /// Required components matter here specifically because of replication: the client's mirror of
 /// this entity only ever gets whatever's explicitly `.replicate::<T>()`-registered (`LevelRoot`
@@ -13,3 +15,18 @@ use serde::{Deserialize, Serialize};
 #[derive(Component, Default, Serialize, Deserialize)]
 #[require(Transform, Visibility)]
 pub struct LevelRoot;
+
+#[derive(Component, Default, Serialize, Deserialize)]
+pub struct Levels {
+    levels: Vec<(AssetPath<'static>, Level)>,
+}
+
+impl Levels {
+    pub fn new(levels: Vec<(AssetPath<'static>, Level)>) -> Self {
+        Self { levels }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &(AssetPath<'static>, Level)> {
+        self.levels.iter()
+    }
+}

@@ -4,18 +4,26 @@ use avian3d::prelude::*;
 use bevy::image::{CompressedImageFormatSupport, CompressedImageFormats};
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
+use bevy_asset_loader::prelude::*;
 use lightyear::avian3d::plugin::{AvianReplicationMode, LightyearAvianPlugin};
 use lightyear::prelude::*;
+use shared::assets::SharedAssetsPlugin;
+use shared::assets::level::LevelMetadataAssets;
 use shared::character_controller::CharacterControllerPlugin;
+use shared::game_state::ServerState;
 use shared::replication::SharedReplicationPlugin;
 
 mod combat;
 mod level_state;
+mod lobby;
 mod networking;
+mod rooms;
 mod spawn;
 
 use combat::ServerCombatPlugin;
 use level_state::LevelStatePlugin;
+use lobby::LobbyPlugin;
+use rooms::GameRoomPlugin;
 use spawn::ServerSpawnPlugin;
 
 fn main() {
@@ -32,7 +40,7 @@ fn main() {
             // `client/assets/` (see CLAUDE.md's note on why assets live inside `client/`), so
             // point the default filesystem asset source there instead of duplicating it.
             AssetPlugin {
-                file_path: "../client/assets".to_string(),
+                // file_path: "../client/assets".to_string(),
                 ..default()
             },
             PhysicsPlugins::default()
@@ -51,6 +59,7 @@ fn main() {
             // RepliconPlugins,
             // RepliconQuinnetPlugins,
             SharedReplicationPlugin,
+            SharedAssetsPlugin,
             ServerCombatPlugin,
             ServerSpawnPlugin,
             CharacterControllerPlugin,
@@ -58,18 +67,27 @@ fn main() {
             // `WorldSerializationPlugin` instantiates it as a `WorldAssetRoot`/reflected entity
             // graph (the same mechanism `WorldInstanceReady` etc. rely on client-side), and
             // `SkeinPlugin` applies whatever reflected components (including `ColliderConstructor`)
-            // are baked into the file's extras. None of these need rendering. Nested in its own
-            // tuple — `add_plugins` only supports so many top-level elements before it runs out
-            // of `Plugins` tuple impls.
+            // are baked into the file's extras. None of these need rendering. `GameRoomPlugin`/
+            // `LobbyPlugin` (room-based interest management, and replicating the available level
+            // list while in the lobby room — see `rooms.rs`/`lobby.rs`) are nested in here too,
+            // not because they're related, just because `add_plugins` only supports so many
+            // top-level elements before it runs out of `Plugins` tuple impls.
             (
                 bevy::gltf::GltfPlugin::default(),
                 bevy::world_serialization::WorldSerializationPlugin,
                 bevy_skein::SkeinPlugin::default(),
                 LevelStatePlugin,
+                GameRoomPlugin,
+                LobbyPlugin,
             ),
             networking::NetworkingPlugin,
         ))
-        // .init_state::<ServerState>()
+        .init_state::<ServerState>()
+        .add_loading_state(
+            LoadingState::new(ServerState::Startup)
+                .continue_to_state(ServerState::Lobby)
+                .load_collection::<LevelMetadataAssets>(),
+        )
         // avian3d's collider cache reads `AssetEvent<Mesh>` (for mesh-derived colliders) even
         // though the server never renders — normally registered by rendering plugins the headless
         // server doesn't have, so it needs registering directly instead. `Image` needs the same

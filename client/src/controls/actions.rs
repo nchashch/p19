@@ -62,7 +62,17 @@ pub struct SpawnNpcAction;
 #[action_output(Vec2)]
 pub struct UiNavigate;
 
-/// "Activate the focused UI element" (gamepad South/A, or Enter) — see `ui.rs`'s `MenuControls`.
+/// "Activate the focused UI element" via gamepad South/A — see `ui.rs`'s `MenuControls`. Kept
+/// separate from `UiConfirmEnter` (the literal-Enter counterpart) specifically so their handlers
+/// can react differently: `bevy_ui_widgets` has no native gamepad handling at all, so gamepad
+/// needs a synthetic `Activate` bridge; it *does* react to `KeyCode::Enter` natively, so Enter
+/// doesn't — see `ui.rs`'s `on_ui_confirm`/`on_ui_confirm_enter` doc comments for the full story.
 #[derive(InputAction)]
 #[action_output(bool)]
 pub struct UiConfirm;
+
+/// "Activate the focused UI element" via the literal Enter key — see `UiConfirm`'s doc comment
+/// for why this is a separate action rather than folded into it.
+#[derive(InputAction)]
+#[action_output(bool)]
+pub struct UiConfirmEnter;

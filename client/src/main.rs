@@ -8,6 +8,7 @@ use bevy_seedling::prelude::*;
 use bevy_skein::SkeinPlugin;
 use lightyear::prelude::*;
 use lightyear_avian3d::plugin::{AvianReplicationMode, LightyearAvianPlugin};
+use shared::assets::SharedAssetsPlugin;
 use shared::replication::SharedReplicationPlugin;
 use std::time::Duration;
 
@@ -54,6 +55,12 @@ use crate::{
 fn main() {
     App::new().add_plugins(Prototype19).run();
 }
+
+/// Global UI scale factor — see `bevy::ui::UiScale`'s own doc comment (a plain multiplier applied
+/// on top of the window's scale factor, affecting every `bevy_ui` node uniformly). Not yet
+/// per-platform/settings-driven (e.g. a Deck-vs-desktop default, or a real options-menu slider) —
+/// just a single hardcoded constant for now.
+const UI_SCALE: f32 = 2.0;
 
 struct Prototype19;
 
@@ -133,7 +140,7 @@ impl Plugin for Prototype19 {
                 }, // default
                 ..default()
             },
-            SharedReplicationPlugin,
+            (SharedReplicationPlugin, SharedAssetsPlugin),
             (
                 CubeSpawnerPlugin,
                 NpcSpawnerPlugin,
@@ -169,6 +176,7 @@ impl Plugin for Prototype19 {
         }
 
         app.insert_resource(UiTheme(create_dark_theme()))
+            .insert_resource(UiScale(UI_SCALE))
             .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.15)))
             .insert_resource(GlobalAmbientLight {
                 color: Color::WHITE,
@@ -176,11 +184,6 @@ impl Plugin for Prototype19 {
                 ..default()
             })
             .register_type::<ColliderConstructor>()
-            // `assets::level::Level` (e.g. `assets/levels/start.level.ron`) now resolves
-            // `model`/`skybox` into real handles via `LoadContext`, which `RonAssetPlugin`'s plain
-            // `serde` deserialization can't give it — see `LevelAssetLoader`'s doc comment.
-            .init_asset::<assets::level::Level>()
-            .register_asset_loader(assets::level::LevelAssetLoader)
             .init_asset::<assets::character::Character>()
             .register_asset_loader(assets::character::CharacterAssetLoader)
             .add_loading_state(
@@ -197,6 +200,11 @@ impl Plugin for Prototype19 {
                     ui::ui::spawn_main_menu,
                     assets::collections::override_default_font,
                 ),
+            )
+            .add_systems(
+                Update,
+                assets::collections::override_feathers_button_font
+                    .run_if(resource_exists::<assets::collections::CommonAssets>),
             );
     }
 }

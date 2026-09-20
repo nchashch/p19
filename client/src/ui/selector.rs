@@ -436,6 +436,7 @@ pub fn toggle_selector(
         return;
     };
     open.0 = !open.0;
+    info!("after toggle popup open = {}", open.0);
     if open.0 {
         let max_start = entries.0.len().saturating_sub(SELECTOR_VISIBLE_ROWS);
         let target_index = last_selected.0.unwrap_or(0);
@@ -467,8 +468,6 @@ fn select_option(
     )>,
     mut focus: ResMut<InputFocus>,
     mut commands: Commands,
-    time: Res<Time>,
-    mut recent_activate: Local<Option<(Entity, f64)>>,
 ) {
     let Ok(slot) = slots.get(activate.entity) else {
         return;

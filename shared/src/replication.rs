@@ -9,10 +9,12 @@ use crate::client_events::{
 };
 use crate::combat::{Dead, Gcd, HitPoints};
 use crate::cube_spawner::Cube;
-use crate::level::LevelRoot;
+use crate::level::{LevelRoot, Levels};
 use crate::npc_spawner::Npc;
 use crate::player::{PlayerCharacter, Selectable};
-use crate::server_events::{Attack, EntityDied, Kill, LoadLevel, ServerInGame, UnloadLevel};
+use crate::server_events::{
+    Attack, EntityDied, Kill, LoadLevel, LoadRig, LoadSkybox, ServerInGame, UnloadLevel,
+};
 
 use lightyear::prelude::*;
 
@@ -30,9 +32,12 @@ impl Plugin for SharedReplicationPlugin {
         app.add_channel::<OrderedReliable>(ChannelSettings {
             mode: ChannelMode::OrderedReliable(ReliableSettings::default()),
             ..default()
-        });
+        })
+        .add_direction(NetworkDirection::Bidirectional);
 
         app.component::<LevelRoot>().replicate();
+        app.component::<Levels>().replicate();
+
         app.component::<PlayerCharacter>().replicate();
         app.component::<Character>().replicate();
         app.component::<CharacterController>().replicate();
@@ -84,6 +89,10 @@ impl Plugin for SharedReplicationPlugin {
         app.register_message::<UnloadLevel>()
             .add_direction(NetworkDirection::ServerToClient);
         app.register_message::<LoadLevel>()
+            .add_direction(NetworkDirection::ServerToClient);
+        app.register_message::<LoadRig>()
+            .add_direction(NetworkDirection::ServerToClient);
+        app.register_message::<LoadSkybox>()
             .add_direction(NetworkDirection::ServerToClient);
         app.register_message::<ServerInGame>()
             .add_direction(NetworkDirection::ServerToClient);

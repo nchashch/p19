@@ -1,10 +1,13 @@
 //! Opens the authoritative QUIC (`bevy_quinnet`) endpoint clients connect to, and drives the
 //! scaffold's one demo entity so there's something server-authoritative to observe replicating.
 
+use bevy::asset::RenderAssetUsages;
+use bevy::gltf::GltfLoaderSettings;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
 use lightyear::prelude::*;
 use shared::assets::asset_exists;
+use shared::assets::level::Level;
 use shared::client_events::Join;
 use shared::replication::OrderedReliable;
 use shared::server_events::ServerInGame;
@@ -19,6 +22,7 @@ use shared::{
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use crate::level_state::LevelState;
+use crate::rooms::GameRoom;
 
 /// Netcode's shared secret + protocol tag, replacing the old self-signed QUIC cert — both sides
 /// must agree on the exact same bytes for a connect token to validate, so the client's own
@@ -40,8 +44,11 @@ impl Plugin for NetworkingPlugin {
             .add_observer(on_client_connected)
             .add_observer(on_level_ready)
             .add_observer(on_client_disconnected);
-
-        app.add_systems(Update, (movement, jump, load_level_request, join));
+        app.add_systems(
+            Update,
+            (movement, jump, join).run_if(in_state(ServerState::InGame)),
+        );
+        app.add_systems(Update, load_level_request);
     }
 }
 
@@ -67,34 +74,64 @@ fn jump(receivers: Query<(Entity, &mut MessageReceiver<Jump>)>, mut commands: Co
     }
 }
 
+// TODO: Gate this on some form of authentication and authorization, so only game host can load
+// levels at will, or perhaps people the host has given the rights to change level.
 fn load_level_request(
     receivers: Query<(Entity, &mut MessageReceiver<LoadLevelRequest>)>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
     mut sender: ServerMultiMessageSender,
     server: Single<&Server>,
+    levels: Res<Assets<Level>>,
+    game_room: Res<GameRoom>,
 ) -> Result {
     for (entity, mut receiver) in receivers {
         for request in receiver.receive() {
-            info!("load level request received for {}", &request.id);
-            let id = request.id.clone();
-            if !asset_exists(&asset_server, &id) {
-                info!("level {} doesn't exit", id);
+            let asset_path = request.asset_path.clone();
+
+            info!("load level request received for {asset_path}");
+            /* if !asset_exists(&asset_server, &asset_path) {
+                info!("level {asset_path} doesn't exit");
                 return Ok(());
-            }
+            } */
             commands.set_state(ServerState::Loading);
-            let handle = asset_server.load(GltfAssetLabel::Scene(0).from_asset(id.clone()));
+            let Some(handle) = asset_server.get_handle::<Level>(&asset_path) else {
+                info!("level {asset_path} doesn't exit");
+                return Ok(());
+            };
+            let Some(level) = levels.get(&handle) else {
+                info!("failed to load metadata for level {asset_path}");
+                return Ok(());
+            };
+            dbg!(&level);
+            // TODO: Add a script or some other kind of step/stage to the assets pipeline that would
+            // strip .glb files of all meshes, textures, materials -- anything visual and not
+            // strictly necessary for server side logic -- for the .glb files in the server assets.
+            // This would make it cheaper to provision servers in terms of storage for large levels.
+            let model: Handle<WorldAsset> = asset_server
+                .load_builder()
+                .with_settings(|settings: &mut GltfLoaderSettings| {
+                    settings.load_meshes = RenderAssetUsages::empty();
+                    settings.load_materials = RenderAssetUsages::empty();
+                })
+                .load(GltfAssetLabel::Scene(0).from_asset(&level.model));
             commands
                 .spawn((
                     LevelRoot,
                     Replicate::to_clients(NetworkTarget::All),
                     Transform::IDENTITY,
+                    // Everything parented under this root (`WorldAssetRoot` below, plus cubes/
+                    // NPCs — see `spawn.rs`) inherits this room automatically via
+                    // `HierarchySendPlugin::<ChildOf>`'s cascade (see `rooms.rs`'s doc comment).
+                    // No client is in this room yet — see `rooms::GameRoom`'s own doc comment for
+                    // why that's deliberately not wired up here.
+                    Rooms::single(game_room.0),
                 ))
                 .with_children(|parent| {
-                    parent.spawn(WorldAssetRoot(handle)).observe(on_level_ready);
+                    parent.spawn(WorldAssetRoot(model)).observe(on_level_ready);
                 });
             sender.send::<LoadLevel, OrderedReliable>(
-                &LoadLevel { id },
+                &LoadLevel { asset_path },
                 &server,
                 &NetworkTarget::All,
             )?;
