@@ -160,7 +160,10 @@ fn navigate_step(
     focus_visible: &mut InputFocusVisible,
     parents: &Query<&ChildOf>,
     slots: &Query<&selector::SelectorSlot>,
-    selectors: &mut Query<(&mut selector::SelectorWindowStart, &selector::SelectorEntries)>,
+    selectors: &mut Query<(
+        &mut selector::SelectorWindowStart,
+        &selector::SelectorEntries,
+    )>,
 ) {
     if navigator.navigate(octant).is_ok() {
         focus_visible.0 = true;
@@ -180,7 +183,10 @@ fn on_ui_navigate(
     mut focus_visible: ResMut<InputFocusVisible>,
     parents: Query<&ChildOf>,
     slots: Query<&selector::SelectorSlot>,
-    mut selectors: Query<(&mut selector::SelectorWindowStart, &selector::SelectorEntries)>,
+    mut selectors: Query<(
+        &mut selector::SelectorWindowStart,
+        &selector::SelectorEntries,
+    )>,
     mut hold: ResMut<UiNavigateHold>,
 ) {
     let Ok(direction) = Dir2::new(navigate.value) else {
@@ -222,7 +228,10 @@ fn repeat_ui_navigate_while_held(
     mut focus_visible: ResMut<InputFocusVisible>,
     parents: Query<&ChildOf>,
     slots: Query<&selector::SelectorSlot>,
-    mut selectors: Query<(&mut selector::SelectorWindowStart, &selector::SelectorEntries)>,
+    mut selectors: Query<(
+        &mut selector::SelectorWindowStart,
+        &selector::SelectorEntries,
+    )>,
 ) {
     let Some(octant) = hold.direction else {
         return;
@@ -349,7 +358,7 @@ pub(crate) fn main_menu_buttons() -> impl Scene {
 /// registrations). Only `width` is overridden on top of `@FeathersButton`'s own `Node` (mirrors
 /// `bevy_feathers::controls::button::FeathersToolButton`'s identical partial-override shape) —
 /// height is left at feathers' own `size::ROW_HEIGHT` rather than forcing the old fixed 50px.
-fn menu_button(label_key: &'static str, variant: ButtonVariant) -> impl Scene {
+pub fn menu_button(label_key: &'static str, variant: ButtonVariant) -> impl Scene {
     bsn! {
         @FeathersButton {
             @variant: {variant},
@@ -570,7 +579,7 @@ fn spawn_vr_main_menu_wrist_panel(
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    common_assets: Res<CommonAssets>,
+    // common_assets: Res<CommonAssets>,
     left_grip: Query<Entity, With<XrTrackedLeftGrip>>,
     existing: Query<(), With<VrMainMenuWristPanel>>,
 ) {
