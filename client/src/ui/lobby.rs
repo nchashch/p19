@@ -14,7 +14,7 @@ use crate::{
     events::{Disconnect, Play},
     ui::{
         ui::menu_button,
-        widgets::{Activate, Tooltip, button, panel},
+        widgets::{Activate, Tooltip},
     },
 };
 
