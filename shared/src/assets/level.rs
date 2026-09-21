@@ -129,7 +129,7 @@ pub struct LevelMetadataAssets {
 
 // This component is supposed to be attached to "logical" entities on the server.
 // Then the client would load in the visuals or something else referenced by this component.
-#[derive(Component, Deserialize, Serialize, Reflect)]
+#[derive(Component, Deserialize, Serialize, Reflect, Debug)]
 #[reflect(Component)]
 pub struct ClientWorldAsset {
     pub asset_path: String,

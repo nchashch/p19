@@ -2,6 +2,7 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::assets::level::ClientWorldAsset;
 use crate::character_controller::{
     Character, CharacterController, DesiredMotion, GroundDetection, Grounded, Idle,
 };
@@ -35,6 +36,7 @@ impl Plugin for SharedReplicationPlugin {
         })
         .add_direction(NetworkDirection::Bidirectional);
 
+        app.component::<ClientWorldAsset>().replicate();
         app.component::<InGameRoot>().replicate();
         app.component::<Levels>().replicate();
         app.component::<ClientInGame>().replicate();

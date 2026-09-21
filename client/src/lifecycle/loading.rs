@@ -20,14 +20,24 @@ impl Plugin for LoadingPlugin {
     }
 }
 
+#[derive(Component)]
+struct ClientWorldAssetSpawned;
+
 fn spawn_client_world_assets(
     client_world_assets: Query<(Entity, &ClientWorldAsset), Without<WorldAssetRoot>>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
     for (entity, client_world_asset) in client_world_assets {
-        let world_asset: Handle<WorldAsset> = asset_server.load(&client_world_asset.asset_path);
-        commands.entity(entity).insert(WorldAssetRoot(world_asset));
+        info!(
+            "entity {entity} has client world asset {:?}",
+            client_world_asset
+        );
+        let world_asset: Handle<WorldAsset> = asset_server
+            .load(GltfAssetLabel::Scene(0).from_asset(client_world_asset.asset_path.clone()));
+        commands
+            .entity(entity)
+            .insert((WorldAssetRoot(world_asset), ClientWorldAssetSpawned));
     }
 }
 

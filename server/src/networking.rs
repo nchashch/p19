@@ -6,7 +6,7 @@ use bevy::gltf::GltfLoaderSettings;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
 use lightyear::prelude::*;
-use shared::assets::level::Level;
+use shared::assets::level::{ClientReplicate, Level};
 use shared::client_events::{InGameRequest, LobbyRequest};
 use shared::level::LobbyRoot;
 use shared::replication::ClientInGame;
@@ -46,7 +46,7 @@ impl Plugin for NetworkingPlugin {
             Update,
             (movement, jump, in_game_request).run_if(in_state(ServerState::InGame)),
         );
-        app.add_systems(Update, load_level_request);
+        app.add_systems(Update, (load_level_request, setup_client_replicate));
     }
 }
 
@@ -69,6 +69,17 @@ fn jump(receivers: Query<(Entity, &mut MessageReceiver<Jump>)>, mut commands: Co
         for _request in receiver.receive() {
             commands.trigger(JumpInput { entity });
         }
+    }
+}
+
+fn setup_client_replicate(entities: Query<Entity, With<ClientReplicate>>, mut commands: Commands) {
+    for entity in entities {
+        commands
+            .entity(entity)
+            .remove::<ClientReplicate>()
+            .insert(Replicate::to_clients(
+                lightyear::connection::network_target::Target::All,
+            ));
     }
 }
 
