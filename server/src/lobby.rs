@@ -61,5 +61,7 @@ fn join_lobby_room_on_connect(
     lobby_room: Res<LobbyRoom>,
     mut commands: Commands,
 ) {
-    commands.entity(add.entity).insert(Rooms::single(lobby_room.0));
+    commands
+        .entity(add.entity)
+        .insert(Rooms::single(lobby_room.0));
 }

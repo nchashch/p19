@@ -128,8 +128,22 @@ pub struct LevelMetadataAssets {
 }
 
 // This component is supposed to be attached to "logical" entities on the server.
-// Then the client would load in the
-#[derive(Component)]
+// Then the client would load in the visuals or something else referenced by this component.
+#[derive(Component, Deserialize, Serialize, Reflect)]
+#[reflect(Component)]
 pub struct ClientWorldAsset {
-    pub asset_path: AssetPath<'static>,
+    pub asset_path: String,
 }
+
+// TODO: Implement this -- so it works in a similar way to ClientWorldAsset.
+#[derive(Component, Deserialize, Serialize, Reflect)]
+#[reflect(Component)]
+pub struct Skybox {
+    pub asset_path: String,
+}
+
+// This is a marker component to mark entities that must be replicated from the server to the client
+// in the Skein authored .glb files on the server with the server logic.
+#[derive(Component, Deserialize, Serialize, Reflect)]
+#[reflect(Component)]
+pub struct ClientReplicate;

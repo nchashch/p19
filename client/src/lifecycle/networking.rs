@@ -35,16 +35,24 @@ impl Plugin for NetworkingPlugin {
     }
 }
 
-fn on_in_game(add: On<Add, ClientInGame>, link: Res<ClientLink>, mut commands: Commands) {
-    info!("ClientInGame observed");
-    if link.0 == add.entity {
+fn on_in_game(
+    add: On<Add, ClientInGame>,
+    is_controlled: Query<Has<Controlled>>,
+    mut commands: Commands,
+) {
+    info!("client in game add received");
+    if is_controlled.get(add.entity) == Ok(true) {
         info!("client is now in game");
         commands.set_state(GameState::InGame);
     }
 }
 
-fn on_out_of_game(add: On<Remove, ClientInGame>, link: Res<ClientLink>, mut commands: Commands) {
-    if link.0 == add.entity {
+fn on_out_of_game(
+    remove: On<Remove, Controlled>,
+    is_controlled: Query<Has<Controlled>>,
+    mut commands: Commands,
+) {
+    if is_controlled.get(remove.entity) == Ok(true) {
         info!("client is now out of game");
         commands.set_state(GameState::Lobby);
     }

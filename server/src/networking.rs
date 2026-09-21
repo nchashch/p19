@@ -8,18 +8,19 @@ use bevy::world_serialization::WorldInstanceReady;
 use lightyear::prelude::*;
 use shared::assets::level::Level;
 use shared::client_events::{InGameRequest, LobbyRequest};
+use shared::level::LobbyRoot;
 use shared::replication::ClientInGame;
 use shared::{
     character_controller::{JumpInput, MovementInput},
     client_events::{Jump, LoadLevelRequest, Movement},
     game_state::ServerState,
-    level::LevelRoot,
+    level::InGameRoot,
     player::{PlayerCharacterSpawner, player},
 };
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use crate::level_state::LevelState;
-use crate::rooms::GameRoom;
+use crate::rooms::{GameRoom, LobbyRoom};
 
 /// Netcode's shared secret + protocol tag, replacing the old self-signed QUIC cert — both sides
 /// must agree on the exact same bytes for a connect token to validate, so the client's own
@@ -78,17 +79,12 @@ fn load_level_request(
     asset_server: Res<AssetServer>,
     mut commands: Commands,
     levels: Res<Assets<Level>>,
-    game_room: Res<GameRoom>,
+    in_game_root: Single<Entity, With<InGameRoot>>,
 ) -> Result {
     for (_entity, mut receiver) in receivers {
         for request in receiver.receive() {
             let asset_path = request.asset_path.clone();
-
             info!("load level request received for {asset_path}");
-            /* if !asset_exists(&asset_server, &asset_path) {
-                info!("level {asset_path} doesn't exit");
-                return Ok(());
-            } */
             commands.set_state(ServerState::Loading);
             let Some(handle) = asset_server.get_handle::<Level>(&asset_path) else {
                 info!("level {asset_path} doesn't exit");
@@ -110,21 +106,9 @@ fn load_level_request(
                     settings.load_materials = RenderAssetUsages::empty();
                 })
                 .load(GltfAssetLabel::Scene(0).from_asset(&level.model));
-            commands
-                .spawn((
-                    LevelRoot,
-                    Replicate::to_clients(NetworkTarget::All),
-                    Transform::IDENTITY,
-                    // Everything parented under this root (`WorldAssetRoot` below, plus cubes/
-                    // NPCs — see `spawn.rs`) inherits this room automatically via
-                    // `HierarchySendPlugin::<ChildOf>`'s cascade (see `rooms.rs`'s doc comment).
-                    // No client is in this room yet — see `rooms::GameRoom`'s own doc comment for
-                    // why that's deliberately not wired up here.
-                    Rooms::single(game_room.0),
-                ))
-                .with_children(|parent| {
-                    parent.spawn(WorldAssetRoot(model)).observe(on_level_ready);
-                });
+            commands.entity(*in_game_root).with_children(|parent| {
+                parent.spawn(WorldAssetRoot(model)).observe(on_level_ready);
+            });
         }
     }
     Ok(())
@@ -138,6 +122,7 @@ fn on_level_ready(
     if !matches!(server_state.get(), ServerState::Loading) {
         return Ok(());
     }
+    info!("server is in game");
     commands.set_state(ServerState::InGame);
     Ok(())
 }
@@ -145,43 +130,31 @@ fn on_level_ready(
 fn in_game_request(
     receivers: Query<(Entity, &mut MessageReceiver<InGameRequest>)>,
     player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
+    in_game_root: Single<Entity, With<InGameRoot>>,
     game_room: Res<GameRoom>,
     mut commands: Commands,
 ) {
     for (entity, mut receiver) in receivers {
         for _request in receiver.receive() {
             if let Ok(player_spawner_transform) = player_spawner.single() {
-                spawn_player_for_client(
-                    entity,
-                    "Player Name".to_string(),
-                    player_spawner_transform.translation,
-                    game_room.0,
-                    &mut commands,
-                );
-                info!("player components inserted");
+                let name = "player name".to_string();
+                let at = player_spawner_transform.translation;
+                let room = game_room.0;
+                commands.entity(entity).insert(Rooms::single(room));
+                commands.spawn((
+                    player(name, at),
+                    Replicate::to_clients(NetworkTarget::All),
+                    ControlledBy {
+                        owner: entity,
+                        lifetime: Lifetime::Persistent,
+                    },
+                    ClientInGame,
+                    ChildOf(*in_game_root),
+                ));
+                info!("player character spawned");
             }
         }
     }
-}
-
-/// Inserts the `player(...)` bundle onto `client_entity` (the client's own connection entity
-/// doubles as its player character — see `on_movement`/`on_jump`) and tells that one client which
-/// entity is theirs via a targeted `PlayerSpawned`, so client-side code doesn't have to guess
-/// which of the (possibly several, once other players are connected) replicated
-/// `PlayerCharacter` entities is its own.
-fn spawn_player_for_client(
-    client_entity: Entity,
-    name: String,
-    at: Vec3,
-    room: RoomId,
-    commands: &mut Commands,
-) {
-    commands.entity(client_entity).insert((
-        player(name, at),
-        Replicate::to_clients(NetworkTarget::All),
-        Rooms::single(room),
-        ClientInGame,
-    ));
 }
 
 /// Spawns the server's own connection entity — `NetcodeServer` (the connect-token/handshake

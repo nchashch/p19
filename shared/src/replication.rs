@@ -11,7 +11,7 @@ use crate::client_events::{
 };
 use crate::combat::{Dead, Gcd, HitPoints};
 use crate::cube_spawner::Cube;
-use crate::level::{LevelRoot, Levels};
+use crate::level::{InGameRoot, Levels};
 use crate::npc_spawner::Npc;
 use crate::player::{PlayerCharacter, Selectable};
 use crate::server_events::{Attack, EntityDied, Kill};
@@ -35,9 +35,10 @@ impl Plugin for SharedReplicationPlugin {
         })
         .add_direction(NetworkDirection::Bidirectional);
 
-        app.component::<LevelRoot>().replicate();
+        app.component::<InGameRoot>().replicate();
         app.component::<Levels>().replicate();
         app.component::<ClientInGame>().replicate();
+        app.component::<ClientInLobby>().replicate();
 
         app.component::<PlayerCharacter>().replicate();
         app.component::<Character>().replicate();
@@ -95,3 +96,6 @@ impl Plugin for SharedReplicationPlugin {
 
 #[derive(Component, Serialize, Deserialize)]
 pub struct ClientInGame;
+
+#[derive(Component, Serialize, Deserialize)]
+pub struct ClientInLobby;

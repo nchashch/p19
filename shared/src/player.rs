@@ -18,12 +18,12 @@ const PLAYER_TERMINAL_VELOCITY: f32 = 300.0;
 #[reflect(Component)]
 pub struct PlayerCharacterSpawner;
 
-/// `#[require(Visibility)]` for the same reason `shared::level::LevelRoot` needs it: the client's
+/// `#[require(Visibility)]` for the same reason `shared::level::InGameRoot` needs it: the client's
 /// mirror of this entity only ever gets whatever's explicitly `.replicate::<T>()`-registered, and
 /// `Visibility`/`InheritedVisibility`/`ViewVisibility` are deliberately never replicated (meant to
 /// be computed locally, the same way `GlobalTransform` is computed locally from `Transform`).
 /// Without this, the client's replicated `PlayerCharacter` had no `Visibility` at all, which
-/// produced the same `bevy_app::hierarchy` B0004 warning `LevelRoot` used to (a child with
+/// produced the same `bevy_app::hierarchy` B0004 warning `InGameRoot` used to (a child with
 /// `InheritedVisibility` — e.g. the `rig.glb` model `player_character.rs::decorate_other_players`
 /// attaches to other players — parented under an entity that itself has none).
 #[derive(Component, Reflect, Default, Serialize, Deserialize)]

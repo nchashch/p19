@@ -62,7 +62,10 @@ fn main() {
             SharedAssetsPlugin,
             ServerCombatPlugin,
             ServerSpawnPlugin,
-            CharacterControllerPlugin,
+            //
+            // TODO: Implement character controller with client side prediction.
+            // CharacterControllerPlugin,
+
             // Loads `.glb` level geometry headlessly: `GltfPlugin` parses the file,
             // `WorldSerializationPlugin` instantiates it as a `WorldAssetRoot`/reflected entity
             // graph (the same mechanism `WorldInstanceReady` etc. rely on client-side), and

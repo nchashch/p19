@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use lightyear::prelude::*;
 use shared::client_events::SpawnNpcRequest;
-use shared::level::LevelRoot;
+use shared::level::InGameRoot;
 use shared::npc_spawner::{Npc, NpcSpawner};
 use shared::replication::OrderedReliable;
 
@@ -42,7 +42,7 @@ const UI_QUAD_HEIGHT: f32 = 1.8;
 
 fn decorate_npcs(
     cubes: Query<Entity, (With<Npc>, Without<Decorated>)>,
-    level_root: Single<Entity, With<LevelRoot>>,
+    level_root: Single<Entity, With<InGameRoot>>,
     common_assets: Res<CommonAssets>,
     npc_ui_quad: Res<NpcUiQuad>,
     mut commands: Commands,

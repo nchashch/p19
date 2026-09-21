@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::assets::level::Level;
 
 /// Required components matter here specifically because of replication: the client's mirror of
-/// this entity only ever gets whatever's explicitly `.replicate::<T>()`-registered (`LevelRoot`
+/// this entity only ever gets whatever's explicitly `.replicate::<T>()`-registered (`InGameRoot`
 /// and `Transform` today) — `Visibility`/`InheritedVisibility`/`ViewVisibility` are never
 /// replicated (they're meant to be computed locally from `Visibility`, the same way
 /// `GlobalTransform` is computed locally from `Transform`), so without requiring them here the
@@ -14,7 +14,11 @@ use crate::assets::level::Level;
 /// child has it — and left the whole subtree's visibility propagation inconsistent.
 #[derive(Component, Default, Serialize, Deserialize)]
 #[require(Transform, Visibility)]
-pub struct LevelRoot;
+pub struct InGameRoot;
+
+#[derive(Component, Default, Serialize, Deserialize)]
+#[require(Transform, Visibility)]
+pub struct LobbyRoot;
 
 #[derive(Component, Default, Serialize, Deserialize)]
 pub struct Levels {

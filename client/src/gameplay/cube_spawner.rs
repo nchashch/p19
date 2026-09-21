@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use lightyear::prelude::*;
 use shared::client_events::SpawnCubeRequest;
 use shared::cube_spawner::{Cube, CubeSpawner};
-use shared::level::LevelRoot;
+use shared::level::InGameRoot;
 use shared::replication::OrderedReliable;
 
 use crate::assets::collections::CommonAssets;
@@ -36,7 +36,7 @@ fn request_spawn_cube(
 
 fn decorate_cubes(
     cubes: Query<Entity, (With<Cube>, Without<Decorated>)>,
-    level_root: Single<Entity, With<LevelRoot>>,
+    level_root: Single<Entity, With<InGameRoot>>,
     common_assets: Res<CommonAssets>,
     mut commands: Commands,
 ) {

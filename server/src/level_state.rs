@@ -8,7 +8,7 @@ use bevy::prelude::*;
 /// `Loading`/`LevelLoaded` carry the requested level's id so `on_load_level_request` can reject
 /// a second `LoadLevelRequest` arriving while one is already in flight or already loaded — e.g. a
 /// client sending it twice (double-fired UI button, retried packet, or a malicious client) used
-/// to spawn a second `LevelRoot`/`WorldAssetRoot` into the same ECS world, corrupting the game
+/// to spawn a second `InGameRoot`/`WorldAssetRoot` into the same ECS world, corrupting the game
 /// (duplicate colliders, duplicate `PlayerCharacterSpawner`s, etc.). Switching to a genuinely
 /// different level isn't supported yet either way — the server doesn't despawn a previous level's
 /// geometry on reload (see `CLAUDE.md`'s "known gap" on this) — so any request beyond the first is

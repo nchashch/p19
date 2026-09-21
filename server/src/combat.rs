@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use lightyear::prelude::*;
 use shared::{
     client_events::{AttackAttempt, KillAttempt},
-    combat::{ATTACK_RANGE, DAMAGE, Dead, Gcd, HitPoints},
+    combat::{Dead, Gcd, HitPoints, ATTACK_RANGE, DAMAGE},
     player::Selectable,
     replication::OrderedReliable,
     server_events::{Attack, EntityDied, Kill},

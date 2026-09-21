@@ -19,8 +19,9 @@
 
 use bevy::prelude::*;
 use lightyear::prelude::*;
+use shared::level::{InGameRoot, LobbyRoot};
 
-/// The single room every in-game entity currently belongs to. Only `LevelRoot` is tagged with
+/// The single room every in-game entity currently belongs to. Only `InGameRoot` is tagged with
 /// this directly (see `networking.rs`'s `load_level_request`) — everything parented under it
 /// (level geometry, cubes, NPCs — see `spawn.rs`) inherits membership automatically via
 /// `HierarchySendPlugin::<ChildOf>`'s cascade, no per-entity tagging needed. Also inserted onto a
@@ -50,8 +51,12 @@ pub struct GameRoom(pub RoomId);
 pub struct LobbyRoom(pub RoomId);
 
 fn allocate_rooms(mut commands: Commands, mut allocator: ResMut<RoomAllocator>) {
-    commands.insert_resource(GameRoom(allocator.allocate()));
-    commands.insert_resource(LobbyRoom(allocator.allocate()));
+    let game_room = allocator.allocate();
+    let lobby_room = allocator.allocate();
+    commands.insert_resource(GameRoom(game_room));
+    commands.insert_resource(LobbyRoom(lobby_room));
+    commands.spawn((LobbyRoot, Rooms::single(lobby_room)));
+    commands.spawn((InGameRoot, Rooms::single(game_room)));
 }
 
 pub struct GameRoomPlugin;
