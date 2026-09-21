@@ -5,6 +5,7 @@ members = ["client", "server", "shared"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
 
 # Debug symbols in the release profile so Tracy (see `client`'s `bevy/trace_tracy` feature) shows
 # real function names instead of addresses. Cargo profiles are workspace-wide, not per-member, so
