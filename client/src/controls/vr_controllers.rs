@@ -1,6 +1,8 @@
 use avian3d::prelude::*;
 use bevy::color::palettes::css::{AQUA, WHITE, YELLOW};
 use bevy::prelude::*;
+use bevy_enhanced_input::prelude::{Action, ActionMock, ActionValue, Actions, MockSpan, TriggerState};
+use bevy_ahoy::input::Movement as AhoyMovement;
 use bevy_mod_openxr::openxr_session_running;
 use bevy_mod_xr::session::XrTrackingRoot;
 use bevy_xr_utils::actions::{
@@ -11,8 +13,10 @@ use bevy_xr_utils::tracking_utils::{
     TrackingUtilitiesPlugin, XrTrackedLeftGrip, XrTrackedRightGrip, XrTrackedView,
 };
 use lightyear::prelude::*;
+use bevy_ahoy::input::RotateCamera as AhoyRotate;
+use shared::inputs::{MouseLook, PlayerInputContext};
 use shared::player::{PlayerCharacter, Selectable};
-use shared::replication::OrderedReliable;
+use std::f32::consts::PI;
 
 use crate::controls::targeting::{Hovered, SELECT_RANGE, Selected};
 use crate::gameplay::player_character::LocalPlayer;
@@ -407,45 +411,86 @@ fn radial_dead_zone(value: Vec2, lower: f32, upper: f32) -> Vec2 {
     value.normalize() * rescaled
 }
 
-/// Left stick moves the player capsule relative to the VR rig's yaw (which right-stick
-/// snap-turns); right stick snap-turns that yaw by `SNAP_TURN_ANGLE` per push, edge-triggered
-/// (`snap_turn_active`) so holding the stick past the threshold doesn't spin continuously.
-/// Movement is only re-sent when it changes (`last_sent_direction`) rather than every frame —
-/// otherwise, once the stick returns to neutral, this would spam a zero `Movement` every tick and
-/// immediately cancel any simultaneous keyboard-driven movement (VR headset + keyboard together
-/// is an explicit target input combo for this project).
+/// Left stick moves the player via the **replicated ahoy `Movement` action** (mocked — see
+/// below), relative to the character's look orientation (which the head/rig rotation feeds —
+/// see `vr_look_bridge`); right stick snap-turns that yaw by `SNAP_TURN_ANGLE` per push,
+/// edge-triggered (`snap_turn_active`) so holding the stick past the threshold doesn't spin
+/// continuously. The snap-turn itself feeds the look stream too: it rotates the rig, which is
+/// an ancestor of the tracked head, so the head's *global* rotation deltas carry it.
 ///
-/// The snap-turn pivots around the player's current head position (`head`, compensating
-/// `rig_transform.translation` alongside its rotation), not around `VrPlayspaceRig`'s own fixed
-/// origin. Rotating the rig in place (translation untouched) is geometrically centered on the
-/// capsule — the rig's origin *is* the capsule's own position, see `on_player_spawned` — but
-/// nobody stands exactly at their tracked playspace's calibrated center at all times, and the
-/// *visible* effect of a turn is governed by how far the player's real head currently is from
-/// whatever point the rig rotates around, not by that point's relationship to the capsule. Left
-/// uncompensated, every snap-turn swings the view through an arc sized by that real-world offset,
-/// which reads as pivoting around some other, arbitrary point rather than turning in place.
+/// The stick is written as a **local** (character-relative) `Vec2` now, not a world-space
+/// direction: ahoy's wish direction is `orientation × local move`, and the orientation comes
+/// from `CharacterLook` (which tracks the head/rig). The old path pre-rotated the stick by the
+/// rig yaw and sent a world-space `Movement` network message to the old (now deleted)
+/// controller.
+///
+/// Input delivery is BEI's mock mechanism (`ActionMock`, `MockSpan::once`): the replicated
+/// action entities have real bindings on desktop (WASD/stick — see
+/// `bind_replicated_ahoy_actions`), and a mock overrides them for one update. In VR the mocks
+/// are rewritten every frame, so the bindings are effectively overridden while an XR session
+/// runs — the documented "VR headset + keyboard together" combo therefore degrades to
+/// mock-only movement (the keyboard's WASD won't add to the stick while in VR); that combo
+/// needs either binding-level input merging or a separate VR input context — a known
+/// follow-up, not a regression (VR movement was dead anyway between the controller gut and
+/// this rewrite).
 fn vr_locomotion(
     left_stick: Single<&XRUtilsActionState, With<LeftStickAction>>,
     right_stick: Single<&XRUtilsActionState, With<RightStickAction>>,
     head: Single<&Transform, With<XrTrackedView>>,
+    head_global: Single<&GlobalTransform, With<XrTrackedView>>,
     rig: Single<(&mut Transform, &mut VrPlayspaceRig), Without<XrTrackedView>>,
-    mut sender: Single<&mut MessageSender<shared::client_events::Movement>>,
-    mut last_sent_direction: Local<Option<Vec3>>,
+    local_player: Res<LocalPlayer>,
+    contexts: Query<&Actions<PlayerInputContext>, With<PlayerCharacter>>,
+    movement_actions: Query<(), With<Action<AhoyMovement>>>,
+    rotate_mouse: Query<(), (With<Action<AhoyRotate>>, With<MouseLook>)>,
+    mut look_state: Local<Option<(f32, f32)>>,
     mut snap_turn_active: Local<bool>,
+    mut commands: Commands,
 ) {
     let (mut rig_transform, mut rig) = rig.into_inner();
 
-    if let XRUtilsActionState::Vector(state) = *left_stick {
-        let stick = radial_dead_zone(
-            Vec2::from(state.current_state),
-            STICK_DEAD_ZONE_LOWER,
-            STICK_DEAD_ZONE_UPPER,
-        );
-        let rotated = Rot2::radians(rig.yaw) * stick;
-        let direction = Vec3::new(-rotated.x, 0.0, rotated.y);
-        if *last_sent_direction != Some(direction) {
-            sender.send::<OrderedReliable>(shared::client_events::Movement { direction });
-            *last_sent_direction = Some(direction);
+    // Head look → the replicated rotate action, as per-frame deltas. The client camera
+    // observer (`rotate_camera`) and the server's look accumulator both consume this — same
+    // stream as desktop mouse deltas. The euler wraps at ±π, so the yaw delta is wrapped back
+    // into (−π, π] before accumulating.
+    let (yaw, pitch, _) = head_global.rotation().to_euler(EulerRot::YXZ);
+    let Some((last_yaw, last_pitch)) = *look_state else {
+        *look_state = Some((yaw, pitch));
+        return;
+    };
+    let yaw_delta = (yaw - last_yaw + PI).rem_euclid(2.0 * PI) - PI;
+    let pitch_delta = pitch - last_pitch;
+    *look_state = Some((yaw, pitch));
+
+    if let Some(player) = local_player.0 {
+        if let Ok(actions) = contexts.get(player) {
+            for action_entity in actions.iter() {
+                if rotate_mouse.contains(action_entity) {
+                    commands.entity(action_entity).insert(ActionMock::new(
+                        TriggerState::Fired,
+                        ActionValue::Axis2D(Vec2::new(-yaw_delta, pitch_delta)),
+                        MockSpan::once(),
+                    ));
+                } else if movement_actions.contains(action_entity) {
+                    // Dead-zoned *local* stick — the character's look orientation supplies the
+                    // world-space rotation. Mocked as Fired even at zero (the value zeroes the
+                    // movement), so releasing the stick stops the character the same way a
+                    // released desktop key does.
+                    let stick = match *left_stick {
+                        XRUtilsActionState::Vector(state) => radial_dead_zone(
+                            Vec2::from(state.current_state),
+                            STICK_DEAD_ZONE_LOWER,
+                            STICK_DEAD_ZONE_UPPER,
+                        ),
+                        _ => Vec2::ZERO,
+                    };
+                    commands.entity(action_entity).insert(ActionMock::new(
+                        TriggerState::Fired,
+                        ActionValue::Axis2D(stick),
+                        MockSpan::once(),
+                    ));
+                }
+            }
         }
     }
 

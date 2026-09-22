@@ -23,5 +23,6 @@ Each record uses the same shape: **Context** (the problem, forces, constraints),
 | [0005](./0005-gut-character-controller-for-prediction-rewrite.md) | Gut the character controller pending a client-side-prediction rewrite | Accepted |
 | [0006](./0006-rename-claude-md-to-llm-md.md) | Rename CLAUDE.md to LLM.md, making agent guidance tool-agnostic | Superseded by [0007](./0007-adopt-agents-md-standard.md) |
 | [0007](./0007-adopt-agents-md-standard.md) | Adopt the AGENTS.md standard for the agent-guidance file | Accepted |
+| [0008](./0008-adopt-bevy-ahoy-character-controller.md) | Adopt bevy_ahoy as the character controller, over lightyear-replicated BEI input | Accepted |
 
 New records should be added to this index in the same PR/commit that adds the file.

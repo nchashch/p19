@@ -61,3 +61,4 @@ quick-xml.workspace = true
 ron.workspace = true
 lightyear.workspace = true
 lightyear_avian3d.workspace = true
+lightyear_inputs_bei = { workspace = true, features = ["client"] }

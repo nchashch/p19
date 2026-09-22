@@ -3,13 +3,21 @@ use crate::controls::actions::*;
 use crate::controls::fps_controller::FpsCamera;
 use crate::controls::targeting::{Hovered, SELECT_RANGE, Selected, TargetingPlugin};
 use crate::events::{SpawnCube, SpawnNpc};
+use crate::gameplay::player_character::LocalPlayer;
 use crate::ui::hud::DataFrameVisible;
+use bevy::ecs::relationship::Relationship;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions};
+// Ahoy's KCC consumes its OWN `InputAction` types (see `AhoyInputPlugin`'s observers), which
+// would name-collide with this repo's legacy `Movement`/`Jump` actions (`actions.rs`) —
+// aliased until the M4 cleanup removes the legacy pair.
+use bevy_ahoy::input::{Jump as AhoyJump, Movement as AhoyMovement, RotateCamera as AhoyRotate};
+use bevy_ahoy::CharacterLook;
 use bevy_enhanced_input::prelude::{Press, *};
 use chill_bevy_console::console_closed;
 use shared::client_events::{AttackAttempt, KillAttempt};
 use shared::game_state::{GameState, ModalMenuState};
+use shared::inputs::{MouseLook, PlayerInputContext, StickLook};
 use shared::player::Selectable;
 use shared::replication::OrderedReliable;
 use std::f32::consts::PI;
@@ -29,13 +37,18 @@ pub struct PlayerControls;
 
 impl Plugin for PlayerControlsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((EnhancedInputPlugin, TargetingPlugin))
-            .add_input_context::<PlayerControls>();
-
+        // `EnhancedInputPlugin` is also added by `shared::inputs::SharedInputsPlugin` (via
+        // `lightyear_inputs_bei`'s `InputPlugin`, which sits earlier in `main.rs`'s plugin
+        // tuple since the M0 prediction wiring) — adding it unconditionally here would
+        // double-register it and panic. The guard keeps this plugin self-sufficient if
+        // plugin order ever changes.
+        app.add_plugins(TargetingPlugin);
+        if !app.is_plugin_added::<EnhancedInputPlugin>() {
+            app.add_plugins(EnhancedInputPlugin);
+        }
+        app.add_input_context::<PlayerControls>();
         app.add_systems(OnEnter(GameState::MainMenu), unlock_cursor);
         app.add_systems(OnEnter(GameState::InGame), lock_cursor);
-
-        app.add_observer(on_movement_stop);
 
         add_observers_run_if!(app, console_closed, main_menu, toggle_modal_menu);
 
@@ -47,16 +60,48 @@ impl Plugin for PlayerControlsPlugin {
             console_closed.and_then(in_state(ModalMenuState::Closed)),
             attack,
             kill,
-            apply_fps_camera_rotation,
+            rotate_camera,
             select,
             deselect,
             shoot,
             spawn_npc,
-            on_jump,
-            on_movement,
             toggle_data_frame,
         );
+
+        // Not an observer — a continuous feed (ahoy's KCC reads `CharacterLook` every fixed
+        // tick, so it must track the camera even when no look input fires this frame).
+        app.add_systems(Update, update_character_look);
+
+        // Bind the server-authored, replicated ahoy action entities for OUR controlled context
+        // (see `bind_replicated_ahoy_actions`'s doc comment — the M2 input flow). Polling
+        // `Update`, not observers — same replication-arrival reasoning as
+        // `on_player_spawned`.
+        app.add_systems(Update, bind_replicated_ahoy_actions);
     }
+}
+
+/// Feeds `bevy_ahoy`'s `CharacterLook` on the local player character from the FPS camera's
+/// world rotation — ahoy derives movement direction (and swimming pitch, etc.) from it.
+///
+/// Ahoy's own `CharacterControllerCameraOf` would maintain this out of the box, but this repo
+/// keeps its own `FpsCamera` rig (mouse-pixel + gamepad-stick handling, modal/console gating),
+/// so the look is bridged instead. `from_quat` on the camera's *global* rotation sidesteps
+/// every yaw/pitch sign-convention question — it's the exact conversion ahoy's own camera
+/// uses.
+fn update_character_look(
+    local_player: Res<LocalPlayer>,
+    mut looks: Query<&mut CharacterLook>,
+    cameras: Query<&GlobalTransform, With<FpsCamera>>,
+) {
+    let (Some(player), Ok(camera)) = (local_player.0, cameras.single()) else {
+        return;
+    };
+    let Ok(mut look) = looks.get_mut(player) else {
+        return;
+    };
+    let (yaw, pitch, _) = camera.rotation().to_euler(EulerRot::YXZ);
+    look.yaw = yaw;
+    look.pitch = pitch;
 }
 
 fn unlock_cursor(mut cursor_options: Single<&mut CursorOptions>) {
@@ -121,59 +166,26 @@ fn toggle_data_frame(
     data_frame_visible.0 = !data_frame_visible.0;
 }
 
-fn on_movement(
-    movement_event: On<Fire<Movement>>,
-    fps_camera: Query<&FpsCamera>,
-    mut sender: Single<&mut MessageSender<shared::client_events::Movement>>,
-) {
-    let Ok(fps_camera) = fps_camera.single() else {
-        return;
-    };
-    let rotation = Rot2::radians(fps_camera.yaw);
-    let rotated = rotation * movement_event.value;
-
-    sender.send::<OrderedReliable>(shared::client_events::Movement {
-        direction: Vec3::new(-rotated.x, 0.0, rotated.y),
-    });
-}
-
-fn on_movement_stop(
-    _: On<Complete<Movement>>,
-    mut sender: Single<&mut MessageSender<shared::client_events::Movement>>,
-) {
-    sender.send::<OrderedReliable>(shared::client_events::Movement {
-        direction: Vec3::ZERO,
-    });
-}
-
-/// Translates the `bevy_enhanced_input` jump action into the input-library-agnostic
-/// `shared::character_controller::JumpInput` the controller actually runs on.
-fn on_jump(_: On<Fire<Jump>>, mut sender: Single<&mut MessageSender<shared::client_events::Jump>>) {
-    sender.send::<OrderedReliable>(shared::client_events::Jump);
-}
-
-/// Marks the right-stick's `FpsCameraRotation` action entity (as opposed to the mouse-motion
-/// one) so `apply_fps_camera_rotation` can tell which fired it — the stick's value already
-/// carries its own rate/sensitivity scaling (`GAMEPAD_LOOK_SPEED` + `DeltaScale`, see
-/// `player_controls()`), unlike mouse's raw pixel delta, which still needs `FpsCamera::sensitivity`.
-#[derive(Component)]
-struct GamepadLook;
-
-fn apply_fps_camera_rotation(
-    rotation: On<Fire<FpsCameraRotation>>,
+/// Rotates the FPS camera from the replicated ahoy `RotateCamera` actions — **the same events
+/// the server's look accumulator consumes (`server::input`)**, which is the whole point of this
+/// observer: ONE consumer per input. BEI gives a binding's input to the first action that reads
+/// it each tick (other actions read zero — "already consumed"), so the old dual path (legacy
+/// `FpsCameraRotation` + replicated `RotateCamera` both bound to mouse motion) split the mouse
+/// deltas nondeterministically between them, starving the server's look to ~20-30% of the
+/// client's turn rate — the server's wish direction then diverged from the camera and its
+/// corrections dragged the player sideways ("movement locked to one axis").
+///
+/// The per-device scaling lives in the bindings (`bind_replicated_ahoy_actions`: mouse scaled
+/// by radians/pixel, stick by rate×dt), so the value here is radians-per-tick for both devices —
+/// no further sensitivity math (unlike the old observer, which applied `FpsCamera::sensitivity`
+/// itself to raw pixel deltas).
+fn rotate_camera(
+    rotate: On<Fire<AhoyRotate>>,
     mut fps_camera: Query<(&mut FpsCamera, &mut Transform)>,
-    gamepad_look: Query<(), With<GamepadLook>>,
 ) {
     if let Ok((mut fps_camera, mut camera_transform)) = fps_camera.single_mut() {
-        // The stick binding pre-scales its value (see `GAMEPAD_LOOK_SPEED`/`DeltaScale`), so
-        // only the mouse's raw pixel delta still needs `FpsCamera::sensitivity` applied here.
-        let scale = if gamepad_look.contains(rotation.action) {
-            1.0
-        } else {
-            fps_camera.sensitivity
-        };
-        let delta_pitch = rotation.value.y * scale;
-        let delta_yaw = -rotation.value.x * scale;
+        let delta_pitch = rotate.value.y;
+        let delta_yaw = -rotate.value.x;
         fps_camera.pitch =
             (fps_camera.pitch + delta_pitch).clamp(-PI / 2. + 0.0001, PI / 2. - 0.0001);
         fps_camera.yaw = fps_camera.yaw + delta_yaw;
@@ -230,24 +242,17 @@ pub fn player_controls() -> impl Bundle {
     (
         PlayerControls,
         Actions::<PlayerControls>::spawn(SpawnWith(|context: &mut ActionSpawner<_>| {
-            context.spawn((
-                Action::<Movement>::new(),
-                Bindings::spawn((Cardinal::wasd_keys(),)),
-            ));
-            context.spawn((
-                Action::<Movement>::new(),
-                DeadZone {
-                    kind: DeadZoneKind::Radial, // circular; correct for a stick
-                    lower_threshold: 0.15,      // below this magnitude → zero
-                    upper_threshold: 1.0,       // above this → clamped to 1, rescaled between
-                },
-                Bindings::spawn(Axial::left_stick()),
-            ));
-            context.spawn((
-                Action::<Jump>::new(),
-                Press::new(1.0),
-                bindings![KeyCode::Space, GamepadButton::South],
-            ));
+            // (The legacy `Movement`/`Jump`/`FpsCameraRotation` action entities used to be
+            // spawned here — the pre-ahoy message-sending path. Deleted in M4: the WASD/Space/
+            // mouse inputs are consumed by the ahoy-typed actions on the replicated
+            // `PlayerInputContext` context now (BEI's one-consumer-per-input rule made the
+            // duplicate bindings a nondeterministic input split), and the `Movement`/`Jump`
+            // network messages they fed are gone (`client_events.rs`)).
+            // Ahoy's action entities live under `ahoy_controls()`'s context — NOT here. Ahoy's
+            // input observers write the *context entity's* `AccumulatedInput`, and its KCC runs
+            // on the entity carrying `CharacterController` — both must be the same entity, and
+            // this legacy context entity is a child of the player (see `player_controls()`'s
+            // doc comment), so its AccumulatedInput would never reach the character.
             context.spawn((
                 Action::<KillAction>::new(),
                 bindings![KeyCode::KeyT, GamepadButton::RightTrigger],
@@ -286,27 +291,104 @@ pub fn player_controls() -> impl Bundle {
                 Action::<ToggleDataFrame>::new(),
                 bindings![KeyCode::Tab, GamepadButton::Select],
             ));
-            context.spawn((
-                Action::<FpsCameraRotation>::new(),
-                bindings![Binding::mouse_motion()],
-            ));
-            context.spawn((
-                Action::<FpsCameraRotation>::new(),
-                GamepadLook,
-                DeadZone {
-                    kind: DeadZoneKind::Radial, // circular; correct for a stick
-                    lower_threshold: 0.15,      // below this magnitude → zero
-                    upper_threshold: 1.0,       // above this → clamped to 1, rescaled between
-                },
-                // The stick reports a held position (-1..1), not a per-frame delta like mouse
-                // motion does, so it needs its own sensitivity plus a delta-time scale to turn
-                // it into a proper rate (rad/s) — otherwise it's ~50x weaker than a mouse flick
-                // and its turn speed scales with frame rate. Mouse's binding is untouched.
-                Scale::splat(GAMEPAD_LOOK_SPEED),
-                DeltaScale::AUTO,
-                Negate::y(), // invert vertical (pitch) axis for the stick only
-                Bindings::spawn(Axial::right_stick()),
-            ));
+            // (The look actions used to be here — legacy `FpsCameraRotation` mouse + stick
+            // entities. Removed: BEI gives a binding's input to the *first* action that reads
+            // it each tick, so binding the same mouse-motion to both the legacy action and the
+            // replicated ahoy `RotateCamera` split the deltas nondeterministically and starved
+            // the server's look accumulation — see `rotate_camera`'s doc comment. The camera
+            // now rotates from the replicated actions alone.)
         })),
     )
+}
+
+/// Mouse-look sensitivity in radians/pixel — baked into the mouse `RotateCamera` binding's
+/// `Scale` modifier (the value that reaches both the client camera and the server's look
+/// accumulator is already in radians-per-tick). Historically `FpsCamera` carried this as its
+/// `sensitivity` field; the field is gone (the observer no longer applies it), so this constant
+/// is the single source.
+const MOUSE_LOOK_SENSITIVITY: f32 = 0.005;
+
+/// Adds local-only bindings to the **server-authored, replicated** ahoy action entities (M2
+/// input flow: `player()` spawns the context + bare actions server-side; they replicate via
+/// `ActionOf<C>`'s hierarchy sender; the owning client is the only side that binds real
+/// inputs — everyone else just sees the entities).
+///
+/// A **polling `Update` system, not `On<Add, …>` observers** — same reasoning as
+/// `on_player_spawned`'s (see its doc comment): replication-inserted components don't reliably
+/// fire per-component `Add` observers, and the arrival *order* is racy anyway (`ActionOf` and
+/// `Controlled` may lag the `Action` component by a tick); a poll just retries until the
+/// world is consistent. The `Without<Bindings>` filter makes it self-terminating: once bound,
+/// the entity stops matching.
+///
+/// Inserting `Bindings` is also what makes lightyear's `add_input_marker_from_binding`
+/// observer add `InputMarker<C>` — the marker that starts buffering this action's state each
+/// tick and streaming it to the server.
+///
+/// The bindings mirror the legacy pair's (`player_controls()`) so gameplay feel is unchanged;
+/// M4 deletes the legacy pair once the message path is gone.
+fn bind_replicated_ahoy_actions(
+    movement: Query<Entity, (With<Action<AhoyMovement>>, Without<Bindings>)>,
+    jump: Query<Entity, (With<Action<AhoyJump>>, Without<Bindings>)>,
+    rotate: Query<Entity, (With<Action<AhoyRotate>>, Without<Bindings>)>,
+    mouse_look: Query<(), With<MouseLook>>,
+    stick_look: Query<(), With<StickLook>>,
+    action_of: Query<&ActionOf<PlayerInputContext>>,
+    controlled: Query<(), With<Controlled>>,
+    mut commands: Commands,
+) {
+    for entity in &movement {
+        let Ok(action_of) = action_of.get(entity) else {
+            continue; // relationship not replicated yet — retried next frame
+        };
+        if !controlled.contains(action_of.get()) {
+            continue; // someone else's actions — never bound here
+        }
+        commands.entity(entity).insert((
+            DeadZone {
+                kind: DeadZoneKind::Radial, // circular; correct for a stick
+                lower_threshold: 0.15,      // below this magnitude → zero
+                upper_threshold: 1.0,       // above this → clamped to 1, rescaled between
+            },
+            Bindings::spawn((Cardinal::wasd_keys(), Axial::left_stick())),
+        ));
+    }
+    for entity in &jump {
+        let Ok(action_of) = action_of.get(entity) else {
+            continue;
+        };
+        if !controlled.contains(action_of.get()) {
+            continue;
+        }
+        commands
+            .entity(entity)
+            .insert((Press::new(1.0), bindings![KeyCode::Space, GamepadButton::South]));
+    }
+    for entity in &rotate {
+        // Look input for the server's `CharacterLook` accumulator (`server::input`): the two
+        // device-marked `RotateCamera` action entities get their respective bindings — mouse
+        // scaled by radians/pixel, stick by the same rate×dt scaling the legacy
+        // `FpsCameraRotation` stick binding uses — so each action's per-tick value is radians,
+        // and the accumulator's signs match `apply_fps_camera_rotation` exactly.
+        let Ok(action_of) = action_of.get(entity) else {
+            continue;
+        };
+        if !controlled.contains(action_of.get()) {
+            continue;
+        }
+        if mouse_look.contains(entity) {
+            commands.entity(entity).insert((
+                Scale::splat(MOUSE_LOOK_SENSITIVITY),
+                Bindings::spawn(Spawn(Binding::mouse_motion())),
+            ));
+        } else if stick_look.contains(entity) {
+            // Action-level modifiers (they hit all of this action's bindings — there's only
+            // one).
+            commands.entity(entity).insert((
+                Scale::splat(GAMEPAD_LOOK_SPEED),
+                DeltaScale::AUTO,
+                Negate::y(), // invert vertical (pitch) axis for the stick — matches the legacy binding
+                Bindings::spawn(Axial::right_stick()),
+            ));
+        }
+    }
 }

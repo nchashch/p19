@@ -10,6 +10,16 @@ bevy = { version = "0.19.0", default-features = false }
 avian3d.workspace = true
 noiz.workspace = true
 lightyear.workspace = true
+# No `client`/`server` features here — each binary enables its own on its own dep entry, and
+# feature unification applies whichever subset is active to this crate's build of the dep.
+lightyear_inputs_bei.workspace = true
+# Direct dep since M2: `player()`'s bundle carries ahoy's KCC + input context, and
+# `SharedInputsPlugin` registers ahoy's action types for replication.
+bevy_ahoy.workspace = true
+# Direct dep (not just via `lightyear_inputs_bei`'s prelude re-export) because the
+# `InputAction` derive expands to `bevy_enhanced_input::...` paths, which need the crate in
+# this crate's own import list.
+bevy_enhanced_input.workspace = true
 serde.workspace = true
 ron.workspace = true
 bevy_asset_loader.workspace = true

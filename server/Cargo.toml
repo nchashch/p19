@@ -52,6 +52,8 @@ bevy_asset_loader.workspace = true
 bevy_common_assets.workspace = true
 
 lightyear.workspace = true
+lightyear_inputs_bei = { workspace = true, features = ["server"] }
+bevy_ahoy.workspace = true
 
 bevy_skein.workspace = true
 shared = { path = "../shared" }

@@ -18,13 +18,11 @@ pub struct FpsCamera {
     pub direction: Vec3,
     pub pitch: f32,
     pub yaw: f32,
-    pub sensitivity: f32,
 }
 
 impl FpsCamera {
     pub fn new() -> Self {
         Self {
-            sensitivity: 0.001,
             pitch: 0.0,
             yaw: -PI,
             direction: Vec3::Z,

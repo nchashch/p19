@@ -18,18 +18,6 @@ pub(crate) struct Select;
 pub(crate) struct Deselect;
 
 #[derive(InputAction)]
-#[action_output(Vec2)]
-pub struct FpsCameraRotation;
-
-#[derive(InputAction)]
-#[action_output(Vec2)]
-pub struct Movement;
-
-#[derive(InputAction)]
-#[action_output(bool)]
-pub struct Jump;
-
-#[derive(InputAction)]
 #[action_output(bool)]
 pub struct MainMenu;
 

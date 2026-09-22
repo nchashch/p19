@@ -6,6 +6,8 @@ use crate::{
     gameplay::combat::CombatPlugin,
 };
 use bevy::prelude::*;
+use bevy_ahoy::prelude::CharacterController as AhoyCharacterController;
+use bevy_ahoy::CharacterLook;
 use lightyear::prelude::Controlled;
 use shared::cube_spawner::CubeSpawner;
 use shared::game_state::GameState;
@@ -18,7 +20,17 @@ impl Plugin for PlayerCharacterPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((CombatPlugin, PlayerControlsPlugin, PlayerCameraPlugin));
 
-        app.add_systems(Update, (on_player_spawned, decorate_other_players));
+        app.add_systems(
+            Update,
+            (
+                on_player_spawned,
+                decorate_other_players,
+                // The local predicted entity's `Grounded`, kept in sync with ahoy's ground
+                // state so animation/HUD reactions stay latency-free (the replicated copy
+                // would lag by the round-trip).
+                shared::character_controller::bridge_grounded,
+            ),
+        );
     }
 }
 
@@ -91,7 +103,24 @@ fn on_player_spawned(
         commands.insert_resource(LocalPlayer(Some(entity)));
         commands
             .entity(entity)
-            .insert(DespawnOnExit(GameState::InGame))
+            .insert((
+                DespawnOnExit(GameState::InGame),
+                // Ahoy's KCC runs client-side on the local player (M1: local-first movement —
+                // the server's own player is inert, its static `Position` never replicates
+                // corrections, so these local writes are what the player sees until M3's
+                // prediction makes the local sim authoritative-and-reconciled). The
+                // `#[require]`d support components (`AccumulatedInput`, `RigidBody` (absent
+                // client-side — it's not replicated — so this inserts `RigidBody::Kinematic`,
+                // whose own requires add `LinearVelocity`/`Position`/`Rotation`),
+                // `CustomPositionIntegration`, …) insert automatically. Aliased
+                // `AhoyCharacterController` — `shared::character_controller::CharacterController`
+                // is still in the server-authored bundle on this same entity until M4 deletes
+                // the gutted controller.
+                AhoyCharacterController::default(),
+                // Fed from the FPS camera every frame (`controls::update_character_look`) —
+                // ahoy derives movement direction from the look yaw.
+                CharacterLook::default(),
+            ))
             .with_children(|parent| {
                 parent.spawn(controls::player_controls());
                 parent

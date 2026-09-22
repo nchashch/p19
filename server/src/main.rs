@@ -9,11 +9,12 @@ use lightyear::avian3d::plugin::{AvianReplicationMode, LightyearAvianPlugin};
 use lightyear::prelude::*;
 use shared::assets::SharedAssetsPlugin;
 use shared::assets::level::LevelMetadataAssets;
-use shared::character_controller::CharacterControllerPlugin;
 use shared::game_state::ServerState;
+use shared::inputs::SharedInputsPlugin;
 use shared::replication::SharedReplicationPlugin;
 
 mod combat;
+mod input;
 mod level_state;
 mod lobby;
 mod networking;
@@ -21,6 +22,7 @@ mod rooms;
 mod spawn;
 
 use combat::ServerCombatPlugin;
+use input::ServerInputPlugin;
 use level_state::LevelStatePlugin;
 use lobby::LobbyPlugin;
 use rooms::GameRoomPlugin;
@@ -52,19 +54,26 @@ fn main() {
             },
             LightyearAvianPlugin {
                 replication_mode: AvianReplicationMode::Position {
-                    sync_to_transform: false,
-                }, // default
+                    // NOT the default — see the matching comment above `PhysicsPlugins` in
+                    // `client/src/main.rs`: ahoy's KCC authors `Transform` during fixed ticks,
+                    // which only reaches `Position` (and thus replication) when the
+                    // Transform→Position import is enabled.
+                    sync_to_transform: true,
+                },
                 ..default()
             },
-            // RepliconPlugins,
-            // RepliconQuinnetPlugins,
             SharedReplicationPlugin,
             SharedAssetsPlugin,
+            // Registers the `lightyear_inputs_bei` input protocol (the replicated-BEI input
+            // flow — see `shared/src/inputs.rs`). The server half of `InputPlugin` is
+            // headless-safe: it registers `ServerInputPlugin<BEIStateSequence<C>>` and
+            // disables BEI's own update systems on headless binaries, so it needs no
+            // rendering and no real input devices. Note this outer tuple is now at Bevy's
+            // 15-element `Plugins` limit — the next top-level plugin needs to join the nested
+            // GLTF tuple below.
+            SharedInputsPlugin,
             ServerCombatPlugin,
             ServerSpawnPlugin,
-            //
-            // TODO: Implement character controller with client side prediction.
-            // CharacterControllerPlugin,
 
             // Loads `.glb` level geometry headlessly: `GltfPlugin` parses the file,
             // `WorldSerializationPlugin` instantiates it as a `WorldAssetRoot`/reflected entity
@@ -79,6 +88,15 @@ fn main() {
                 bevy::gltf::GltfPlugin::default(),
                 bevy::world_serialization::WorldSerializationPlugin,
                 bevy_skein::SkeinPlugin::default(),
+                // Ahoy's KCC stack — the server-authoritative half of the M2 movement setup
+                // (the client registers the same group; both sides simulate the player over
+                // the same replicated-BEI input stream). Headless-safe: `InputPlugin` disables
+                // BEI's raw-input systems on server-only builds, and the camera plugin's
+                // observers simply never fire without camera entities.
+                bevy_ahoy::prelude::AhoyPlugins::default(),
+                // Accumulates the replicated `RotateCamera` action into the server-side
+                // `CharacterLook` (see `input.rs`).
+                ServerInputPlugin,
                 LevelStatePlugin,
                 GameRoomPlugin,
                 LobbyPlugin,

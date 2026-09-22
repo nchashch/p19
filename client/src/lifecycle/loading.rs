@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use bevy_hanabi::ParticleEffect;
 use bevy_mod_xr::session::XrTrackingRoot;
 use bevy_seedling::sample::SamplePlayer;
+use lightyear::prelude::client::Remote;
 use shared::assets::level::ClientWorldAsset;
 use shared::game_state::GameState;
 
@@ -24,7 +25,19 @@ impl Plugin for LoadingPlugin {
 struct ClientWorldAssetSpawned;
 
 fn spawn_client_world_assets(
-    client_world_assets: Query<(Entity, &ClientWorldAsset), Without<WorldAssetRoot>>,
+    // `With<Remote>` matters: this system materializes *server-authored* world content only.
+    // Without it, any client-locally instantiated entity that carries a Skein-baked
+    // `ClientWorldAsset` (glb extras are applied to scene-instantiated entities too) also
+    // matches — and if the referenced asset itself has one baked in, each instantiation
+    // spawns another match pointing back at the same file: a self-feeding spawn loop
+    // (confirmed by testing: entity count growing ~1.5x-per-cycle while loading
+    // `rigs/visuals.glb`, which had `ClientWorldAsset` baked into its own node extras).
+    // Replicated (server-origin) entities carry lightyear/replicon's `Remote` marker; scene
+    // instantiations don't. (`Remote` lives at `lightyear::prelude::client::Remote` in 0.30.)
+    client_world_assets: Query<
+        (Entity, &ClientWorldAsset),
+        (Without<ClientWorldAssetSpawned>, With<Remote>),
+    >,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {

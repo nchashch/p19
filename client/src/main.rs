@@ -10,6 +10,7 @@ use bevy_skein::SkeinPlugin;
 use lightyear::prelude::*;
 use lightyear_avian3d::plugin::{AvianReplicationMode, LightyearAvianPlugin};
 use shared::assets::SharedAssetsPlugin;
+use shared::inputs::SharedInputsPlugin;
 use shared::replication::SharedReplicationPlugin;
 use std::time::Duration;
 
@@ -117,31 +118,43 @@ impl Plugin for Prototype19 {
             // the footgun `lightyear_avian3d`'s own docs warn against (see its module doc
             // comment), not something specific to this project. Mirrors `server/src/main.rs`'s
             // identical `PhysicsPlugins` setup.
+            //
+            // `sync_to_transform: true` (NOT the default) makes `Transform` the authoring API
+            // during fixed ticks — `Transform` is imported into `Position` before physics,
+            // and copied back after. This is required by ahoy: its KCC writes **`Transform`**
+            // only (`run_kcc`'s final write), and with the import disabled every ahoy-driven
+            // character froze at `Position (0,0,0)` while `LinearVelocity` accumulated
+            // unboundedly (`CustomPositionIntegration` deliberately excludes KCC bodies from
+            // avian's own velocity integration, so nothing else moves them either). It also
+            // fixes player spawning: `player()` positions the character via `Transform` only.
+            // The import is safe for this setup: it only touches `With<RigidBody>` entities
+            // (interpolated remote entities don't carry `RigidBody` client-side) and only on
+            // `Changed<Transform>` with a real value difference.
             PhysicsPlugins::default()
                 .build()
                 .disable::<PhysicsTransformPlugin>()
                 .disable::<PhysicsInterpolationPlugin>(),
-            // `PredictionPlugin` is on by default but unconditionally assumes one of lightyear's
-            // own input plugins (`lightyear_inputs_native`/`_bei`/`_leafwing`, none of which this
-            // project uses — `Movement`/`Jump` are sent as plain `MessageSender` messages, not
-            // through lightyear's input-replication system) has already initialized
-            // `LastConfirmedInput`. Without that, `reset_input_rollback_tracker` panics
+            // `PredictionPlugin` hard-depends on one of lightyear's own input plugins
+            // (`lightyear_inputs_native`/`_bei`/`_leafwing`) having already initialized
+            // `LastConfirmedInput` — without one, `reset_input_rollback_tracker` panics
             // ("Resource does not exist: LastConfirmedInput") the moment a connection starts.
-            // Disabling it outright matches this project's deliberate "no client-side prediction
-            // yet" design (see AGENTS.md's top-of-file gap note) rather than wiring up an input
-            // protocol this project doesn't otherwise need.
+            // The ahoy/prediction migration's M0 resolves that the idiomatic way:
+            // `lightyear_inputs_bei` (BEI is ahoy's native input layer) is registered via
+            // `shared::inputs::SharedInputsPlugin` below, so the plugin runs un-disabled.
             client::ClientPlugins {
                 tick_duration: Duration::from_secs_f32(1.0 / 60.0),
-            }
-            .build()
-            .disable::<lightyear::prediction::plugin::PredictionPlugin>(),
+            },
             LightyearAvianPlugin {
                 replication_mode: AvianReplicationMode::Position {
-                    sync_to_transform: false,
-                }, // default
+                    // NOT the default — see the comment above `PhysicsPlugins`: ahoy's KCC
+                    // authors `Transform` during fixed ticks, which only reaches `Position`
+                    // (and thus the visual/camera sync in PostUpdate) when the
+                    // Transform→Position import is enabled.
+                    sync_to_transform: true,
+                },
                 ..default()
             },
-            (SharedReplicationPlugin, SharedAssetsPlugin),
+            (SharedReplicationPlugin, SharedAssetsPlugin, SharedInputsPlugin),
             (
                 CubeSpawnerPlugin,
                 NpcSpawnerPlugin,

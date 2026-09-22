@@ -1,5 +1,5 @@
-//! Opens the authoritative QUIC (`bevy_quinnet`) endpoint clients connect to, and drives the
-//! scaffold's one demo entity so there's something server-authoritative to observe replicating.
+//! Opens the authoritative UDP/netcode endpoint clients connect to, plus the server-side
+//! in-game flow (level loading, player spawning).
 
 use bevy::asset::RenderAssetUsages;
 use bevy::gltf::GltfLoaderSettings;
@@ -7,16 +7,9 @@ use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
 use lightyear::prelude::*;
 use shared::assets::level::{ClientReplicate, Level};
-use shared::client_events::{InGameRequest, LobbyRequest};
-use shared::level::LobbyRoot;
+use shared::client_events::{InGameRequest, LoadLevelRequest};
 use shared::replication::ClientInGame;
-use shared::{
-    character_controller::{JumpInput, MovementInput},
-    client_events::{Jump, LoadLevelRequest, Movement},
-    game_state::ServerState,
-    level::InGameRoot,
-    player::{PlayerCharacterSpawner, player},
-};
+use shared::{game_state::ServerState, level::InGameRoot, player::{PlayerCharacterSpawner, player}};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use crate::level_state::LevelState;
@@ -42,33 +35,8 @@ impl Plugin for NetworkingPlugin {
             .add_observer(on_client_connected)
             .add_observer(on_level_ready)
             .add_observer(on_client_disconnected);
-        app.add_systems(
-            Update,
-            (movement, jump, in_game_request).run_if(in_state(ServerState::InGame)),
-        );
+        app.add_systems(Update, in_game_request.run_if(in_state(ServerState::InGame)));
         app.add_systems(Update, (load_level_request, setup_client_replicate));
-    }
-}
-
-/// Resolves which entity a `Movement`/`Jump` request applies to from the sending connection
-/// itself, per `ClientId::entity()` — never from anything the client's payload claims. See
-/// `on_level_ready` below: the client's own connection entity *is* its player character.
-fn movement(receivers: Query<(Entity, &mut MessageReceiver<Movement>)>, mut commands: Commands) {
-    for (entity, mut receiver) in receivers {
-        for request in receiver.receive() {
-            commands.trigger(MovementInput {
-                entity,
-                direction: request.direction,
-            });
-        }
-    }
-}
-
-fn jump(receivers: Query<(Entity, &mut MessageReceiver<Jump>)>, mut commands: Commands) {
-    for (entity, mut receiver) in receivers {
-        for _request in receiver.receive() {
-            commands.trigger(JumpInput { entity });
-        }
     }
 }
 
@@ -143,6 +111,7 @@ fn in_game_request(
     player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
     in_game_root: Single<Entity, With<InGameRoot>>,
     game_room: Res<GameRoom>,
+    remote_ids: Query<&RemoteId>,
     mut commands: Commands,
 ) {
     for (entity, mut receiver) in receivers {
@@ -152,9 +121,19 @@ fn in_game_request(
                 let at = player_spawner_transform.translation;
                 let room = game_room.0;
                 commands.entity(entity).insert(Rooms::single(room));
+                // The owning client predicts this entity (its local ahoy sim becomes the
+                // prediction, reconciled by lightyear's rollback); `PredictionTarget`
+                // materializes as `Predicted` on that client's received entity. Other
+                // clients currently just get the plain replicated entity (their Transform
+                // follows the replicated `Position` via lightyear_avian's sync).
+                let own_client = remote_ids
+                    .get(entity)
+                    .map(|remote| NetworkTarget::Single(remote.0))
+                    .unwrap_or(NetworkTarget::None);
                 commands.spawn((
                     player(name, at),
                     Replicate::to_clients(NetworkTarget::All),
+                    PredictionTarget::to_clients(own_client),
                     ControlledBy {
                         owner: entity,
                         lifetime: Lifetime::Persistent,

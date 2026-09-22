@@ -2994,6 +2994,7 @@ dependencies = [
  "futures-lite",
  "lightyear",
  "lightyear_avian3d",
+ "lightyear_inputs_bei",
  "noiz",
  "openxr",
  "polyanya",
@@ -8576,10 +8577,12 @@ version = "0.1.0"
 dependencies = [
  "avian3d",
  "bevy",
+ "bevy_ahoy",
  "bevy_asset_loader",
  "bevy_common_assets",
  "bevy_skein",
  "lightyear",
+ "lightyear_inputs_bei",
  "noiz",
  "shared",
 ]
@@ -8627,9 +8630,12 @@ version = "0.1.0"
 dependencies = [
  "avian3d",
  "bevy",
+ "bevy_ahoy",
  "bevy_asset_loader",
+ "bevy_enhanced_input",
  "gltf",
  "lightyear",
+ "lightyear_inputs_bei",
  "noiz",
  "ron 0.12.1",
  "serde",

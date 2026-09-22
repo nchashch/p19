@@ -36,11 +36,3 @@ pub struct LoadLevelRequest {
     // pub id: String,
     pub asset_path: AssetPath<'static>,
 }
-
-#[derive(Event, Serialize, Deserialize, Clone)]
-pub struct Movement {
-    pub direction: Vec3,
-}
-
-#[derive(Event, Serialize, Deserialize, Clone)]
-pub struct Jump;

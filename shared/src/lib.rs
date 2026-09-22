@@ -9,6 +9,7 @@ pub mod client_events;
 pub mod combat;
 pub mod cube_spawner;
 pub mod game_state;
+pub mod inputs;
 pub mod level;
 pub mod npc_spawner;
 pub mod player;

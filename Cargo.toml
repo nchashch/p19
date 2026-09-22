@@ -85,8 +85,21 @@ bevy_ahoy = { version = "0.2.0", default-features = false }
 # piggybacks on a dependency edge that's already there for reasons unrelated to `bevy_common_assets`.
 ron = "0.12.1"
 
-lightyear = { version = "0.30.0", features = ["avian3d", "udp", "netcode"] }
+# `input_bei` activates the meta-crate's own `dep:lightyear_inputs`/`dep:lightyear_inputs_bei`
+# edges, which is what makes its `prediction` feature's `lightyear_inputs?/prediction`
+# passthrough actually apply — without it, `lightyear_inputs` builds without `prediction`,
+# its `LastConfirmedInputPlugin` is compiled out, and `LastConfirmedInput` is never
+# initialized (client panics at connect). Our direct `lightyear_inputs_bei` dep below only
+# provides the import path + per-binary `client`/`server` features; it does NOT feed the
+# meta-crate's `?` passthroughs.
+lightyear = { version = "0.30.0", features = ["avian3d", "udp", "netcode", "input_bei"] }
 lightyear_avian3d = "0.30.0"
+# BEI-action input replication — the missing piece that un-blocks lightyear's `PredictionPlugin`
+# (which hard-depends on one of the `lightyear_inputs_*` plugins having initialized
+# `LastConfirmedInput`). Registered via `shared::inputs::SharedInputsPlugin` on both binaries;
+# each member enables its own `client`/`server` feature on top of this entry. Already present
+# in `Cargo.lock` at 0.30.0 as a transitive dep, so this adds no version churn.
+lightyear_inputs_bei = "0.30.0"
 
 # `gltf` (transitive, via `bevy`/`bevy_gltf`) is patched to a vendored fork with
 # https://github.com/gltf-rs/gltf/pull/467 applied, adding support for `KHR_texture_basisu`

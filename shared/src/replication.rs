@@ -3,12 +3,10 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::assets::level::ClientWorldAsset;
-use crate::character_controller::{
-    Character, CharacterController, DesiredMotion, GroundDetection, Grounded, Idle,
-};
+use crate::character_controller::{Character, Grounded, Idle};
 use crate::client_events::{
-    AttackAttempt, InGameRequest, Jump, KillAttempt, LoadLevelRequest, LobbyRequest, Movement,
-    SpawnCubeRequest, SpawnNpcRequest,
+    AttackAttempt, InGameRequest, KillAttempt, LoadLevelRequest, LobbyRequest, SpawnCubeRequest,
+    SpawnNpcRequest,
 };
 use crate::combat::{Dead, Gcd, HitPoints};
 use crate::cube_spawner::Cube;
@@ -44,15 +42,25 @@ impl Plugin for SharedReplicationPlugin {
 
         app.component::<PlayerCharacter>().replicate();
         app.component::<Character>().replicate();
-        app.component::<CharacterController>().replicate();
         app.component::<Name>().replicate();
         app.component::<HitPoints>().replicate();
         app.component::<Gcd>().replicate();
-        app.component::<GroundDetection>().replicate();
+        // `Grounded` is written by `character_controller::bridge_grounded` (ahoy's ground
+        // state → the marker) on both binaries; the client's animation + HUD read it.
         app.component::<Grounded>().replicate();
         app.component::<Collider>().replicate();
+        // Required for ahoy's KCC to see replicated colliders client-side: ahoy's collision
+        // query (`ColliderComponents`) requires `Position`/`Rotation`/`ColliderOf` on collider
+        // entities, and none of those exist client-side without a `RigidBody` — `Position`/
+        // `Rotation` only replicate *filtered* on `With<RigidBody>` (see lightyear_avian's
+        // `register_position_mode_protocol`), and a replicated `Collider` without a body is a
+        // loose collider avian never attaches (no `ColliderOf`). With `RigidBody` replicated,
+        // level geometry (e.g. `minimal_level.glb`'s `RigidBody::Static` floor) attaches
+        // client-side and the KCC collides with it. Also gives remote cubes/NPCs their local
+        // `RigidBody::Dynamic`, matching client main.rs's "full Avian simulation runs
+        // client-side" intent.
+        app.component::<RigidBody>().replicate();
         app.component::<CollisionLayers>().replicate();
-        app.component::<DesiredMotion>().replicate();
         app.component::<Selectable>().replicate();
         app.component::<Npc>().replicate();
         app.component::<Idle>().replicate();
@@ -70,11 +78,6 @@ impl Plugin for SharedReplicationPlugin {
         app.register_message::<SpawnCubeRequest>()
             .add_direction(NetworkDirection::ClientToServer);
         app.register_message::<SpawnNpcRequest>()
-            .add_direction(NetworkDirection::ClientToServer);
-
-        app.register_message::<Movement>()
-            .add_direction(NetworkDirection::ClientToServer);
-        app.register_message::<Jump>()
             .add_direction(NetworkDirection::ClientToServer);
 
         app.register_message::<LoadLevelRequest>()
