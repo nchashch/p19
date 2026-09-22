@@ -189,11 +189,14 @@ fn spawn_vr_in_game_wrist_panel(
 fn resume_button(
     _: On<Activate>,
     mut next_state: ResMut<NextState<ModalMenuState>>,
-    mut cursor_options: Single<&mut CursorOptions>,
+    // `Query`, not `Single<&mut …>` — windowless (`--mcp`) mode has no `CursorOptions` at all.
+    mut cursor_options: Query<&mut CursorOptions>,
 ) {
     next_state.set(ModalMenuState::Closed);
-    cursor_options.visible = false;
-    cursor_options.grab_mode = CursorGrabMode::Locked;
+    for mut options in &mut cursor_options {
+        options.visible = false;
+        options.grab_mode = CursorGrabMode::Locked;
+    }
 }
 
 /// Marks `controls_tips`'s root — shown only while `InputDeviceState` is `KeyboardMouse`. See

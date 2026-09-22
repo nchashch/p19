@@ -1,8 +1,10 @@
 use bevy::light::Skybox;
 use bevy::{
     anti_alias::taa::TemporalAntiAliasing,
+    camera::RenderTarget,
     pbr::{DistanceFog, FogFalloff, ScreenSpaceAmbientOcclusion},
     prelude::*,
+    render::render_resource::{TextureFormat, TextureUsages},
 };
 use bevy_mod_xr::camera::XrCamera;
 
@@ -57,6 +59,45 @@ pub fn player_camera(common_assets: &CommonAssets) -> impl Bundle {
         distance_fog(),
         skybox(common_assets),
     )
+}
+
+/// The offscreen texture every camera renders to in `--mcp` (headless) mode — the rendered view
+/// the agent's `game/screenshot` tool reads. Created (1280×720) when the app starts in
+/// headless mode; see the headless branch in `main.rs` and `retarget_cameras_to_offscreen`.
+#[derive(Resource, Clone)]
+pub struct OffscreenRenderTarget(pub Handle<Image>);
+
+impl OffscreenRenderTarget {
+    pub fn new(width: u32, height: u32, images: &mut Assets<Image>) -> Self {
+        let mut image =
+            Image::new_target_texture(width, height, TextureFormat::Rgba8UnormSrgb, None);
+        // The screenshot readback copies from this texture; the default render-attachment
+        // usage doesn't include COPY_SRC.
+        image.texture_descriptor.usage |= TextureUsages::COPY_SRC;
+        Self(images.add(image))
+    }
+}
+
+/// Rewrites every camera whose target is the (nonexistent, in headless mode) primary window to
+/// render into [`OffscreenRenderTarget`] instead — the loaded level/background worlds carry
+/// their own cameras that would otherwise render nowhere, and the player camera and menu UI
+/// camera are covered by the same sweep. Polling rather than an `On<Add, Camera>` observer,
+/// matching the repo's replication-arrival precedent (cameras can appear at any time from
+/// loaded worlds, and `RenderTarget` may also *change back* after spawn).
+///
+/// Only run in headless mode: on desktop, `Window(Primary)` is exactly right.
+pub fn retarget_cameras_to_offscreen(
+    offscreen: Option<Res<OffscreenRenderTarget>>,
+    mut cameras: Query<&mut RenderTarget>,
+) {
+    let Some(offscreen) = offscreen else {
+        return;
+    };
+    for mut target in &mut cameras {
+        if matches!(*target, RenderTarget::Window(_)) {
+            *target = RenderTarget::Image(offscreen.0.clone().into());
+        }
+    }
 }
 
 pub struct PlayerCameraPlugin;

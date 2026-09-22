@@ -1,6 +1,9 @@
 use avian3d::prelude::*;
 use bevy::feathers::{dark_theme::create_dark_theme, theme::UiTheme};
 use bevy::prelude::*;
+use bevy::app::ScheduleRunnerPlugin;
+use bevy::winit::WinitPlugin;
+use bevy::window::ExitCondition;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bevy_ahoy::prelude::AhoyPlugins;
 use bevy_asset_loader::prelude::*;
@@ -15,6 +18,7 @@ use shared::replication::SharedReplicationPlugin;
 use std::time::Duration;
 
 use controls::fps_controller::FpsControllerPlugin;
+use controls::camera::{OffscreenRenderTarget, retarget_cameras_to_offscreen};
 use controls::input_device::InputDevicePlugin;
 use dev::console::PConsolePlugin;
 use gameplay::cube_spawner::CubeSpawnerPlugin;
@@ -74,11 +78,47 @@ impl Plugin for Prototype19 {
         // way, via the `AssetServer`) could run. See `is_vr_enabled_presync`'s doc comment for why
         // this can't just reuse that later, `AssetServer`-based path.
         let vr_enabled = config::is_vr_enabled_presync();
+        // `--mcp` (or config.toml's `mcp = true`): run as a headless agent host — no window at
+        // all, every camera rendered into an offscreen texture, the tool API (BRP + MCP)
+        // serving localhost. Same pre-sync reasoning as `vr_enabled` above. Incompatible with
+        // VR (the XR swapchain needs a session, and this mode's purpose is display-less hosts);
+        // `--mcp` wins when both are set.
+        let mcp_headless = config::is_mcp_mode_presync() && !vr_enabled;
 
         if vr_enabled {
             app.add_plugins(add_xr_plugins(
                 DefaultPlugins.build().disable::<PipelinedRenderingPlugin>(),
             ));
+        } else if mcp_headless {
+            // The headless-renderer pattern (bevy's own `headless_renderer` example): no winit
+            // at all — `ScheduleRunnerPlugin` drives the frame loop, no window is ever created
+            // (so this runs on display-less hosts too, with a software Vulkan driver such as
+            // lavapipe), and every camera renders into [`OffscreenRenderTarget`] via the
+            // retarget system below. UI renders into the same texture (the UI camera is a
+            // normal camera).
+            app.add_plugins(
+                DefaultPlugins.build()
+                    .disable::<WinitPlugin>()
+                    .disable::<PipelinedRenderingPlugin>()
+                    .set(WindowPlugin {
+                        primary_window: None,
+                        exit_condition: ExitCondition::DontExit,
+                        ..default()
+                    }),
+            )
+            .add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(1.0 / 60.0)));
+        let offscreen_target = {
+            let mut images = app.world_mut().resource_mut::<Assets<Image>>();
+            OffscreenRenderTarget::new(1280, 720, &mut images)
+        };
+        app.insert_resource(offscreen_target)
+            // A camera for UI that exists before any player/menu-background camera does —
+            // otherwise bevy_ui has nothing to render the main menu onto until the level's
+            // cameras arrive. The retarget system aims it at the offscreen texture.
+            .add_systems(Startup, |mut commands: Commands| {
+                commands.spawn((Camera2d, IsDefaultUiCamera));
+            })
+            .add_systems(Update, retarget_cameras_to_offscreen);
         } else {
             app.add_plugins(DefaultPlugins);
         }

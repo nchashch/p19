@@ -104,14 +104,21 @@ fn update_character_look(
     look.pitch = pitch;
 }
 
-fn unlock_cursor(mut cursor_options: Single<&mut CursorOptions>) {
-    cursor_options.visible = true;
-    cursor_options.grab_mode = CursorGrabMode::None;
+// `Query`, not `Single<&mut …>`: in `--mcp` (headless) mode there is no window, so there are
+// no `CursorOptions` at all — a `Single` would panic on param validation every state
+// transition. Windowless mode simply has no cursor to manage.
+fn unlock_cursor(mut cursor_options: Query<&mut CursorOptions>) {
+    for mut options in &mut cursor_options {
+        options.visible = true;
+        options.grab_mode = CursorGrabMode::None;
+    }
 }
 
-fn lock_cursor(mut cursor_options: Single<&mut CursorOptions>) {
-    cursor_options.visible = false;
-    cursor_options.grab_mode = CursorGrabMode::Locked;
+fn lock_cursor(mut cursor_options: Query<&mut CursorOptions>) {
+    for mut options in &mut cursor_options {
+        options.visible = false;
+        options.grab_mode = CursorGrabMode::Locked;
+    }
 }
 
 fn shoot(_: On<Start<Shoot>>, mut commands: Commands) {
@@ -143,18 +150,22 @@ fn toggle_modal_menu(
     _: On<Start<ToggleModalMenu>>,
     state: Res<State<ModalMenuState>>,
     mut next_state: ResMut<NextState<ModalMenuState>>,
-    mut cursor_options: Single<&mut CursorOptions>,
+    mut cursor_options: Query<&mut CursorOptions>,
 ) {
     match state.get() {
         ModalMenuState::Closed => {
             next_state.set(ModalMenuState::Open);
-            cursor_options.visible = true;
-            cursor_options.grab_mode = CursorGrabMode::None;
+            for mut options in &mut cursor_options {
+                options.visible = true;
+                options.grab_mode = CursorGrabMode::None;
+            }
         }
         ModalMenuState::Open => {
             next_state.set(ModalMenuState::Closed);
-            cursor_options.visible = false;
-            cursor_options.grab_mode = CursorGrabMode::Locked;
+            for mut options in &mut cursor_options {
+                options.visible = false;
+                options.grab_mode = CursorGrabMode::Locked;
+            }
         }
     }
 }

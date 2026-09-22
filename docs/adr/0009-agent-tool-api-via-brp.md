@@ -95,6 +95,18 @@ Two implementation findings recorded here so they're not re-tripped:
   `+watch` long-poll variants, `world.registry.schema`, …) — the older `bevy/*` names seen in
   third-party docs don't exist anymore.
 
+**Headless mode** (`--mcp` CLI flag or `mcp = true` in config.toml): the client runs with **no
+window at all** — winit disabled, `ScheduleRunnerPlugin::run_loop` driving frames, and a
+single `OffscreenRenderTarget` (1280×720 texture, `controls/camera.rs`) that
+`retarget_cameras_to_offscreen` points *every* camera into (loaded-world cameras, the player
+camera, a startup `Camera2d` for the menu UI) — so all the same code (UI, rendering, the tool
+API) runs, `game/screenshot` captures the texture via `Screenshot(RenderTarget::Image(…))`,
+and the cursor systems are query-based (windowless-safe). Because there's no display
+dependency at all, the same binary runs on GPU-less VPSes with a software Vulkan driver
+(lavapipe) — the "cheap headless fleet driven by one agent setup" scenario. Caveats: `--mcp`
+wins over `vr = true` (they're incompatible); the 2× `UI_SCALE` overflows the 720p offscreen
+target cosmetically; keyboard/mouse do nothing in this mode (no window — agent input only).
+
 ## Alternatives considered
 
 - **In-process MCP server only (no BRP).** Ties the tool surface to MCP clients and a specific

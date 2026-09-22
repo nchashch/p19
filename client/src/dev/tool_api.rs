@@ -39,6 +39,7 @@ use shared::inputs::PlayerInputContext;
 use avian3d::prelude::LinearVelocity;
 use bevy_ahoy::input::{Jump as AhoyJump, Movement as AhoyMovement, RotateCamera as AhoyRotate};
 
+use crate::controls::camera::OffscreenRenderTarget;
 use crate::gameplay::player_character::LocalPlayer;
 
 /// The MCP surface's TCP port. NOT 15703: that's `bevy_remote`'s **render-subapp BRP port**
@@ -147,8 +148,14 @@ fn screenshot_path() -> PathBuf {
 fn screenshot_start_method(_params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
     let path = screenshot_path();
     let _ = std::fs::remove_file(&path);
+    // Headless (`--mcp`) mode: the cameras render into the offscreen texture — capture THAT.
+    // Windowed: capture the primary window.
+    let capture_target = world
+        .get_resource::<OffscreenRenderTarget>()
+        .map(|target| Screenshot(bevy::camera::RenderTarget::Image(target.0.clone().into())))
+        .unwrap_or_else(Screenshot::primary_window);
     world
-        .spawn(Screenshot::primary_window())
+        .spawn(capture_target)
         .observe(save_to_disk(path.clone()))
         .observe(|_trigger: On<ScreenshotCaptured>| {
             // The entity is despawned after capture; nothing extra to do — the file is the

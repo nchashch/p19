@@ -17,9 +17,34 @@ struct ClientConfig {
     server_ip: String,
     #[serde(default)]
     vr: bool,
+    #[serde(default)]
+    mcp: bool,
 }
 
+/// `--mcp` (CLI) or `mcp = true` (config.toml) — runs the client as a **headless agent host**:
+/// no window at all, all cameras rendered into an offscreen texture, and (with the `dev-tools`
+/// cargo feature) the BRP + MCP tool API up on localhost. Must be decided *pre-sync* — it
+/// changes which plugins the app is built with (no winit; `ScheduleRunnerPlugin` drives frames),
+/// the same reason `is_vr_enabled_presync` is decided up front. See `docs/adr/0009`.
+pub fn is_mcp_mode_presync() -> bool {
+    // CLI first (explicit per-invocation intent), then the config file.
+    if std::env::args().any(|arg| arg == "--mcp") {
+        return true;
+    }
+    is_config_flag_enabled("mcp")
+}
+
+/// Whether the game runs in desktop-VR mode (`vr = true` in `assets/config.toml`) — decided
+/// *pre-sync* (which plugin group even gets added is a build-time choice); see `main.rs`.
 pub fn is_vr_enabled_presync() -> bool {
+    is_config_flag_enabled("vr")
+}
+
+/// Shared plumbing for the pre-sync boolean flags: the config file's `assets/config.toml`
+/// resolved via the same base-path chain `bevy_asset` uses (`BEVY_ASSET_ROOT` →
+/// `CARGO_MANIFEST_DIR` → the executable's directory), read with plain `std::fs` because this
+/// runs before any asset source exists.
+fn is_config_flag_enabled(flag: &str) -> bool {
     let base_path = if let Ok(root) = std::env::var("BEVY_ASSET_ROOT") {
         PathBuf::from(root)
     } else if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
@@ -33,9 +58,15 @@ pub fn is_vr_enabled_presync() -> bool {
     let Ok(contents) = std::fs::read_to_string(base_path.join("assets/config.toml")) else {
         return false;
     };
-    toml::from_str::<ClientConfig>(&contents)
-        .map(|config| config.vr)
-        .unwrap_or(false)
+    match toml::from_str::<ClientConfig>(&contents) {
+        #[allow(clippy::bool_comparison)]
+        Ok(config) => match flag {
+            "vr" => config.vr == true,
+            "mcp" => config.mcp == true,
+            _ => false,
+        },
+        Err(_) => false,
+    }
 }
 
 /// Overwrites `ServerAddress`'s hardcoded fallback with `assets/config.toml`'s `server_ip`, if the
