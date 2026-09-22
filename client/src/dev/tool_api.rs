@@ -37,7 +37,6 @@ use shared::game_state::GameState;
 use shared::inputs::PlayerInputContext;
 
 use avian3d::prelude::LinearVelocity;
-use bevy_ahoy::input::{Jump as AhoyJump, Movement as AhoyMovement, RotateCamera as AhoyRotate};
 
 use crate::controls::camera::OffscreenRenderTarget;
 use crate::gameplay::player_character::LocalPlayer;
@@ -67,6 +66,9 @@ impl Plugin for DevToolsPlugin {
         let screenshot_start = app.register_system(screenshot_start_method);
         let screenshot_get = app.register_system(screenshot_get_method);
         let input_method_id = app.register_system(input_method);
+        let trigger_method = app.register_system(trigger_method);
+        let levels_method = app.register_system(levels_method);
+        let select_level_method = app.register_system(select_level_method);
         let mut methods = app
             .world_mut()
             .resource_mut::<bevy::remote::RemoteMethods>();
@@ -74,6 +76,9 @@ impl Plugin for DevToolsPlugin {
         methods.insert("game/screenshot", bevy::remote::RemoteMethodSystemId::Instant(screenshot_start));
         methods.insert("game/screenshot/get", bevy::remote::RemoteMethodSystemId::Instant(screenshot_get));
         methods.insert("game/input", bevy::remote::RemoteMethodSystemId::Instant(input_method_id));
+        methods.insert("game/trigger", bevy::remote::RemoteMethodSystemId::Instant(trigger_method));
+        methods.insert("game/levels", bevy::remote::RemoteMethodSystemId::Instant(levels_method));
+        methods.insert("game/select_level", bevy::remote::RemoteMethodSystemId::Instant(select_level_method));
 
         start_mcp_server();
     }
@@ -135,19 +140,71 @@ fn game_state_method(_params: In<Option<serde_json::Value>>, world: &mut World) 
     Ok(serde_json::Value::Object(out).into())
 }
 
-/// The temp file the screenshot pipeline round-trips through: `game/screenshot` writes it (via
-/// bevy's own `save_to_disk`, which encodes the PNG), `game/screenshot/get` drains it. A fixed
-/// path + one-shot consumption keeps the flow trivial for a single-agent QA loop.
-fn screenshot_path() -> PathBuf {
-    std::env::temp_dir().join("prototype19_devtools_screenshot.png")
+/// Where captures land: `<workspace>/assets_src/screenshots/<utc>-<label>.png` — persistent,
+/// NOT consumed on read, so a human can browse everything the agent saw. `assets_src/` is the
+/// workspace-root source-asset directory; screenshots ride alongside it as another kind of
+/// source material. Anchored on `CARGO_MANIFEST_DIR` (set under `cargo run`/`cargo build`, and
+/// by the QA harness that launches the client) falling back to the CWD, matching how bevy
+/// itself resolves asset roots.
+fn screenshots_dir() -> PathBuf {
+    std::env::var_os("CARGO_MANIFEST_DIR")
+        .map(|manifest| PathBuf::from(manifest).join("../assets_src/screenshots"))
+        .unwrap_or_else(|| PathBuf::from("assets_src/screenshots"))
 }
 
-/// `game/screenshot` — starts an async capture of the primary window. The PNG is written to a
-/// temp file by bevy's own `save_to_disk` observer when the render completes (async!); poll
-/// `game/screenshot/get` until it reports `ready`.
-fn screenshot_start_method(_params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
-    let path = screenshot_path();
-    let _ = std::fs::remove_file(&path);
+/// A new unique capture path: `<utc-zulu>-<label>.png`, millisecond-resolution so names sort
+/// chronologically. A same-millisecond collision (two captures in one instant) appends a
+/// counter suffix.
+fn next_screenshot_path(label: Option<&str>) -> PathBuf {
+    let dir = screenshots_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let label = label.unwrap_or("capture");
+    let stem = format!("{millis}-{label}");
+    let mut path = dir.join(format!("{stem}.png"));
+    let mut disambiguator = 1u32;
+    while path.exists() {
+        path = dir.join(format!("{stem}-{disambiguator}.png"));
+        disambiguator += 1;
+    }
+    path
+}
+
+/// The newest capture currently on disk (what `game/screenshot/get` reports). The filenames are
+/// millisecond timestamps, so lexicographic max = chronological max.
+fn newest_screenshot() -> Option<PathBuf> {
+    let dir = screenshots_dir();
+    let mut newest: Option<(std::ffi::OsString, PathBuf)> = None;
+    for entry in std::fs::read_dir(&dir).ok()?.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|ext| ext == "png") {
+            let name = entry.file_name();
+            if newest.as_ref().is_none_or(|(best, _)| name > *best) {
+                newest = Some((name, path));
+            }
+        }
+    }
+    newest.map(|(_, path)| path)
+}
+
+/// `game/screenshot` — starts an async capture of the primary window. The PNG is written under
+/// `assets_src/screenshots/` by bevy's own `save_to_disk`, which encodes the PNG (async!); poll
+/// `game/screenshot/get` until it reports `ready`. Takes an optional `{"label": "..."}` param
+/// for the filename. The file PERSISTS (it is the human-browsable record of what the agent
+/// saw), so this also returns the path immediately.
+fn screenshot_start_method(
+    params: In<Option<serde_json::Value>>,
+    world: &mut World,
+) -> BrpResult {
+    let label = params
+        .0
+        .as_ref()
+        .and_then(|p| p.get("label"))
+        .and_then(serde_json::Value::as_str);
+    let path = next_screenshot_path(label);
     // Headless (`--mcp`) mode: the cameras render into the offscreen texture — capture THAT.
     // Windowed: capture the primary window.
     let capture_target = world
@@ -161,20 +218,27 @@ fn screenshot_start_method(_params: In<Option<serde_json::Value>>, world: &mut W
             // The entity is despawned after capture; nothing extra to do — the file is the
             // delivery mechanism.
         });
-    Ok(json!({"status": "capturing", "poll": "game/screenshot/get"}).into())
+    Ok(
+        json!({"status": "capturing", "poll": "game/screenshot/get", "path": path.display().to_string()})
+            .into(),
+    )
 }
 
-/// `game/screenshot/get` — one-shot drain of the last capture: `{"ready": true, "png_base64":
-/// …}` once the PNG is on disk, `{"ready": false}` while still rendering. The file is consumed
-/// (deleted) on the ready read.
+/// `game/screenshot/get` — polls the newest capture: `{"ready": true, "png_base64": …, "path":
+/// …}` once a PNG is on disk, `{"ready": false}` while still rendering. The file is NOT
+/// consumed — captures persist in `assets_src/screenshots/` for human review.
 fn screenshot_get_method(_params: In<Option<serde_json::Value>>, _world: &mut World) -> BrpResult {
-    let path = screenshot_path();
+    let Some(path) = newest_screenshot() else {
+        return Ok(json!({"ready": false}).into());
+    };
     match std::fs::read(&path) {
         Ok(bytes) => {
-            let _ = std::fs::remove_file(&path);
             use base64::Engine as _;
             let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
-            Ok(json!({"ready": true, "png_base64": encoded}).into())
+            Ok(
+                json!({"ready": true, "png_base64": encoded, "path": path.display().to_string()})
+                    .into(),
+            )
         }
         Err(_) => Ok(json!({"ready": false}).into()),
     }
@@ -218,10 +282,6 @@ fn input_method(params: In<Option<serde_json::Value>>, world: &mut World) -> Brp
         ));
     };
 
-    // The mouse-look binding scales pixels→radians (MOUSE_LOOK_SENSITIVITY); an agent speaks
-    // radians, so pre-divide to hand the binding the pixel-equivalent it expects.
-    const MOUSE_LOOK_SENSITIVITY: f32 = 0.001;
-
     // Collect the target action entities first: `player_entity` borrows `world` immutably, and
     // the mock insert below needs `&mut World` (via `get_entity_mut`).
     let action_entities: Vec<Entity> = actions.iter().collect();
@@ -260,9 +320,19 @@ fn input_method(params: In<Option<serde_json::Value>>, world: &mut World) -> Brp
                 if action_entity_mut.get::<Action<AhoyRotate>>().is_some() {
                     let yaw_delta = params.get("yaw_delta").and_then(serde_json::Value::as_f64).unwrap_or(0.0) as f32;
                     let pitch_delta = params.get("pitch_delta").and_then(serde_json::Value::as_f64).unwrap_or(0.0) as f32;
+                    // The mock BYPASSES the binding's `Scale` modifier (mocks replace the
+                    // whole binding-evaluation step), so the value is radians DIRECTLY — no
+                    // pixel-equivalent pre-scaling. And BEI fires the action on EVERY tick the
+                    // mock is active, so the value is a PER-TICK RATE: `ticks` total is
+                    // `ticks * value`. Divide the requested total turn by the tick count.
+                    // `rotate_camera`'s `delta_yaw = -value.x` makes positive yaw_delta turn
+                    // right (Bevy yaw decreases clockwise); positive pitch_delta looks up.
                     action_entity_mut.insert(ActionMock::new(
                         TriggerState::Fired,
-                        ActionValue::Axis2D(Vec2::new(-yaw_delta / MOUSE_LOOK_SENSITIVITY, pitch_delta)),
+                        ActionValue::Axis2D(Vec2::new(
+                            yaw_delta / ticks as f32,
+                            pitch_delta / ticks as f32,
+                        )),
                         MockSpan::Updates(ticks),
                     ));
                     mocked = Some(action_entity);
@@ -285,7 +355,110 @@ fn input_method(params: In<Option<serde_json::Value>>, world: &mut World) -> Brp
     }
 }
 
+/// `game/trigger` — triggers the app's own client-local events, the same ones the menu buttons
+/// fire. `connect` → the main menu's Connect (opens the lightyear connection); `play` → the
+/// lobby's Play (sends `InGameRequest` via the client's own `MessageSender`); `disconnect` →
+/// the lobby/menu's Main Menu + Disconnect.
+fn trigger_method(params: In<Option<serde_json::Value>>, mut world: &mut World) -> BrpResult {
+    use crate::events::{Connect, Disconnect};
+    use shared::client_events::InGameRequest;
+    use shared::replication::OrderedReliable;
+
+    let Some(params) = params.0 else {
+        return Err(BrpError::internal("missing params"));
+    };
+    let event = params
+        .get("event")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| BrpError::internal("missing params.event"))?;
+    match event {
+        "connect" => {
+            world.commands().trigger(Connect);
+            Ok(json!({"triggered": "connect"}).into())
+        }
+        "disconnect" => {
+            world.commands().trigger(Disconnect);
+            Ok(json!({"triggered": "disconnect"}).into())
+        }
+        "play" => {
+            // The lobby Play button's exact behavior: `InGameRequest` over the client's own
+            // message sender.
+            let mut sender = world
+                .query::<&mut lightyear::prelude::MessageSender<InGameRequest>>()
+                .iter_mut(world)
+                .next()
+                .ok_or_else(|| BrpError::internal("no MessageSender<InGameRequest> (not connected?)"))?;
+            sender.send::<shared::replication::OrderedReliable>(InGameRequest);
+            Ok(json!({"triggered": "play", "sent": "InGameRequest"}).into())
+        }
+        // The spawn hotkeys: client-local triggers whose observers wrap the player's current
+        // aim/camera into the server request, so the cube/NPC appears where the player is
+        // looking.
+        "spawn_cube" => {
+            world.commands().trigger(crate::events::SpawnCube);
+            Ok(json!({"triggered": "spawn_cube"}).into())
+        }
+        "spawn_npc" => {
+            world.commands().trigger(crate::events::SpawnNpc);
+            Ok(json!({"triggered": "spawn_npc"}).into())
+        }
+        other => Err(BrpError::internal(&format!(
+            "unknown event {other:?} (expected connect|play|disconnect)"
+        ))),
+    }
+}
+
+/// `game/levels` — lists the server-replicated `Levels` singleton (the same list the lobby's
+/// level picker reads): asset paths + names, so an agent can pick a level by asset path.
+fn levels_method(_params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
+    // `Levels` is a replicated COMPONENT on an entity (not a resource).
+    let mut query = world.query::<&shared::level::Levels>();
+    let Some(levels) = query.iter(world).next() else {
+        return Err(BrpError::internal(
+            "no Levels entity replicated yet (not in the lobby?)",
+        ));
+    };
+    let list: Vec<serde_json::Value> = levels
+        .iter()
+        .map(|(asset_path, level)| {
+            json!({
+                "asset_path": asset_path.to_string(),
+                "name": level.name,
+            })
+        })
+        .collect();
+    Ok(json!({"levels": list}).into())
+}
+
+/// `game/select_level` — sends `LoadLevelRequest { asset_path }` via the client's own message
+/// sender, the same message the lobby's level picker sends after a selection. `asset_path`
+/// comes from `game/levels` (e.g. `levels/minimal.level.ron`).
+fn select_level_method(params: In<Option<serde_json::Value>>, mut world: &mut World) -> BrpResult {
+    use shared::client_events::LoadLevelRequest;
+    use shared::replication::OrderedReliable;
+
+    let Some(params) = params.0 else {
+        return Err(BrpError::internal("missing params"));
+    };
+    let asset_path = params
+        .get("asset_path")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| BrpError::internal("missing params.asset_path"))?;
+    let mut sender = world
+        .query::<&mut lightyear::prelude::MessageSender<LoadLevelRequest>>()
+        .iter_mut(world)
+        .next()
+        .ok_or_else(|| BrpError::internal("no MessageSender<LoadLevelRequest> (not connected?)"))?;
+    sender.send::<OrderedReliable>(LoadLevelRequest {
+        asset_path: bevy::asset::AssetPath::parse(asset_path).into_owned(),
+    });
+    Ok(
+        json!({"sent": "LoadLevelRequest", "asset_path": asset_path}).into(),
+    )
+}
+
 // ---------------------------------------------------------------------------
+// The in-process MCP server// ---------------------------------------------------------------------------
 // The in-process MCP server (rmcp, Streamable HTTP, stateless) — the protocol surface whose
 // tools proxy to the BRP methods above over loopback HTTP.
 // ---------------------------------------------------------------------------

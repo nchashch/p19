@@ -1,7 +1,7 @@
 use bevy::light::Skybox;
 use bevy::{
     anti_alias::taa::TemporalAntiAliasing,
-    camera::RenderTarget,
+    camera::{ClearColorConfig, RenderTarget},
     pbr::{DistanceFog, FogFalloff, ScreenSpaceAmbientOcclusion},
     prelude::*,
     render::render_resource::{TextureFormat, TextureUsages},
@@ -78,24 +78,53 @@ impl OffscreenRenderTarget {
     }
 }
 
-/// Rewrites every camera whose target is the (nonexistent, in headless mode) primary window to
-/// render into [`OffscreenRenderTarget`] instead — the loaded level/background worlds carry
-/// their own cameras that would otherwise render nowhere, and the player camera and menu UI
-/// camera are covered by the same sweep. Polling rather than an `On<Add, Camera>` observer,
-/// matching the repo's replication-arrival precedent (cameras can appear at any time from
-/// loaded worlds, and `RenderTarget` may also *change back* after spawn).
+/// Rewrites every camera that would render nowhere to render into
+/// [`OffscreenRenderTarget`] instead — the loaded level/background worlds carry their own
+/// cameras that would otherwise render nowhere, and the player camera and menu UI camera are
+/// covered by the same sweep. Polling rather than an `On<Add, Camera>` observer, matching the
+/// repo's replication-arrival precedent (cameras can appear at any time from loaded worlds,
+/// and `RenderTarget` may also *change back* after spawn).
+///
+/// Two value shapes render nowhere in headless mode: `Window(_)` (the default — there is no
+/// window) and `RenderTarget::None { .. }` (authored/glTF cameras that opt out of a target).
+/// Deliberately untouched: `Image(_)` (cameras already rendering into a texture — e.g. the
+/// UI-quad cameras whose texture is displayed on a quad; stealing it would blank the quad)
+/// and `TextureView(_)` (XR eye targets).
+///
+/// All the claimed cameras share ONE target, so each must also stop clearing it
+/// (`ClearColorConfig::None`) — a camera that clears erases every camera that rendered before
+/// it, which is exactly why the menu background used to vanish under the UI camera's clear.
+/// The startup UI camera keeps the only `Default` clear and order 0, so it runs first every
+/// frame; each newly claimed camera gets the next order (1, 2, 3, …), i.e. the most recently
+/// arrived camera's 3D view wins — the player camera arrives after the level's authored one,
+/// so the agent sees through the player's eyes in game.
 ///
 /// Only run in headless mode: on desktop, `Window(Primary)` is exactly right.
 pub fn retarget_cameras_to_offscreen(
     offscreen: Option<Res<OffscreenRenderTarget>>,
-    mut cameras: Query<&mut RenderTarget>,
+    mut cameras: Query<(Entity, &mut RenderTarget, &mut Camera)>,
+    mut next_order: Local<u32>,
 ) {
     let Some(offscreen) = offscreen else {
         return;
     };
-    for mut target in &mut cameras {
-        if matches!(*target, RenderTarget::Window(_)) {
+    for (entity, mut target, mut camera) in &mut cameras {
+        if matches!(
+            *target,
+            RenderTarget::Window(_) | RenderTarget::None { .. }
+        ) {
             *target = RenderTarget::Image(offscreen.0.clone().into());
+            *next_order += 1;
+            camera.order = *next_order as isize;
+            if *next_order == 1 {
+                // The first-claimed camera renders first (lowest order): it is the shared
+                // target's base layer and keeps its clear. Every later claim draws on top of
+                // it instead of erasing it — a camera left on `Default` clear would erase every
+                // camera that rendered before it, leaving only the last camera's frame.
+            } else {
+                camera.clear_color = ClearColorConfig::None;
+            }
+            info!("retargeted camera {entity} to the offscreen target (order {})", *next_order);
         }
     }
 }

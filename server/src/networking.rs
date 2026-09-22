@@ -9,7 +9,11 @@ use lightyear::prelude::*;
 use shared::assets::level::{ClientReplicate, Level};
 use shared::client_events::{InGameRequest, LoadLevelRequest};
 use shared::replication::ClientInGame;
-use shared::{game_state::ServerState, level::InGameRoot, player::{PlayerCharacterSpawner, player}};
+use shared::{
+    game_state::ServerState,
+    level::InGameRoot,
+    player::{PlayerCharacterSpawner, player},
+};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use crate::level_state::LevelState;
@@ -35,7 +39,10 @@ impl Plugin for NetworkingPlugin {
             .add_observer(on_client_connected)
             .add_observer(on_level_ready)
             .add_observer(on_client_disconnected);
-        app.add_systems(Update, in_game_request.run_if(in_state(ServerState::InGame)));
+        app.add_systems(
+            Update,
+            in_game_request.run_if(in_state(ServerState::InGame)),
+        );
         app.add_systems(Update, (load_level_request, setup_client_replicate));
     }
 }
