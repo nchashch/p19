@@ -72,5 +72,5 @@ connection entity into `GameRoom` instead.
 - This work also surfaced (but does not itself fix) the fact that `InGameRoot` being a single
   persistent entity, rather than one spawned fresh per level load, meant the level-loading code
   needed a matching update to parent new level geometry under the *existing* root instead of
-  spawning a second one — see the "Server" section of `CLAUDE.md` for the current state of
+  spawning a second one — see the "Server" section of `AGENTS.md` for the current state of
   that fix and the dedup-protection regression it exposed.

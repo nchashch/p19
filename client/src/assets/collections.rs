@@ -51,7 +51,7 @@ use crate::ui::input_icons::SparrowAtlasManifest;
 pub struct CommonAssets {
     /// The `Cube` prop's world-asset scene (`cube_spawner.rs`) — a `Handle<WorldAsset>`, not
     /// `Handle<Gltf>`, since that's what `WorldAssetRoot` (Skein/world-serialization's headless-safe
-    /// spawn mechanism) actually wraps; see `shared`/CLAUDE.md's "Server" section for why this
+    /// spawn mechanism) actually wraps; see `shared`/AGENTS.md's "Server" section for why this
     /// path exists alongside plain GLTF loading at all.
     #[asset(key = "cube_world")]
     pub cube_world: Handle<WorldAsset>,

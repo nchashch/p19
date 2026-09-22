@@ -22,7 +22,7 @@
 //! module finds "my sibling popup" / "my owning popup" via plain hierarchy walks
 //! (`iter_ancestors`/`iter_descendants`) at the point it's needed, rather than pre-resolving and
 //! storing a reference at construction time — this project's own established convention for
-//! hierarchy lookups (see `CLAUDE.md`'s "Notable conventions" section), and it sidesteps needing
+//! hierarchy lookups (see `AGENTS.md`'s "Notable conventions" section), and it sidesteps needing
 //! `bsn!`'s `#label`/`EntityTemplate` cross-reference mechanism, which this module's own
 //! `payload` closures (see below) already can't use anyway.
 //!

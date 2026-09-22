@@ -2,6 +2,7 @@ use avian3d::prelude::*;
 use bevy::feathers::{dark_theme::create_dark_theme, theme::UiTheme};
 use bevy::prelude::*;
 use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
+use bevy_ahoy::prelude::AhoyPlugins;
 use bevy_asset_loader::prelude::*;
 use bevy_common_assets::ron::RonAssetPlugin;
 use bevy_seedling::prelude::*;
@@ -127,7 +128,7 @@ impl Plugin for Prototype19 {
             // `LastConfirmedInput`. Without that, `reset_input_rollback_tracker` panics
             // ("Resource does not exist: LastConfirmedInput") the moment a connection starts.
             // Disabling it outright matches this project's deliberate "no client-side prediction
-            // yet" design (see CLAUDE.md's top-of-file gap note) rather than wiring up an input
+            // yet" design (see AGENTS.md's top-of-file gap note) rather than wiring up an input
             // protocol this project doesn't otherwise need.
             client::ClientPlugins {
                 tick_duration: Duration::from_secs_f32(1.0 / 60.0),
@@ -146,6 +147,17 @@ impl Plugin for Prototype19 {
                 NpcSpawnerPlugin,
                 NpcUiQuadPlugin,
                 PlayerCharacterPlugin,
+                // `bevy_ahoy` (Bevy + Avian + BEI kinematic character controller) — wired in
+                // ahead of the actual controller migration, deliberately inert for now: no
+                // entity carries ahoy's `CharacterController` and none of its own input actions
+                // are bound yet (`controls/actions.rs`'s existing `Movement`/`Jump` still feed
+                // the old send-a-network-message path), so every system this group registers
+                // simply matches no entities until that changes. Both prerequisites are already
+                // registered: `PhysicsPlugins` (outer tuple, above) and `EnhancedInputPlugin`
+                // (added by `PlayerControlsPlugin`, via `PlayerCharacterPlugin` directly above).
+                // Sits in this inner tuple only because the outer one is already at Bevy's
+                // 15-element `Plugins` tuple-impl limit. Default schedule: `FixedPostUpdate`.
+                AhoyPlugins::default(),
                 FpsControllerPlugin,
                 GameStatePlugin { vr_enabled },
                 InputDevicePlugin,

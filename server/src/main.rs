@@ -37,7 +37,7 @@ fn main() {
             TransformPlugin,
             // `server` has no `assets/` directory of its own — level geometry (and eventually
             // anything else the server needs, e.g. collider-relevant data) lives in
-            // `client/assets/` (see CLAUDE.md's note on why assets live inside `client/`), so
+            // `client/assets/` (see AGENTS.md's note on why assets live inside `client/`), so
             // point the default filesystem asset source there instead of duplicating it.
             AssetPlugin {
                 // file_path: "../client/assets".to_string(),

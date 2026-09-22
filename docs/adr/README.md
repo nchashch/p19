@@ -2,7 +2,7 @@
 
 Short, dated writeups of specific significant decisions made in this project — the
 alternatives considered, why one was picked, and what it cost. These are deliberately
-separate from [`CLAUDE.md`](../../CLAUDE.md): `CLAUDE.md` describes the *current* state of
+separate from [`AGENTS.md`](../../AGENTS.md): `AGENTS.md` describes the *current* state of
 the code and gets rewritten as things change, which means the reasoning trail behind a past
 decision (what was tried first, why it didn't work, what the tradeoff actually was) tends to
 get compressed away or dropped entirely once it's no longer "current." ADRs are meant to stay
@@ -21,5 +21,7 @@ Each record uses the same shape: **Context** (the problem, forces, constraints),
 | [0003](./0003-room-based-interest-management.md) | Room-based interest management for lobby/in-game separation | Accepted |
 | [0004](./0004-decouple-player-character-from-connection-entity.md) | Decouple the player character from the client connection entity | Accepted |
 | [0005](./0005-gut-character-controller-for-prediction-rewrite.md) | Gut the character controller pending a client-side-prediction rewrite | Accepted |
+| [0006](./0006-rename-claude-md-to-llm-md.md) | Rename CLAUDE.md to LLM.md, making agent guidance tool-agnostic | Superseded by [0007](./0007-adopt-agents-md-standard.md) |
+| [0007](./0007-adopt-agents-md-standard.md) | Adopt the AGENTS.md standard for the agent-guidance file | Accepted |
 
 New records should be added to this index in the same PR/commit that adds the file.

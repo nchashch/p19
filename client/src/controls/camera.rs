@@ -72,7 +72,7 @@ impl Plugin for PlayerCameraPlugin {
 /// the `Camera3d` `player_camera()` spawns), so `Skybox`/`DistanceFog`/etc. on our own camera
 /// never reach them. An `On<Add, XrCamera>` observer rather than a polling system, per this
 /// project's component-lifecycle convention — these entities are created at a time relative to
-/// session startup that nothing else here controls (see `camera.rs`'s git history / CLAUDE.md
+/// session startup that nothing else here controls (see `camera.rs`'s git history / AGENTS.md
 /// for the broader pattern of XR entities appearing later than `Startup`/`OnEnter`).
 fn on_xr_camera_added(
     added: On<Add, XrCamera>,

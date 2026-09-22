@@ -9,7 +9,7 @@ hosting real multiplayer later is "open a port," not a rewrite.
 **Status: pre-release prototype, actively evolving, not currently playable end-to-end.**
 In particular, the character controller has been deliberately gutted (every movement/physics
 system is a `todo!()` stub right now) pending a rewrite using lightyear's own client-side
-prediction — see [`CLAUDE.md`](./CLAUDE.md) and [`docs/adr/`](./docs/adr/) for the full story.
+prediction — see [`AGENTS.md`](./AGENTS.md) and [`docs/adr/`](./docs/adr/) for the full story.
 Expect things to be broken or half-built; this is a live development snapshot, not a demo.
 
 ## Getting started
@@ -31,7 +31,7 @@ needs to support more than one working copy.
 
 `cargo build -p <client|server> --release` on the host machine produces a binary linked
 against the host's glibc, which will *not* run correctly on a Steam Deck or inside the
-project's `steamrt4` toolbox — see `CLAUDE.md`'s "Commands" section for why, and use
+project's `steamrt4` toolbox — see `AGENTS.md`'s "Commands" section for why, and use
 `./steam_deck_toolbox.sh cargo build -p <client|server> --release` instead when targeting
 either.
 
@@ -51,14 +51,14 @@ Physics is [`avian3d`](https://github.com/Jondolf/avian). No test suite exists y
 
 ## Documentation
 
-- **[`CLAUDE.md`](./CLAUDE.md)** — the real architecture reference: current module-by-module
+- **[`AGENTS.md`](./AGENTS.md)** — the real architecture reference: current module-by-module
   behavior, known gaps, conventions, and non-obvious "confirmed by testing" details. Written
   for (and kept up to date by) AI coding agents working in this repo, but equally useful for a
   human trying to understand *why* something is built the way it is. Start here for anything
   beyond a surface-level look.
 - **[`docs/adr/`](./docs/adr/)** — Architecture Decision Records: short, dated writeups of
   specific significant decisions (and the alternatives/tradeoffs considered), kept separate
-  from `CLAUDE.md`'s "current state" description so the reasoning trail behind a decision
+  from `AGENTS.md`'s "current state" description so the reasoning trail behind a decision
   doesn't get overwritten every time the doc is refreshed to match new code.
 
 There's no `CHANGELOG.md` yet — this is deeply pre-release, so a user-facing changelog isn't

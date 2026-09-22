@@ -53,7 +53,7 @@ one file plus a documentation correction.
   though the eventual lightyear-prediction-based design may not follow the identical stage
   breakdown.
 - Zero changes needed anywhere outside `shared/src/character_controller.rs` plus one
-  corrected `CLAUDE.md` bullet — confirmed by `cargo check --workspace` passing immediately
+  corrected `AGENTS.md` bullet — confirmed by `cargo check --workspace` passing immediately
   after the gut with no other edits.
 - **The game is not currently playable past joining, by design.** `update_grounded` runs
   unconditionally every `FixedUpdate` tick for any `CharacterController` entity — not gated on

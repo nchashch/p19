@@ -20,7 +20,7 @@ bevy_asset_loader.workspace = true
 # `extensionsRequired: ["KHR_texture_basisu"]` (see the root `Cargo.toml`'s `[patch.crates-io]`
 # for the vendored `gltf` fork this feature lives in). Declared here, not per-binary, so both
 # `client` and `server` — which both parse the same `.glb` files independently, see the "Server"
-# section of CLAUDE.md — pick it up from a single place.
+# section of AGENTS.md — pick it up from a single place.
 gltf = { version = "1.4.0", default-features = false, features = [
 	"KHR_texture_basisu",
 ] }

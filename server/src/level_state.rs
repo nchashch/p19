@@ -11,7 +11,7 @@ use bevy::prelude::*;
 /// to spawn a second `InGameRoot`/`WorldAssetRoot` into the same ECS world, corrupting the game
 /// (duplicate colliders, duplicate `PlayerCharacterSpawner`s, etc.). Switching to a genuinely
 /// different level isn't supported yet either way — the server doesn't despawn a previous level's
-/// geometry on reload (see `CLAUDE.md`'s "known gap" on this) — so any request beyond the first is
+/// geometry on reload (see `AGENTS.md`'s "known gap" on this) — so any request beyond the first is
 /// rejected regardless of id until that's addressed.
 ///
 /// Deliberately a plain `Resource`, not a Bevy `States` type: `bevy_replicon` can trigger

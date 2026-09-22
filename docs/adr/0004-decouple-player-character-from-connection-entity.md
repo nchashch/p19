@@ -48,7 +48,7 @@ server-side.
 Bevy's relationship system supports opting into self-referential relationships via
 `#[relationship(allow_self_referential)]` on the type definition. Since `ControlledBy` is
 defined in the vendored `lightyear_replication` crate, this project already has a precedent
-for exactly this kind of local patch (see `bevy_mod_outline`/`bevy_oxr` in `CLAUDE.md`'s
+for exactly this kind of local patch (see `bevy_mod_outline`/`bevy_oxr` in `AGENTS.md`'s
 "Dependency layout" section). This was considered and explicitly not taken: it would have kept
 the *identity conflated with ownership* design, which fights lightyear's own ownership model
 (`ControlledBy.owner` is documented as naming a distinct entity with its own
@@ -82,4 +82,4 @@ it.
   lifetime: Lifetime::Persistent, .. }`, which means it is *not* despawned when its owning
   connection disconnects (unlike the old single-entity design, where disconnection handling
   and character cleanup were the same event by construction). This is currently unaddressed —
-  see `CLAUDE.md`'s gap list.
+  see `AGENTS.md`'s gap list.
