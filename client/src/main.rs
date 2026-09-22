@@ -200,6 +200,11 @@ impl Plugin for Prototype19 {
             ));
         }
 
+        #[cfg(feature = "dev-tools")]
+        // The agent/QA tool API (ADR 0009): BRP on 127.0.0.1:15702 + the MCP wrapper on
+        // 15703 — dev-only (the client is untrusted; a tool API in it is a cheat surface).
+        app.add_plugins(dev::tool_api::DevToolsPlugin);
+
         app.insert_resource(UiTheme(create_dark_theme()))
             .insert_resource(UiScale(UI_SCALE))
             .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.15)))

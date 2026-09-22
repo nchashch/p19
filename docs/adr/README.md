@@ -24,5 +24,6 @@ Each record uses the same shape: **Context** (the problem, forces, constraints),
 | [0006](./0006-rename-claude-md-to-llm-md.md) | Rename CLAUDE.md to LLM.md, making agent guidance tool-agnostic | Superseded by [0007](./0007-adopt-agents-md-standard.md) |
 | [0007](./0007-adopt-agents-md-standard.md) | Adopt the AGENTS.md standard for the agent-guidance file | Accepted |
 | [0008](./0008-adopt-bevy-ahoy-character-controller.md) | Adopt bevy_ahoy as the character controller, over lightyear-replicated BEI input | Accepted |
+| [0009](./0009-agent-tool-api-via-brp.md) | Expose an agent tool API on the client via the Bevy Remote Protocol, MCP-wrappable | Accepted |
 
 New records should be added to this index in the same PR/commit that adds the file.

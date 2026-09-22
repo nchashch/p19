@@ -16,6 +16,21 @@ license.workspace = true
 # attached; a normal `cargo run -p client` build no longer has this instrumentation at all.
 [features]
 tracy = ["bevy/trace_tracy"]
+# The agent/QA tool surface (ADR 0009): BRP (the Bevy Remote Protocol — JSON-RPC over HTTP on
+# localhost:15702) + an in-process MCP server (rmcp, Streamable HTTP on localhost:15703) whose
+# tools proxy to BRP. NEVER enable in player-facing builds — the client is untrusted in this
+# architecture (the server is authoritative), and a tool API in it is a cheat surface; this
+# feature exists for dev/QA builds only, same discipline as the `tracy` feature above.
+dev-tools = [
+    "bevy/bevy_remote",
+    "dep:rmcp",
+    "dep:axum",
+    "dep:tokio",
+    "dep:reqwest",
+    "dep:base64",
+    "dep:serde_json",
+    "dep:schemars",
+]
 
 [dependencies]
 fluent.workspace = true
@@ -62,3 +77,19 @@ ron.workspace = true
 lightyear.workspace = true
 lightyear_avian3d.workspace = true
 lightyear_inputs_bei = { workspace = true, features = ["client"] }
+# --- agent tool API (dev-tools feature, ADR 0009) ---
+rmcp = { version = "3.4", features = [
+    "server",
+    "macros",
+    "schemars",
+    "transport-streamable-http-server",
+], optional = true }
+axum = { version = "0.8", optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time"], optional = true }
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+], optional = true }
+base64 = { version = "0.22", optional = true }
+serde_json = { version = "1", optional = true }
+schemars = { version = "1.0", optional = true }
