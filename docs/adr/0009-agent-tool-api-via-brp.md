@@ -84,6 +84,17 @@ unauthenticated by design — never exposed beyond loopback), the entire surface
 the server binary (a server-side tool API is a possible follow-up for authoritative
 inspection, with the same feature-gating).
 
+Two implementation findings recorded here so they're not re-tripped:
+
+- **The MCP server must NOT bind port 15703** — that's `bevy_remote`'s **render-subapp BRP
+  port** (`DEFAULT_RENDER_PORT`, live whenever `bevy_render` runs). Binding our listener there
+  made the render app's BRP bind fail and the **main** BRP pipeline hang (accepted TCP, no
+  response) in release builds. MCP now uses **15710**.
+- **BRP's builtin method names are `world.*`-namespaced in Bevy 0.19** (`world.query`,
+  `world.get_components`, `world.list_components`, `world.spawn_entity`, `world.insert_components`,
+  `+watch` long-poll variants, `world.registry.schema`, …) — the older `bevy/*` names seen in
+  third-party docs don't exist anymore.
+
 ## Alternatives considered
 
 - **In-process MCP server only (no BRP).** Ties the tool surface to MCP clients and a specific

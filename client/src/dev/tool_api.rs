@@ -41,9 +41,10 @@ use bevy_ahoy::input::{Jump as AhoyJump, Movement as AhoyMovement, RotateCamera 
 
 use crate::gameplay::player_character::LocalPlayer;
 
-/// The MCP surface's TCP port — one above BRP's own default (15702), so the two are easy to
-/// remember as a pair.
-const MCP_PORT: u16 = 15703;
+/// The MCP surface's TCP port. NOT 15703: that's `bevy_remote`'s **render-subapp BRP port**
+/// (`DEFAULT_RENDER_PORT`, active whenever `bevy_render` runs) — binding our MCP listener
+/// there made the render app's BRP bind fail and the main BRP pipeline hang in release builds.
+const MCP_PORT: u16 = 15710;
 
 pub struct DevToolsPlugin;
 
