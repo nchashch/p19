@@ -8,6 +8,7 @@ use bevy::{
     },
     input_focus::AutoFocus,
     prelude::*,
+    ui_widgets::Activate,
 };
 use bevy_fluent::prelude::Localization;
 use fluent_content::Content;
@@ -23,7 +24,7 @@ use crate::{
     ui::{
         selector,
         ui::menu_button,
-        widgets::{Activate, Tooltip},
+        widgets::Tooltip,
     },
 };
 
@@ -76,6 +77,24 @@ fn lobby_buttons() -> impl Scene {
     ]
 }
 
+/// **Fixed a real, 100%-reproducible bug, found via agent testing (not review)**: this file used
+/// to import `Activate` from `crate::ui::widgets` (the hand-rolled, pre-`bevy_feathers` type,
+/// still correct for `widgets::button()` — the HUD and pause modal) instead of
+/// `bevy::ui_widgets::Activate` (the real event a `FeathersButton`/`menu_button()` press emits —
+/// see `selector.rs`'s own correct import, or `ui.rs`'s `connect_button`/`stub_button`). Since
+/// `lobby_play_button`/`lobby_main_menu_button` are both `menu_button()`-based (`FeathersButton`),
+/// a genuine mouse click on either only ever produced the *real* `bevy::ui_widgets::Activate` —
+/// which these two handlers, listening for the wrong type, never received — so **a real mouse
+/// click on "Play" or "Main Menu" in the lobby never worked, ever, not just "under certain
+/// conditions"**. It only *looked* input-method-dependent because `ui.rs`'s `on_ui_confirm`/
+/// `on_ui_confirm_enter` (gamepad South / literal Enter) both *also* fire the legacy
+/// `LegacyActivate` as a compatibility bridge for old-style widgets (see their own doc comments)
+/// — which happens to be exactly the (wrong) type these two handlers were listening for,
+/// masking the bug for every input path except a real click. Confirmed via `game/mouse` before
+/// and after: press/release and the `Pressed` marker's insert/remove both behaved correctly the
+/// whole time (ruling out a picking/hit-testing bug or a `ServerState::Loading` race), but
+/// `Activate` itself never fired pre-fix; `game/gamepad`'s South button worked throughout,
+/// exactly matching the reported symptom.
 fn lobby_play_button(_: On<Activate>, mut sender: Single<&mut MessageSender<InGameRequest>>) {
     info!("InGameRequest sent");
     sender.send::<OrderedReliable>(InGameRequest);

@@ -13,6 +13,37 @@ filed — that's part of filing it, not a separate later chore.
 
 #outline(title: none, indent: auto)
 
+== `playtest_0008` --- Full Keyboard+Mouse / Gamepad Reachability Sweep
+
+#table(
+  columns: (auto, auto),
+  stroke: 0.5pt,
+  inset: 5pt,
+  [*Date*], [2026-09-23 13:35 -- 14:09 UTC],
+  [*Commit*], [Started at `736ec01`; the `lobby.rs` fix not yet committed as of this entry],
+  [*Agent*], [Claude (Sonnet 5)],
+  [*Report*], [`docs/playtests/playtest_0008/report.typ`],
+)
+
+Requested directly: verify every functional element (main menu, lobby, in-game) is reachable by
+both keyboard+mouse and gamepad, using only device-level input injection (no `game/trigger`/
+`game/select_level`/`game/input` shortcuts). Reproduced and root-caused a real,
+100%-reproducible bug the project owner had independently noticed: a genuine mouse click on the
+lobby's "Play" or "Main Menu" button never worked, at all -- `client/src/ui/lobby.rs` imported
+the wrong of two identically-named `Activate` event types, so these `FeathersButton`-based
+handlers only ever received `Activate` via a gamepad/keyboard-Enter compatibility bridge meant
+for old-style widgets, never via a real click's actual `bevy_ui_widgets::Activate`. Fixed with a
+one-line import change; verified post-fix with a fresh server+client pair that a mouse click on
+Play immediately after selecting a level (the exact reported scenario) now reaches
+`GameState::InGame` -- and independently confirmed by the project owner on the real windowed
+client (Connect -> select level -> click Play, all with the mouse; literal Enter also works
+there). Also found and documented a separate, unfixable *harness* limitation:
+`bevy_input_focus::dispatch_focused_input` requires a `PrimaryWindow` entity that `--mcp`
+headless mode never creates, so literal keyboard Enter can never confirm a `FeathersButton`
+through this tool API (mouse click and gamepad South both work fine) -- not believed to affect a
+real windowed client. Full reachability matrix in the report covers every menu/lobby/in-game
+control across all three input methods.
+
 == `playtest_0007` --- Add game/keyboard + game/mouse, Verify Real UI Clicks
 
 #table(

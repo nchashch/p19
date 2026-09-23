@@ -309,6 +309,26 @@ their own schedule, same as a real winit event would. `game/mouse`'s own
 implementation already does this correctly; don't "fix" it back to a direct
 resource write on a future refactor.
 
+**A hard ceiling, not a bug — literal keyboard Enter can never activate a
+`FeathersButton` (main menu, lobby, any `selector.rs` popup/row) through this
+harness.** `bevy_input_focus::dispatch_focused_input` (the system that turns a
+raw `KeyboardInput` event into the `FocusedInput<KeyboardInput>` a focused
+widget's native key handler reacts to) requires a `PrimaryWindow` entity to
+exist — confirmed via `world.query` for `bevy_window::window::PrimaryWindow`
+returning `[]` in `--mcp` mode — and silently no-ops its entire body otherwise,
+no error. `--mcp` mode never creates one (`WindowPlugin { primary_window:
+None }`), so this is unfixable from `game/keyboard`'s side; not believed to
+affect a real windowed client. **Use `game/mouse` or `game/gamepad`'s South
+button to test any `FeathersButton`'s click/confirm path instead** — both
+verified to work fine headlessly (mouse via `bevy_picking`'s own pipeline,
+gamepad via `ui.rs`'s `on_ui_confirm` direct-trigger bridge). Literal Enter
+*does* still work headlessly on the *old* hand-rolled `widgets::button()`
+surfaces (the HUD, the pause modal) — those go through a different,
+window-independent activation path (`on_ui_confirm_enter`'s `LegacyActivate`
+trigger) — so don't conflate "Enter doesn't work" there with this limitation;
+if Enter fails on a `widgets::button()`-based surface, that's a real bug, not
+this ceiling.
+
 ## 6. Probing the world (BRP)
 
 Type paths must be **exact and fully qualified**. When in doubt, grep the source:
