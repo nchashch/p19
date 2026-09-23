@@ -318,6 +318,13 @@ typst compile --root docs/playtests \
 Check the exit code only. Do **not** open or read the produced PDF. typst 0.15.1 is at
 `/usr/sbin/typst`.
 
+**Also update `docs/playtests/index.typ`** — add a new entry (newest first) with the date,
+agent, report path, and a short explanation of what the playtest covered and found, in the
+same style as the existing entries. This is part of filing a report, not an optional later
+chore — the index only stays useful for navigation if every playtest actually lands in it.
+Recompile it too (`typst compile --root docs/playtests docs/playtests/index.typ
+docs/playtests/dist/index.pdf`) and check the exit code.
+
 ## 11. Practical flow summary
 
 1. Teardown (`pkill -x` both), verify ports free.
