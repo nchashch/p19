@@ -13,6 +13,30 @@ filed — that's part of filing it, not a separate later chore.
 
 #outline(title: none, indent: auto)
 
+== `playtest_0006` --- Add game/gamepad, Verify the Literal Crash Path
+
+#table(
+  columns: (auto, auto),
+  stroke: 0.5pt,
+  inset: 5pt,
+  [*Date*], [2026-09-23 01:37 -- 01:42 UTC],
+  [*Commit*], [Started at `05a416c`; not yet committed as of this entry],
+  [*Agent*], [Claude (Sonnet 5)],
+  [*Report*], [`docs/playtests/playtest_0006/report.typ`],
+)
+
+Added `game/gamepad` (mocks real `bevy_input::gamepad::Gamepad` button/axis state on a
+synthetic entity, flowing through `bevy_enhanced_input`'s actual binding resolution) precisely
+to close `playtest_0005`'s own stated gap: no way to reach UI navigation through the tool API,
+only the three ahoy gameplay actions via `game/input`'s action-level mocking. First
+implementation used the wrong `Gamepad` field (`digital`, not `analog` -- BEI's button reader
+calls `Gamepad::get`, which is the analog map; confirmed by testing, a silent no-crash failure,
+not an error) and was caught by actually running it, not by review. Fixed, then used
+immediately: drove the *literal* reported crash path for the first time -- gamepad Start (open
+pause modal) -> DPadUp (navigate focus to "Main Menu") -> South (activate) -- confirming
+`playtest_0005`'s fix against the real interaction, not an equivalent one. No crash, clean
+`GameState::MainMenu` transition.
+
 == `playtest_0005` --- Fix the return_to_main_menu Crash
 
 #table(
@@ -33,7 +57,9 @@ and its established two-part-disconnect handler rather than a fresh implementati
 the equivalent code path (`game/trigger disconnect` while genuinely in-game) since the tool API
 has no way to simulate the actual keypress/button-click yet -- no crash, clean return to
 `MainMenu`, UI correctly rendered. Also fixed a stale doc comment in `modal_menu.rs` caught
-along the way (no behavior change).
+along the way (no behavior change). *Re-verified against the literal crash path in
+`playtest_0006`*, once `game/gamepad` closed the tool-API gap this report's own verification
+had to work around.
 
 == `playtest_0004` --- Fix the Headless UI Render-Order Bug
 

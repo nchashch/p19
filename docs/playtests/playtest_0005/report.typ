@@ -91,11 +91,15 @@ lines, and `game/state` read back `{"game_state": "MainMenu", "player_despawned"
   see the tool-API gap noted above. Confidence is high regardless: `return_to_main_menu` has no
   logic of its own beyond the two calls shown, both already proven correct (`lobby_main_menu_button`
   and `playtest_0004`'s own disconnect-while-in-game test both already exercised them
-  successfully before this run).
+  successfully before this run). *Update: re-verified against the literal crash path
+  (real simulated gamepad Start -> navigate -> South, through the actual pause-menu button) in
+  `playtest_0006`, once `game/gamepad` existed to make that possible -- confirmed, not just
+  inferred.*
 - *A real, reusable gap in the tool API*: no way to inject a raw key press, gamepad button, or
   UI-node click through `game/input` or any other method -- only the three specific BEI player-
-  movement actions. Worth a follow-up ADR/design note if agent-driven testing of menu/UI
-  interaction specifically (as opposed to gameplay movement) becomes a recurring need; not
+  movement actions. *Closed in `playtest_0006` (`game/gamepad`).* Worth a follow-up ADR/design
+  note if agent-driven testing of menu/UI interaction specifically (as opposed to gameplay
+  movement) becomes a recurring need; not
   attempted here since it's out of scope for a single bug fix.
 - The VR wrist-panel "Main Menu" equivalent (`modal_menu.rs`'s `spawn_vr_in_game_wrist_panel`)
   was confirmed by reading the code to reuse the *same* `modal_menu` scene and `main_menu_button`

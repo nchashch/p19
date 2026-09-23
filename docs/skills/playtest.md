@@ -165,6 +165,75 @@ as-is, which is why rotate is radians-direct rather than mouse-pixels. Read back
 effects via `game/state` — position/velocity/yaw/pitch/grounded are
 server-authoritative and reliable.
 
+## 5a. Gamepad-level input (`game/gamepad`) — for UI navigation, or true binding fidelity
+
+`game/input` (above) mocks at the *action* level — it can't reach anything
+`game/trigger`/`game/input` don't already cover, most importantly **UI
+navigation** (the pause menu, main menu, any `selector` popup), since those are
+driven by `MenuControls`'s own `UiNavigate`/`UiConfirm` actions, not the three
+ahoy ones. `game/gamepad` mocks a real gamepad's button/axis state instead —
+`bevy_input::gamepad::Gamepad` on a synthetic, lazily-spawned entity (created on
+first use, not at boot) — so the value flows through `bevy_enhanced_input`'s
+*real* binding resolution exactly like a human's controller: dead zones, which
+context currently owns a shared physical input, `require_reset`, all of it.
+This is the only method here that can drive UI at all.
+
+```sh
+# press Start (opens the in-game pause modal — bound in PlayerControls); release
+# it right after, like a human would (see the level-triggered note below)
+{"input":"button","button":"Start","pressed":true}
+{"input":"button","button":"Start","pressed":false}
+
+# navigate focus (Cardinal::dpad() binds DPad directions to UiNavigate octants);
+# "Resume" auto-focuses when the modal opens, DPadUp moves focus to "Main Menu"
+# above it
+{"input":"button","button":"DPadUp","pressed":true}
+{"input":"button","button":"DPadUp","pressed":false}
+
+# confirm whatever's focused (South is UiConfirm's binding)
+{"input":"button","button":"South","pressed":true}
+{"input":"button","button":"South","pressed":false}
+
+# axes: roughly -1.0..1.0, e.g. left stick forward
+{"input":"axis","axis":"LeftStickY","value":1.0}
+
+# release/zero everything in one call — cheap insurance against a forgotten
+# release leaving something stuck for the rest of the session; reach for this
+# between unrelated test scenarios
+{"input":"reset"}
+```
+
+**The one trap that will cost you real debugging time if you don't know it
+going in**: `bevy_enhanced_input`'s gamepad-button reader calls `Gamepad::get`,
+which reads the **`analog`** field — *not* `digital`/`ButtonInput`, despite that
+being the obviously-correct-looking choice for a boolean button (confirmed by
+testing: an implementation using `digital_mut().press()` compiled fine, ran
+with no error, and the modal menu simply never opened — silent, not a panic).
+`game/gamepad`'s own implementation already gets this right; this note is here
+so nobody "fixes" it back to `digital` on a future refactor without re-reading
+this.
+
+Gamepad state is **level-triggered, not duration-based** — unlike `game/input`'s
+`ticks`, a button/axis you set stays exactly as you left it until you
+explicitly change it again. This matches a real controller (you don't get to
+say "press for 30 frames then auto-release," you press and later release), so
+budget an explicit release call for everything you press, or use
+`{"input":"reset"}` once you're done with a scenario.
+
+Standard button names (19, matches `GamepadButton`, `Other(u8)` not exposed):
+`South`, `East`, `North`, `West`, `C`, `Z`, `LeftTrigger`, `LeftTrigger2`,
+`RightTrigger`, `RightTrigger2`, `Select`, `Start`, `Mode`, `LeftThumb`,
+`RightThumb`, `DPadUp`, `DPadDown`, `DPadLeft`, `DPadRight`. Standard axis names
+(6, matches `GamepadAxis`): `LeftStickX`, `LeftStickY`, `LeftZ`, `RightStickX`,
+`RightStickY`, `RightZ`.
+
+Known limitation: this doesn't flip `InputDeviceState` to `Gamepad` (the
+control-tip icons in the modal/HUD stay keyboard-styled even while driving
+input this way) — that state tracks real input *events*
+(`GamepadButtonChangedEvent` etc.), and this mock writes persistent component
+state directly rather than emitting events. Cosmetic only; every actual
+gameplay/UI effect of the input is real.
+
 ## 6. Probing the world (BRP)
 
 Type paths must be **exact and fully qualified**. When in doubt, grep the source:

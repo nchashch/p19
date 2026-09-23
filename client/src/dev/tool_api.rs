@@ -10,10 +10,15 @@
 //! 2. **Custom BRP methods** as the game tools: `game/state` (a curated snapshot — agents work
 //!    better with a small structured view than raw ECS dumps), `game/screenshot` +
 //!    `game/screenshot/get` (capture via bevy's `Screenshot` → PNG on disk → base64 on poll),
-//!    and `game/input` (inject input through the *real* pipeline: `ActionMock` on the
-//!    replicated ahoy action entities, so the agent's input flows BEI → replicated-BEI →
-//!    server-authoritative sim → corrected prediction, exactly like a gamepad's).
-//! 3. **An in-process MCP server** (`rmcp`, Streamable HTTP on `127.0.0.1:15703`, stateless
+//!    `game/input` (inject input through the *real* pipeline: `ActionMock` on the replicated
+//!    ahoy action entities, so the agent's input flows BEI → replicated-BEI →
+//!    server-authoritative sim → corrected prediction, exactly like a gamepad's — but only for
+//!    the three ahoy gameplay actions, since it mocks at the action level), and `game/gamepad`
+//!    (a level below that: mocks `bevy_input::gamepad::Gamepad`'s own button/axis state on a
+//!    synthetic gamepad entity, so it also flows through BEI's real binding resolution — the
+//!    only way to reach UI navigation, e.g. the pause menu, through this API at all; see
+//!    `gamepad_method`'s doc comment).
+//! 3. **An in-process MCP server** (`rmcp`, Streamable HTTP on `127.0.0.1:15710`, stateless
 //!    mode) whose tools proxy to the BRP methods over loopback HTTP — the MCP layer owns only
 //!    the protocol surface (tool listing + schemas), never the `World` (the handlers are async
 //!    and run outside Bevy's world; all `World` access stays in BRP's systems).
@@ -66,6 +71,7 @@ impl Plugin for DevToolsPlugin {
         let screenshot_start = app.register_system(screenshot_start_method);
         let screenshot_get = app.register_system(screenshot_get_method);
         let input_method_id = app.register_system(input_method);
+        let gamepad_method_id = app.register_system(gamepad_method);
         let trigger_method = app.register_system(trigger_method);
         let levels_method = app.register_system(levels_method);
         let select_level_method = app.register_system(select_level_method);
@@ -76,6 +82,7 @@ impl Plugin for DevToolsPlugin {
         methods.insert("game/screenshot", bevy::remote::RemoteMethodSystemId::Instant(screenshot_start));
         methods.insert("game/screenshot/get", bevy::remote::RemoteMethodSystemId::Instant(screenshot_get));
         methods.insert("game/input", bevy::remote::RemoteMethodSystemId::Instant(input_method_id));
+        methods.insert("game/gamepad", bevy::remote::RemoteMethodSystemId::Instant(gamepad_method_id));
         methods.insert("game/trigger", bevy::remote::RemoteMethodSystemId::Instant(trigger_method));
         methods.insert("game/levels", bevy::remote::RemoteMethodSystemId::Instant(levels_method));
         methods.insert("game/select_level", bevy::remote::RemoteMethodSystemId::Instant(select_level_method));
@@ -359,6 +366,152 @@ fn input_method(params: In<Option<serde_json::Value>>, world: &mut World) -> Brp
     }
 }
 
+/// Marks the one synthetic gamepad entity `gamepad_method` mocks input on — spawned lazily on
+/// first use, not at `Startup`, so a session that never touches `game/gamepad` never pays for
+/// it. Distinct from [`Gamepad`] itself only so this entity is unambiguously identifiable
+/// (`world.query`-able) as agent-injected rather than a real, `bevy_gilrs`-detected controller —
+/// nothing reads this marker at runtime.
+#[derive(Component)]
+struct AgentVirtualGamepad;
+
+/// `game/gamepad` — mocks a real gamepad's button/axis state directly (`bevy_input::gamepad::
+/// Gamepad`'s `analog` field — see the note in the `"button"` match arm below for why buttons
+/// go through this too, not the seemingly-obvious `digital`/`ButtonInput` field — on a
+/// synthetic, agent-owned gamepad entity), rather than `game/input`'s action-level `ActionMock`.
+/// This is the load-bearing difference: the injected
+/// state flows through `bevy_enhanced_input`'s *real* binding resolution (dead zones, `Scale`
+/// modifiers, `require_reset`, which action currently owns a shared physical input, …) exactly
+/// like a human's controller does, rather than skipping straight to "this action fired with this
+/// value." Confirmed by testing (`bevy_enhanced_input-0.26.0/src/context.rs`'s `GamepadDevice`):
+/// contexts that don't explicitly set a `GamepadDevice` component default to `GamepadDevice::Any`
+/// ("input will be read from all connected gamepads") — none of this project's contexts set one,
+/// so a bare `Gamepad` component on any entity, real controller or not, is read identically. This
+/// is what makes UI navigation (`ui/ui.rs`'s `MenuControls` — the pause menu, main menu, level
+/// picker, everything `game/input` categorically can't reach since it only knows the three ahoy
+/// gameplay actions) actually testable: the exact same button/stick state a human's controller
+/// would report drives the exact same `Press`/`Axial` bindings, `UiNavigate`/`UiConfirm` actions,
+/// and `on_ui_navigate`/`on_ui_confirm` observers.
+///
+/// Gamepad button/stick state is level-triggered on a real controller (held until physically
+/// released), not duration-based like `game/input`'s `ticks` — so this mirrors that instead of
+/// introducing a separate auto-expiry mechanism: every `press`/`release`/`set_axis` call is a
+/// direct, persistent state change the caller is responsible for undoing (release what you
+/// press). `{"input": "reset"}` clears all button/axis state in one call — cheap insurance
+/// against a forgotten release leaving an input stuck for the rest of the session; reach for it
+/// between unrelated test scenarios rather than trying to track exactly what's still held.
+///
+/// Params:
+/// - `{"input": "button", "button": "South", "pressed": true}` — press or release one of the 19
+///   standard `GamepadButton` variants (see `parse_gamepad_button`'s match arms for the exact
+///   names; `Other(u8)` isn't exposed, this project doesn't bind it anywhere).
+/// - `{"input": "axis", "axis": "LeftStickX", "value": 0.8}` — set one of the 6 standard
+///   `GamepadAxis` variants to a value in roughly −1.0..1.0 (see `parse_gamepad_axis`).
+/// - `{"input": "reset"}` — release every button and zero every axis on the virtual gamepad.
+fn gamepad_method(params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
+    let Some(params) = params.0 else {
+        return Err(BrpError::internal("missing params"));
+    };
+    let input = params
+        .get("input")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| BrpError::internal("missing params.input"))?;
+
+    // Lazily find-or-spawn the one virtual gamepad entity. Not `Startup`-spawned: see
+    // `AgentVirtualGamepad`'s doc comment.
+    let gamepad_entity = {
+        let mut query = world.query_filtered::<Entity, With<AgentVirtualGamepad>>();
+        match query.single(world) {
+            Ok(entity) => entity,
+            Err(_) => world.spawn((Gamepad::default(), AgentVirtualGamepad)).id(),
+        }
+    };
+    let mut gamepad = world
+        .get_mut::<Gamepad>(gamepad_entity)
+        .ok_or_else(|| BrpError::internal("virtual gamepad entity has no Gamepad component"))?;
+
+    match input {
+        "button" => {
+            let button_name = params
+                .get("button")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| BrpError::internal("missing params.button"))?;
+            let button = parse_gamepad_button(button_name)
+                .ok_or_else(|| BrpError::internal(&format!("unknown button {button_name:?}")))?;
+            let pressed = params
+                .get("pressed")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(true);
+            // `bevy_enhanced_input`'s `Binding::GamepadButton` reader reads `Gamepad::get`,
+            // i.e. the `analog` map — NOT `digital`/`ButtonInput` — confirmed by testing (a
+            // first attempt using `digital_mut().press()` compiled fine, but the modal-menu
+            // gamepad-Start test below never opened the modal at all) and by reading
+            // `bevy_enhanced_input-0.26.0/src/context/input_reader.rs`'s `Binding::GamepadButton`
+            // arm directly. `1.0`/`0.0` here is what a real button reports through this same
+            // path — Bevy's own button-axis convention, not something specific to this project.
+            gamepad.analog_mut().set(button, if pressed { 1.0 } else { 0.0 });
+            Ok(json!({"gamepad_entity": gamepad_entity, "button": button_name, "pressed": pressed}).into())
+        }
+        "axis" => {
+            let axis_name = params
+                .get("axis")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| BrpError::internal("missing params.axis"))?;
+            let axis = parse_gamepad_axis(axis_name)
+                .ok_or_else(|| BrpError::internal(&format!("unknown axis {axis_name:?}")))?;
+            let value = params
+                .get("value")
+                .and_then(serde_json::Value::as_f64)
+                .ok_or_else(|| BrpError::internal("missing params.value"))? as f32;
+            gamepad.analog_mut().set(axis, value);
+            Ok(json!({"gamepad_entity": gamepad_entity, "axis": axis_name, "value": value}).into())
+        }
+        "reset" => {
+            *gamepad = Gamepad::default();
+            Ok(json!({"gamepad_entity": gamepad_entity, "reset": true}).into())
+        }
+        other => Err(BrpError::internal(&format!(
+            "unknown input {other:?} (expected button|axis|reset)"
+        ))),
+    }
+}
+
+fn parse_gamepad_button(name: &str) -> Option<GamepadButton> {
+    Some(match name {
+        "South" => GamepadButton::South,
+        "East" => GamepadButton::East,
+        "North" => GamepadButton::North,
+        "West" => GamepadButton::West,
+        "C" => GamepadButton::C,
+        "Z" => GamepadButton::Z,
+        "LeftTrigger" => GamepadButton::LeftTrigger,
+        "LeftTrigger2" => GamepadButton::LeftTrigger2,
+        "RightTrigger" => GamepadButton::RightTrigger,
+        "RightTrigger2" => GamepadButton::RightTrigger2,
+        "Select" => GamepadButton::Select,
+        "Start" => GamepadButton::Start,
+        "Mode" => GamepadButton::Mode,
+        "LeftThumb" => GamepadButton::LeftThumb,
+        "RightThumb" => GamepadButton::RightThumb,
+        "DPadUp" => GamepadButton::DPadUp,
+        "DPadDown" => GamepadButton::DPadDown,
+        "DPadLeft" => GamepadButton::DPadLeft,
+        "DPadRight" => GamepadButton::DPadRight,
+        _ => return None,
+    })
+}
+
+fn parse_gamepad_axis(name: &str) -> Option<GamepadAxis> {
+    Some(match name {
+        "LeftStickX" => GamepadAxis::LeftStickX,
+        "LeftStickY" => GamepadAxis::LeftStickY,
+        "LeftZ" => GamepadAxis::LeftZ,
+        "RightStickX" => GamepadAxis::RightStickX,
+        "RightStickY" => GamepadAxis::RightStickY,
+        "RightZ" => GamepadAxis::RightZ,
+        _ => return None,
+    })
+}
+
 /// `game/trigger` — triggers the app's own client-local events, the same ones the menu buttons
 /// fire. `connect` → the main menu's Connect (opens the lightyear connection); `play` → the
 /// lobby's Play (sends `InGameRequest` via the client's own `MessageSender`); `disconnect` →
@@ -521,6 +674,27 @@ pub struct InjectInputParams {
     pub ticks: Option<u32>,
 }
 
+/// The `gamepad_input` tool's parameters — see `gamepad_method`'s doc comment for the full
+/// button/axis name lists and why this is a genuinely different mechanism from `inject_input`.
+#[derive(serde::Deserialize, schemars::JsonSchema)]
+pub struct GamepadInputParams {
+    /// Which kind of input this call sets: `button`, `axis`, or `reset` (releases everything).
+    pub input: String,
+    /// `button`: one of the 19 standard `GamepadButton` names (`South`, `East`, `North`,
+    /// `West`, `C`, `Z`, `LeftTrigger`, `LeftTrigger2`, `RightTrigger`, `RightTrigger2`,
+    /// `Select`, `Start`, `Mode`, `LeftThumb`, `RightThumb`, `DPadUp`, `DPadDown`, `DPadLeft`,
+    /// `DPadRight`).
+    pub button: Option<String>,
+    /// `button`: `true` to press (default), `false` to release. Held until you explicitly
+    /// release it — this is level-triggered like a real controller, not duration-based.
+    pub pressed: Option<bool>,
+    /// `axis`: one of the 6 standard `GamepadAxis` names (`LeftStickX`, `LeftStickY`, `LeftZ`,
+    /// `RightStickX`, `RightStickY`, `RightZ`).
+    pub axis: Option<String>,
+    /// `axis`: the value to set, roughly −1.0..1.0 for sticks.
+    pub value: Option<f64>,
+}
+
 /// The MCP tool surface — every tool is a thin proxy to a BRP method over loopback HTTP; all
 /// `World` access lives in the BRP handlers above.
 #[derive(Clone)]
@@ -627,6 +801,44 @@ impl GameTools {
             None => params,
         };
         let result = self.brp("game/input", params).await?;
+        Ok(rmcp::model::CallToolResult::success(vec![rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&result).map_err(|err| rmcp::ErrorData::internal_error(format!("{err}"), None))?,
+        )]))
+    }
+
+    /// Mocks real gamepad button/stick state (not an action-level mock — see the tool
+    /// description). Held until explicitly released/reset.
+    #[rmcp::tool(description = "Mock a real gamepad's button/stick state directly, so it flows through the actual binding/dead-zone/context resolution bevy_enhanced_input does for a human's controller — unlike inject_input, this reaches UI navigation (menus, the pause screen) too, not just the three gameplay actions. `input`: `button` (name one of the 19 standard GamepadButton names, `pressed` true/false — held until you release it, like a real controller, not duration-based), `axis` (name one of the 6 standard GamepadAxis names, `value` roughly -1..1), or `reset` (releases/zeros everything — use this between unrelated test scenarios so a forgotten release doesn't linger). Example: press Start to open the pause menu, then South to activate whatever's focused, then release both.")]
+    async fn gamepad_input(
+        &self,
+        rmcp::handler::server::wrapper::Parameters(GamepadInputParams { input, button, pressed, axis, value }):
+            rmcp::handler::server::wrapper::Parameters<GamepadInputParams>,
+    ) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
+        let params = match input.as_str() {
+            "button" => {
+                let button = button.ok_or_else(|| {
+                    rmcp::ErrorData::invalid_params("missing button for input=\"button\"", None)
+                })?;
+                json!({"input": "button", "button": button, "pressed": pressed.unwrap_or(true)})
+            }
+            "axis" => {
+                let axis = axis.ok_or_else(|| {
+                    rmcp::ErrorData::invalid_params("missing axis for input=\"axis\"", None)
+                })?;
+                let value = value.ok_or_else(|| {
+                    rmcp::ErrorData::invalid_params("missing value for input=\"axis\"", None)
+                })?;
+                json!({"input": "axis", "axis": axis, "value": value})
+            }
+            "reset" => json!({"input": "reset"}),
+            other => {
+                return Err(rmcp::ErrorData::invalid_params(
+                    format!("unknown input {other:?} (expected button|axis|reset)"),
+                    None,
+                ))
+            }
+        };
+        let result = self.brp("game/gamepad", params).await?;
         Ok(rmcp::model::CallToolResult::success(vec![rmcp::model::ContentBlock::text(
             serde_json::to_string_pretty(&result).map_err(|err| rmcp::ErrorData::internal_error(format!("{err}"), None))?,
         )]))
