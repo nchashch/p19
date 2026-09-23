@@ -5,3 +5,8 @@
 /steam_deck_staging
 /profiling
 /scripts/__pycache__
+# Compiled playtest report PDFs and raw/uncurated screenshot capture staging — regenerable from
+# docs/playtests/playtest_NNNN/report.typ and the client's own runs, not meant to be committed.
+# The curated docs/playtests/screenshots/playtest_NNNN/ subset (referenced by report.typ, LFS-
+# tracked — see .gitattributes) is NOT covered by this and stays tracked.
+/docs/playtests/dist

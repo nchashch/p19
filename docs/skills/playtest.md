@@ -82,7 +82,7 @@ Custom `game/*` methods (see `client/src/dev/tool_api.rs`):
 | `game/levels` | — | Lists the server-replicated `Levels` singleton (`asset_path` + `name`). Lobby only |
 | `game/select_level` | `{"asset_path":"levels/minimal.level.ron"}` | Sends `LoadLevelRequest` (the lobby level-picker's exact message) |
 | `game/input` | see §5 | Mocks a replicated BEI action entity for `ticks` fixed ticks |
-| `game/screenshot` | `{"label":"..."}` optional | Async capture; PNG written under `assets_src/screenshots/` (persistent!) |
+| `game/screenshot` | `{"label":"..."}` optional | Async capture; PNG written under `docs/playtests/dist/screenshots/` (persistent, raw staging — not curated) |
 | `game/screenshot/get` | — | `{"ready":true,"png_base64":...,"path":...}` for the newest capture; **does not consume it** |
 
 Bevy builtins are **`world.*`-named** in 0.19 (`world.query`, `world.get_components`,
@@ -209,9 +209,9 @@ Retry once after ~2s before concluding anything.
 ## 7. Screenshots
 
 - `game/screenshot {"label":"ingame-cubes"}` →
-  `assets_src/screenshots/<millistamp>-ingame-cubes.png` (persistent, never
+  `docs/playtests/dist/screenshots/<millistamp>-ingame-cubes.png` (persistent, never
   consumed). Poll `game/screenshot/get` until `ready:true` (~1–3s), or just
-  `ls assets_src/screenshots/`.
+  `ls docs/playtests/dist/screenshots/`.
 - The capture reads the **offscreen texture** in `--mcp` mode = exactly what the
   agent "sees" (the most recently arrived claimed camera's view).
 - Annotate captures by measuring pixels, not by eyeballing memory:
@@ -265,9 +265,9 @@ The user's windowed client and your headless client can share a server:
 Each client instance generates a fresh nanosecond netcode client-id — no
 collision by design.
 
-## 10. Reporting (typst playthroughs)
+## 10. Reporting (typst playtests)
 
-**Every run is a playthrough, no exceptions.** Any session where a client gets started,
+**Every run gets a report, no exceptions.** Any session where a client gets started,
 driven through the MCP/BRP tool API in any way, and then torn down — a full formal state
 tour, a five-minute poke to sanity-check one thing, a targeted bug-reproduction pass, a
 one-off check while debugging something else — gets a filed report. "This was too small/
@@ -275,23 +275,48 @@ informal to write up" is exactly the case this rule exists to rule out: the valu
 accumulating, searchable history (what was tried, what was observed, on what date, against
 what commit), not in any single run being significant. Don't wait to be asked.
 
-- One directory per run: `assets_src/agent_playthroughs/playthrough_NNNN/`
-  (find the next free number), containing `report.typ`, the screenshots it
-  references (copied into the directory), and the compiled `report.pdf`.
-- Copy screenshots in and reference them **relatively**; use `#figure(image(...),
-  caption:[...])`, a metadata `#table`, numbered `= Sections`, and a
-  `<findings>` label for the findings block (see `playthrough_0001/report.typ`
-  for the house style).
-- **The findings section isn't just confirmed bugs.** Record observations, suspicions,
-  things that looked odd but weren't chased down, open questions, anything that would help
-  a *future* session pick up the thread faster — not only what got definitively proven.
-  Say what's uncertain as uncertain; don't inflate a hunch into a confirmed finding, but
-  don't omit it either. Cross-reference earlier reports by number when a run confirms,
-  contradicts, or narrows something an earlier one said (`playthrough_0002` superseding
-  `playthrough_0001`'s unverified `spawn_cube` caption is the working example of this).
-- Compile with `typst compile assets_src/agent_playthroughs/playthrough_NNNN/report.typ`
-  and check the exit code only. Do **not** open or read the produced PDF.
-- typst 0.15.1 is at `/usr/sbin/typst`.
+**Layout — three separate locations, not one directory, since only the screenshots need
+Git LFS and only the PDF needs to stay out of git entirely:**
+
+- `docs/playtests/playtest_NNNN/report.typ` (find the next free number) — the report
+  source. Plain text, tracked normally (not LFS).
+- `docs/playtests/screenshots/playtest_NNNN/*.png` — the *curated* screenshots this
+  report's `report.typ` actually references (copy the relevant ones in from the raw
+  capture staging directory, `docs/playtests/dist/screenshots/` — see §7 — don't dump
+  every capture from the session, just what's worth keeping). Tracked via **Git LFS**
+  (`.gitattributes` covers `docs/playtests/screenshots/**/*.png`) — confirm
+  `git lfs status` shows them as LFS objects, not plain git blobs, before committing.
+- `docs/playtests/dist/playtest_NNNN.pdf` — the compiled report. **Gitignored**
+  (`/docs/playtests/dist` in `.gitignore`) — regenerable from `report.typ`, never commit
+  it directly.
+
+Reference screenshots from `report.typ` **relatively**, e.g.
+`image("../screenshots/playtest_NNNN/<file>.png", ...)` (the report lives one level
+under `docs/playtests/`, the screenshots one level under `docs/playtests/screenshots/`);
+use `#figure(image(...), caption:[...])`, a metadata `#table`, numbered `= Sections`, and
+a `<findings>` label for the findings block (see `docs/playtests/playtest_0001/report.typ`
+for the house style).
+
+**The findings section isn't just confirmed bugs.** Record observations, suspicions,
+things that looked odd but weren't chased down, open questions, anything that would help
+a *future* session pick up the thread faster — not only what got definitively proven.
+Say what's uncertain as uncertain; don't inflate a hunch into a confirmed finding, but
+don't omit it either. Cross-reference earlier reports by number when a run confirms,
+contradicts, or narrows something an earlier one said (`playtest_0002` superseding
+`playtest_0001`'s unverified `spawn_cube` caption is the working example of this).
+
+Compile with (the `--root` matters — a bare `typst compile docs/playtests/playtest_NNNN/report.typ`
+fails with "path would escape the project root" the moment it hits a `../screenshots/...`
+reference, since typst sandboxes relative paths to the input file's own directory by default):
+
+```sh
+typst compile --root docs/playtests \
+  docs/playtests/playtest_NNNN/report.typ \
+  docs/playtests/dist/playtest_NNNN.pdf
+```
+
+Check the exit code only. Do **not** open or read the produced PDF. typst 0.15.1 is at
+`/usr/sbin/typst`.
 
 ## 11. Practical flow summary
 
@@ -307,4 +332,4 @@ what commit), not in any single run being significant. Don't wait to be asked.
    screenshots at each interesting state.
 8. Capture logs from both processes; teardown when done (or leave the pair for
    the user, saying which processes are yours).
-9. Write the playthrough report; compile; never inspect the PDF.
+9. Write the playtest report (see §10 for the three-location layout); compile with `--root docs/playtests`; never inspect the PDF.

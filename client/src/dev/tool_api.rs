@@ -140,16 +140,20 @@ fn game_state_method(_params: In<Option<serde_json::Value>>, world: &mut World) 
     Ok(serde_json::Value::Object(out).into())
 }
 
-/// Where captures land: `<workspace>/assets_src/screenshots/<utc>-<label>.png` — persistent,
-/// NOT consumed on read, so a human can browse everything the agent saw. `assets_src/` is the
-/// workspace-root source-asset directory; screenshots ride alongside it as another kind of
-/// source material. Anchored on `CARGO_MANIFEST_DIR` (set under `cargo run`/`cargo build`, and
-/// by the QA harness that launches the client) falling back to the CWD, matching how bevy
-/// itself resolves asset roots.
+/// Where captures land: `<workspace>/docs/playtests/dist/screenshots/<utc>-<label>.png` —
+/// persistent, NOT consumed on read, so a human can browse everything the agent saw. This is
+/// raw, uncurated staging output (gitignored — `docs/playtests/dist/` holds nothing meant to be
+/// committed), not the same thing as `docs/playtests/screenshots/playtest_NNNN/`, which is the
+/// curated, Git LFS-tracked subset an agent copies in when actually filing a playtest report
+/// (see `docs/skills/playtest.md` §10) — this function has no notion of "which playtest number"
+/// a capture belongs to, since that's only decided after the fact, when a report gets written.
+/// Anchored on `CARGO_MANIFEST_DIR` (set under `cargo run`/`cargo build`, and by the QA harness
+/// that launches the client) falling back to the CWD, matching how bevy itself resolves asset
+/// roots.
 fn screenshots_dir() -> PathBuf {
     std::env::var_os("CARGO_MANIFEST_DIR")
-        .map(|manifest| PathBuf::from(manifest).join("../assets_src/screenshots"))
-        .unwrap_or_else(|| PathBuf::from("assets_src/screenshots"))
+        .map(|manifest| PathBuf::from(manifest).join("../docs/playtests/dist/screenshots"))
+        .unwrap_or_else(|| PathBuf::from("docs/playtests/dist/screenshots"))
 }
 
 /// A new unique capture path: `<utc-zulu>-<label>.png`, millisecond-resolution so names sort
@@ -191,7 +195,7 @@ fn newest_screenshot() -> Option<PathBuf> {
 }
 
 /// `game/screenshot` — starts an async capture of the primary window. The PNG is written under
-/// `assets_src/screenshots/` by bevy's own `save_to_disk`, which encodes the PNG (async!); poll
+/// `docs/playtests/dist/screenshots/` by bevy's own `save_to_disk`, which encodes the PNG (async!); poll
 /// `game/screenshot/get` until it reports `ready`. Takes an optional `{"label": "..."}` param
 /// for the filename. The file PERSISTS (it is the human-browsable record of what the agent
 /// saw), so this also returns the path immediately.
@@ -226,7 +230,7 @@ fn screenshot_start_method(
 
 /// `game/screenshot/get` — polls the newest capture: `{"ready": true, "png_base64": …, "path":
 /// …}` once a PNG is on disk, `{"ready": false}` while still rendering. The file is NOT
-/// consumed — captures persist in `assets_src/screenshots/` for human review.
+/// consumed — captures persist in `docs/playtests/dist/screenshots/` for human review.
 fn screenshot_get_method(_params: In<Option<serde_json::Value>>, _world: &mut World) -> BrpResult {
     let Some(path) = newest_screenshot() else {
         return Ok(json!({"ready": false}).into());
