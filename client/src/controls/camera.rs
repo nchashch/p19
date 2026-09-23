@@ -99,16 +99,58 @@ impl OffscreenRenderTarget {
 /// arrived camera's 3D view wins — the player camera arrives after the level's authored one,
 /// so the agent sees through the player's eyes in game.
 ///
+/// **Known, deliberately unfixed follow-on issue**: with this scheme, the menu/lobby UI panel
+/// (Connect/Play/etc.) ends up drawn *under* the menu/lobby background once that background
+/// actually renders (see the `target_info` fix below) — the background arrives on a later
+/// frame than the UI camera and, correctly per this scheme, draws on top of it with no clear.
+/// Three different attempts at making the UI camera draw last *without* breaking in-game
+/// rendering were tried and reverted in the same session this fix landed (bumping the UI
+/// camera's order dynamically; re-deriving clear ownership every tick; giving the UI camera a
+/// fixed high sentinel order) — each fixed the menu/lobby ordering but regressed in-game
+/// rendering back to a blank frame, for reasons not fully root-caused (suspected: something
+/// order-dependent downstream of `camera.order`, e.g. frustum/visible-entities computation,
+/// which isn't BRP-inspectable to confirm directly since `VisibleEntities` is
+/// `#[reflect(ignore)]`). Reverted to this known-good version rather than ship an unverified
+/// fix for a cosmetic issue at the cost of the actual rendering-works-at-all fix. Worth
+/// revisiting with more room to instrument the render world directly (e.g. a temporary custom
+/// extract-schedule system logging `VisibleEntities` counts) rather than only BRP-probing the
+/// main world's `Camera` component, which reports "correct" configuration even on the runs
+/// where nothing actually rendered.
+///
 /// Only run in headless mode: on desktop, `Window(Primary)` is exactly right.
+///
+/// **The camera-target-never-resolves bug and its fix** (found via a direct read of
+/// `bevy_render::camera::camera_system`, `bevy_render-0.19.0/src/camera.rs`): every camera here
+/// spawns pointed at the default `RenderTarget::Window(Primary)`, but headless mode never has a
+/// primary window (`WindowPlugin { primary_window: None, .. }`) — so `RenderTarget::normalize`
+/// returns `None` for it, and `camera_system` silently skips its *entire* per-camera body
+/// (including the `Camera.computed.target_info` recompute) for any camera still in that state,
+/// with no error. Critically, merely running that `Query` item still consumes the camera's
+/// one-tick `is_added()` window even though the skipped body never reads it. By the time this
+/// system gets around to retargeting a given camera (spawned mid-session — a loaded world's
+/// background camera, the player's camera, anything not present at `Startup`), `is_added()` has
+/// already gone false, and the shared [`OffscreenRenderTarget`] image's own one-time
+/// `AssetEvent::Added` was already consumed by whichever camera claimed it first. Nothing in
+/// `camera_system`'s recompute gate (window/image asset events, `is_added()`, projection change,
+/// viewport-size change) ever fires again for that camera, so `target_info` — and thus its
+/// render output — stays permanently unresolved. Confirmed by testing: only the camera present
+/// at `Startup` (retargeted before its first `camera_system` pass) ever got a populated
+/// `target_info`; every camera retargeted on a later frame (the player's, and every loaded
+/// world's background camera) never did, independent of how long the app kept running.
+///
+/// The fix forces the one recompute condition this system *can* trigger deliberately: touching
+/// `Projection`'s own change-detection flag right when we fix the target, so `camera_system`'s
+/// `camera_projection.is_changed()` check is true on the very next pass — regardless of the
+/// `is_added()`/`AssetEvent` race above. `set_changed()` alone (no value mutation) is enough.
 pub fn retarget_cameras_to_offscreen(
     offscreen: Option<Res<OffscreenRenderTarget>>,
-    mut cameras: Query<(Entity, &mut RenderTarget, &mut Camera)>,
+    mut cameras: Query<(Entity, &mut RenderTarget, &mut Camera, &mut Projection)>,
     mut next_order: Local<u32>,
 ) {
     let Some(offscreen) = offscreen else {
         return;
     };
-    for (entity, mut target, mut camera) in &mut cameras {
+    for (entity, mut target, mut camera, mut projection) in &mut cameras {
         if matches!(
             *target,
             RenderTarget::Window(_) | RenderTarget::None { .. }
@@ -124,6 +166,10 @@ pub fn retarget_cameras_to_offscreen(
             } else {
                 camera.clear_color = ClearColorConfig::None;
             }
+            // See the doc comment above: this is what actually makes `camera_system` compute
+            // `target_info` for this camera at all, since the `RenderTarget`/`Camera` writes
+            // above don't by themselves satisfy its recompute gate.
+            projection.set_changed();
             info!("retargeted camera {entity} to the offscreen target (order {})", *next_order);
         }
     }

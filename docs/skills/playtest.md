@@ -222,15 +222,20 @@ Retry once after ~2s before concluding anything.
   "Functionality not supported". Compile typst reports, but verify only that the
   compile command exits 0 (§10).
 
-Known visual divergences in `--mcp` (frozen camera investigation — see AGENTS.md):
+Known visual divergences in `--mcp` (see AGENTS.md for the full root-cause writeup —
+the "nothing renders at all" version of this is fixed; one cosmetic ordering issue
+remains):
 
-- Menu/lobby: UI renders correctly; the `.glb` background does not visibly draw
-  (clear color behind the panel). Top of frames cut off (2× `UI_SCALE` vs 720p).
-- In-game: frames are pure clear color and the HUD does not draw, even though
-  every *data* path (state, input, replication) works. The player camera exists,
-  is claimed and ordered, but renders nothing; the KTX2-skybox kill and the
-  `IsDefaultUiCamera` ambiguity are the current leads. On a windowed client the
-  same build is correct.
+- Menu/lobby: both UI *and* the real `.glb` background now render correctly. The UI
+  panel currently draws *underneath* the background rather than on top of it
+  (background arrives on a later frame than the UI camera and draws over it, per
+  the retarget scheme's ordering rules) — a known, deliberately unfixed follow-on,
+  not the original bug. Top of frames still cut off (2× `UI_SCALE` vs 720p, unrelated,
+  cosmetic).
+- In-game: the real starfield HDRI skybox and level geometry now render correctly.
+  `levels/minimal.level.ron`'s floor renders black specifically because that level's
+  content has zero light entities anywhere — not a `--mcp` bug, confirmed via BRP,
+  would be black on a windowed client too.
 
 ## 8. Known failure modes & recovery
 
@@ -262,6 +267,14 @@ collision by design.
 
 ## 10. Reporting (typst playthroughs)
 
+**Every run is a playthrough, no exceptions.** Any session where a client gets started,
+driven through the MCP/BRP tool API in any way, and then torn down — a full formal state
+tour, a five-minute poke to sanity-check one thing, a targeted bug-reproduction pass, a
+one-off check while debugging something else — gets a filed report. "This was too small/
+informal to write up" is exactly the case this rule exists to rule out: the value is in the
+accumulating, searchable history (what was tried, what was observed, on what date, against
+what commit), not in any single run being significant. Don't wait to be asked.
+
 - One directory per run: `assets_src/agent_playthroughs/playthrough_NNNN/`
   (find the next free number), containing `report.typ`, the screenshots it
   references (copied into the directory), and the compiled `report.pdf`.
@@ -269,6 +282,13 @@ collision by design.
   caption:[...])`, a metadata `#table`, numbered `= Sections`, and a
   `<findings>` label for the findings block (see `playthrough_0001/report.typ`
   for the house style).
+- **The findings section isn't just confirmed bugs.** Record observations, suspicions,
+  things that looked odd but weren't chased down, open questions, anything that would help
+  a *future* session pick up the thread faster — not only what got definitively proven.
+  Say what's uncertain as uncertain; don't inflate a hunch into a confirmed finding, but
+  don't omit it either. Cross-reference earlier reports by number when a run confirms,
+  contradicts, or narrows something an earlier one said (`playthrough_0002` superseding
+  `playthrough_0001`'s unverified `spawn_cube` caption is the working example of this).
 - Compile with `typst compile assets_src/agent_playthroughs/playthrough_NNNN/report.typ`
   and check the exit code only. Do **not** open or read the produced PDF.
 - typst 0.15.1 is at `/usr/sbin/typst`.

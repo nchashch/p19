@@ -1,8 +1,6 @@
 use avian3d::prelude::*;
 use bevy::feathers::{dark_theme::create_dark_theme, theme::UiTheme};
 use bevy::prelude::*;
-#[allow(unused_imports)]
-use bevy::{anti_alias::taa::TemporalAntiAliasing, pbr::ScreenSpaceAmbientOcclusion};
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::winit::WinitPlugin;
 use bevy::window::ExitCondition;
@@ -120,29 +118,16 @@ impl Plugin for Prototype19 {
             .add_systems(Startup, |mut commands: Commands| {
                 commands.spawn((Camera2d, IsDefaultUiCamera));
             })
-            .add_systems(Update, retarget_cameras_to_offscreen)
-            // The KTX2 (BC6H) starry skybox renders nothing — at all, silently, with no wgpu
-            // error — for any camera whose target is an offscreen `Image` in this mode (verified
-            // by bisection: a programmatic Rgba8Unorm cubemap skybox lets the camera render, the
-            // loaded KTX2 one leaves the camera's whole output at the clear color; brightness is
-            // not a factor; the same asset+camera renders fine on a window target). Strip the
-            // skybox in headless mode so cameras render the world against the clear color
-            // instead of nothing; the sky is a cosmetic loss for the agent, not a functional
-            // one. TAA and SSAO are stripped on the same grounds: the player camera (the only
-            // one carrying them) renders black with them present into an offscreen target.
-            .add_systems(
-                Update,
-                |cameras: Query<Entity, Or<(With<bevy::light::Skybox>, With<TemporalAntiAliasing>, With<ScreenSpaceAmbientOcclusion>)>>,
-                 mut commands: Commands| {
-                    for entity in &cameras {
-                        commands
-                            .entity(entity)
-                            .remove::<bevy::light::Skybox>()
-                            .remove::<TemporalAntiAliasing>()
-                            .remove::<ScreenSpaceAmbientOcclusion>();
-                    }
-                },
-            );
+            .add_systems(Update, retarget_cameras_to_offscreen);
+            // A prior version of this file stripped `Skybox`/`TemporalAntiAliasing`/
+            // `ScreenSpaceAmbientOcclusion` from every camera here, believing the loaded KTX2
+            // (BC6H) skybox specifically killed offscreen rendering (silently, no wgpu error) and
+            // that TAA/SSAO did the same to the player camera. Confirmed by testing (once
+            // `retarget_cameras_to_offscreen`'s `target_info` bug — see that function's doc
+            // comment — was actually fixed) that this was never a separate bug: every one of
+            // those "kills" was the same camera never having a resolved render target, so nothing
+            // it carried could render either. With `target_info` fixed, the skybox/TAA/SSAO all
+            // render correctly unstripped; no headless-specific carve-out needed here at all.
         } else {
             app.add_plugins(DefaultPlugins);
         }
