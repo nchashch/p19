@@ -13,6 +13,33 @@ filed — that's part of filing it, not a separate later chore.
 
 #outline(title: none, indent: auto)
 
+== `playtest_0007` --- Add game/keyboard + game/mouse, Verify Real UI Clicks
+
+#table(
+  columns: (auto, auto),
+  stroke: 0.5pt,
+  inset: 5pt,
+  [*Date*], [2026-09-23 08:33 -- 08:41 UTC],
+  [*Commit*], [Started at `b340541`; not yet committed as of this entry],
+  [*Agent*], [Claude (Sonnet 5)],
+  [*Report*], [`docs/playtests/playtest_0007/report.typ`],
+)
+
+Extended `game/gamepad` (`playtest_0006`) to keyboard and mouse: `game/keyboard` mocks
+`ButtonInput<KeyCode>` directly (every one of Bevy's 160+ variants, via `KeyCode`'s own `serde`
+impl); `game/mouse` mocks `ButtonInput<MouseButton>` plus drives `bevy_picking`'s real
+`PointerInput` pipeline for cursor motion/position/clicks -- the first method in this API that
+reaches UI by screen position rather than by navigating focus and confirming. First
+implementation of mouse motion/wheel set `AccumulatedMouseMotion`/`AccumulatedMouseScroll` via a
+direct resource write -- compiled and ran with no error, but silently did nothing (`look_yaw`
+stayed `0.0`), because Bevy's own per-frame reset-from-events systems unconditionally overwrite
+those resources every frame. Fixed by injecting real `MouseMotion`/`MouseWheel` events instead.
+Verified live: a real mouse click on "Connect"/"Options" at their actual screenshot pixel
+coordinates drove the genuine `bevy_ui`/`bevy_picking` pipeline (state transitions and
+`selector` popup open/close confirmed independently via `game/state` and log lines); `KeyW`
+moved the in-game player through the real replicated movement pipeline; mouse motion turned the
+camera only after the event-based fix.
+
 == `playtest_0006` --- Add game/gamepad, Verify the Literal Crash Path
 
 #table(

@@ -234,6 +234,81 @@ input this way) — that state tracks real input *events*
 state directly rather than emitting events. Cosmetic only; every actual
 gameplay/UI effect of the input is real.
 
+## 5b. Keyboard + mouse (`game/keyboard`, `game/mouse`) — real UI clicks too
+
+Device-level, same idea as `game/gamepad`: `game/keyboard` mocks
+`ButtonInput<KeyCode>` directly, `game/mouse` mocks `ButtonInput<MouseButton>`
+plus real cursor motion/position through `bevy_picking`'s own event pipeline —
+this is the only method here that can click an actual UI button by position
+(as opposed to navigating focus with a gamepad/keyboard and confirming).
+
+```sh
+# hold W (bound to Movement's forward axis) for real, through the actual
+# KeyCode binding, then release
+{"key":"KeyW","pressed":true}
+{"key":"KeyW","pressed":false}
+
+# release every held key
+{"reset":true}
+```
+
+`key` is the exact Rust `KeyCode` variant name (`KeyW`, `Digit1`, `Escape`,
+`Space`, `Enter`, `Tab`, `ArrowUp`, `ShiftLeft`, `ControlLeft`, …) — deserialized
+directly via `KeyCode`'s own `serde` impl, so every one of Bevy's 160+ variants
+works, not a hand-picked subset. Level-triggered like `game/gamepad`, not
+duration-based — budget a release call, or use `{"reset":true}`.
+
+`game/mouse` is discriminated by `input`:
+
+```sh
+# move the cursor to an absolute pixel position — the SAME 1280x720 space
+# game/screenshot captures, so you can click exactly what you see in a
+# screenshot. Read the button's on-screen rect off a screenshot first.
+{"input":"move_to","x":161,"y":327}
+
+# press then release Left — this is a REAL click: it updates both
+# ButtonInput<MouseButton> (for mouse-bound gameplay actions) AND fires a
+# bevy_picking PointerInput on the pointer bevy_picking's own
+# spawn_mouse_pointer already spawns at Startup (headless or not) — so it
+# actually activates whatever UI node is under the cursor, through the real
+# hit-testing/Interaction/Activate pipeline, not a shortcut
+{"input":"button","button":"Left","pressed":true}
+{"input":"button","button":"Left","pressed":false}
+
+# relative motion (mouse-look) — dx/dy, like a real MouseMotion delta
+{"input":"motion","dx":200,"dy":0}
+
+# scroll wheel
+{"input":"wheel","x":0,"y":1,"unit":"Line"}
+
+# release all buttons + zero motion/scroll accumulators (does not recenter
+# the cursor)
+{"input":"reset"}
+```
+
+**Verified live, not just by inspection**: clicking "Connect" on the main menu
+at its actual screenshot pixel coordinates transitioned the client into
+`Lobby` through the real `bevy_ui`/`bevy_picking` pipeline (confirmed via
+`game/state`), and clicking "Options" opened/closed its real `selector` popup
+(confirmed via the `client::ui::selector` log lines it emits). This is the
+first method in this API that reaches UI by *position* rather than by
+navigating focus and confirming.
+
+**The gotcha that cost real debugging time, same shape as `game/gamepad`'s
+analog/digital one**: `AccumulatedMouseMotion`/`AccumulatedMouseScroll` cannot
+be set with a direct `world.insert_resource(...)` — Bevy's own
+`accumulate_mouse_motion_system`/`accumulate_mouse_scroll_system` unconditionally
+overwrite them from `MouseMotion`/`MouseWheel` **events** every single frame
+(their own doc comments say "reset to zero every frame"), so a direct write is
+silently wiped before `bevy_enhanced_input`'s reader ever observes it —
+confirmed live: `look_yaw` in `game/state` stayed exactly `0.0` after a
+`dx:200` motion call with the resource-write approach, no error anywhere.
+Fixed by writing real `MouseMotion`/`MouseWheel` events instead (`world.
+write_message(...)`), letting those systems compute the accumulated value on
+their own schedule, same as a real winit event would. `game/mouse`'s own
+implementation already does this correctly; don't "fix" it back to a direct
+resource write on a future refactor.
+
 ## 6. Probing the world (BRP)
 
 Type paths must be **exact and fully qualified**. When in doubt, grep the source:

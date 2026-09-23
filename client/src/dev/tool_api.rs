@@ -15,9 +15,16 @@
 //!    server-authoritative sim → corrected prediction, exactly like a gamepad's — but only for
 //!    the three ahoy gameplay actions, since it mocks at the action level), and `game/gamepad`
 //!    (a level below that: mocks `bevy_input::gamepad::Gamepad`'s own button/axis state on a
-//!    synthetic gamepad entity, so it also flows through BEI's real binding resolution — the
-//!    only way to reach UI navigation, e.g. the pause menu, through this API at all; see
-//!    `gamepad_method`'s doc comment).
+//!    synthetic gamepad entity, so it also flows through BEI's real binding resolution),
+//!    `game/keyboard` (mocks `ButtonInput<KeyCode>` directly — see `keyboard_method`), and
+//!    `game/mouse` (mocks `ButtonInput<MouseButton>` plus real `MouseMotion`/`MouseWheel`
+//!    events, and drives `bevy_picking`'s own `PointerInput` pipeline for cursor position and
+//!    UI clicks — see `mouse_method`'s doc comment, including a real gotcha found by testing:
+//!    `AccumulatedMouseMotion`/`AccumulatedMouseScroll` can't be set directly, only injected as
+//!    events). `game/gamepad`/`game/keyboard`/`game/mouse` are all the same idea at the device
+//!    level, one level below `game/input`'s action-level mocking — together they're the only
+//!    way to reach UI navigation (menus, the pause screen, clicking an actual button) through
+//!    this API at all, `game/input` only ever drives the three ahoy gameplay actions.
 //! 3. **An in-process MCP server** (`rmcp`, Streamable HTTP on `127.0.0.1:15710`, stateless
 //!    mode) whose tools proxy to the BRP methods over loopback HTTP — the MCP layer owns only
 //!    the protocol surface (tool listing + schemas), never the `World` (the handlers are async
@@ -72,6 +79,8 @@ impl Plugin for DevToolsPlugin {
         let screenshot_get = app.register_system(screenshot_get_method);
         let input_method_id = app.register_system(input_method);
         let gamepad_method_id = app.register_system(gamepad_method);
+        let keyboard_method_id = app.register_system(keyboard_method);
+        let mouse_method_id = app.register_system(mouse_method);
         let trigger_method = app.register_system(trigger_method);
         let levels_method = app.register_system(levels_method);
         let select_level_method = app.register_system(select_level_method);
@@ -83,6 +92,8 @@ impl Plugin for DevToolsPlugin {
         methods.insert("game/screenshot/get", bevy::remote::RemoteMethodSystemId::Instant(screenshot_get));
         methods.insert("game/input", bevy::remote::RemoteMethodSystemId::Instant(input_method_id));
         methods.insert("game/gamepad", bevy::remote::RemoteMethodSystemId::Instant(gamepad_method_id));
+        methods.insert("game/keyboard", bevy::remote::RemoteMethodSystemId::Instant(keyboard_method_id));
+        methods.insert("game/mouse", bevy::remote::RemoteMethodSystemId::Instant(mouse_method_id));
         methods.insert("game/trigger", bevy::remote::RemoteMethodSystemId::Instant(trigger_method));
         methods.insert("game/levels", bevy::remote::RemoteMethodSystemId::Instant(levels_method));
         methods.insert("game/select_level", bevy::remote::RemoteMethodSystemId::Instant(select_level_method));
@@ -512,6 +523,304 @@ fn parse_gamepad_axis(name: &str) -> Option<GamepadAxis> {
     })
 }
 
+/// `game/keyboard` — mocks real keyboard key state directly on `ButtonInput<KeyCode>`, the
+/// same resource `bevy_enhanced_input`'s `Binding::Keyboard` reads
+/// (`bevy_enhanced_input-0.26.0/src/context/input_reader.rs:79-86`, `keys.pressed(key)` — a
+/// plain resource, no per-device entity needed the way `Gamepad` is, so unlike `game/gamepad`
+/// there's nothing to lazily spawn here). Level-triggered like a real key: held until released.
+///
+/// Params:
+/// - `{"key": "KeyW", "pressed": true}` — press or release a `KeyCode` by its exact Rust variant
+///   name, deserialized directly via `KeyCode`'s own `serde` impl (this project's `bevy` already
+///   enables the `serialize` feature) rather than a hand-maintained name list — every one of
+///   Bevy's 160+ variants works, not just a hand-picked subset (e.g. `KeyA`..`KeyZ`,
+///   `Digit0`..`Digit9`, `Escape`, `Space`, `Enter`, `Tab`, `ArrowUp`/`Down`/`Left`/`Right`,
+///   `ShiftLeft`/`Right`, `ControlLeft`/`Right`, `AltLeft`/`Right`).
+/// - `{"reset": true}` — release every currently-pressed key.
+fn keyboard_method(params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
+    let Some(params) = params.0 else {
+        return Err(BrpError::internal("missing params"));
+    };
+    let mut keys = world.resource_mut::<ButtonInput<KeyCode>>();
+    if params.get("reset").and_then(serde_json::Value::as_bool) == Some(true) {
+        keys.release_all();
+        return Ok(json!({"reset": true}).into());
+    }
+    let key_name = params
+        .get("key")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| BrpError::internal("missing params.key"))?;
+    let key: KeyCode = serde_json::from_value(json!(key_name))
+        .map_err(|err| BrpError::internal(&format!("unknown key {key_name:?}: {err}")))?;
+    let pressed = params
+        .get("pressed")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true);
+    if pressed {
+        keys.press(key);
+    } else {
+        keys.release(key);
+    }
+    Ok(json!({"key": key_name, "pressed": pressed}).into())
+}
+
+/// The pointer this whole method drives. **Not a synthetic entity we spawn** — unlike
+/// `game/gamepad`'s virtual `Gamepad`, `bevy_picking`'s own `spawn_mouse_pointer` (part of its
+/// default plugin set) unconditionally spawns a `PointerId::Mouse` entity at `Startup`
+/// regardless of whether a window exists (confirmed by reading
+/// `bevy_picking-0.19.0/src/input.rs:115-118`) — headless mode already has a real mouse pointer
+/// entity, it just never receives real `PointerInput` events (those come from `WindowEvent`s
+/// this mode never gets, since there's no window). This project's own screenshot mechanism
+/// aside, `PointerId::Custom(Uuid)` exists in `bevy_picking` specifically "for mocking inputs",
+/// but reusing the real `PointerId::Mouse` is simpler (no new `uuid` dependency, no lazy-spawn
+/// bookkeeping) and arguably more faithful — it *is* the mouse, not a stand-in for it.
+const AGENT_POINTER: bevy::picking::pointer::PointerId = bevy::picking::pointer::PointerId::Mouse;
+
+/// The pointer's current position, read back from its own `PointerLocation` component so a
+/// relative `"motion"` move (below) computes the right new absolute position — falls back to
+/// the offscreen target's center (640, 360 for the 1280×720 target) if nothing has moved it yet
+/// this session.
+fn current_pointer_location(
+    world: &mut World,
+    offscreen: &Handle<Image>,
+) -> bevy::picking::pointer::Location {
+    use bevy::picking::pointer::{Location, PointerLocation};
+    let target = bevy::camera::NormalizedRenderTarget::Image(offscreen.clone().into());
+    let mut query = world.query::<(&bevy::picking::pointer::PointerId, &PointerLocation)>();
+    query
+        .iter(world)
+        .find(|(id, _)| **id == AGENT_POINTER)
+        .and_then(|(_, loc)| loc.location.clone())
+        .unwrap_or(Location {
+            target,
+            position: Vec2::new(640.0, 360.0),
+        })
+}
+
+/// `game/mouse` — mocks real mouse button/motion/wheel/cursor-position state. Buttons and
+/// motion/wheel deltas go through the same plain resources `game/keyboard`'s doc comment
+/// describes for keyboard (`ButtonInput<MouseButton>`, `AccumulatedMouseMotion`,
+/// `AccumulatedMouseScroll` — all three read directly by `bevy_enhanced_input`'s
+/// `Binding::MouseButton`/`MouseMotion`/`MouseWheel`, confirmed via the same
+/// `input_reader.rs` read that found `game/gamepad`'s analog-not-digital gotcha). Cursor
+/// position and clicks go through `bevy_picking`'s real event pipeline instead
+/// (`PointerInput`/`PointerAction` — see `AGENT_POINTER`'s doc comment) since UI hover/click
+/// hit-testing needs a *position*, which the button/motion resources above don't carry — this
+/// is the mechanism that makes clicking an actual UI button (as opposed to just a raw mouse-
+/// bound gameplay action) possible at all through this tool.
+///
+/// A real mouse click drives both mechanisms simultaneously in real life (`ButtonInput` for
+/// direct mouse-bound gameplay bindings, `PointerInput` for UI hit-testing), so `"button"`
+/// below updates both at once for `Left`/`Right`/`Middle` (mapped to `PointerButton`'s
+/// `Primary`/`Secondary`/`Middle` — `Back`/`Forward`/`Other` update `ButtonInput` only, since
+/// `PointerButton` has no equivalent).
+///
+/// Params:
+/// - `{"input":"button","button":"Left","pressed":true}` — `Left`/`Right`/`Middle`/`Back`/
+///   `Forward` (matches `MouseButton`). Level-triggered: held until an explicit
+///   `pressed:false` call.
+/// - `{"input":"motion","dx":10,"dy":-5}` — a *relative* delta, matching real mouse-motion
+///   events: sets this tick's `AccumulatedMouseMotion` (for camera-look-style bindings) and
+///   also moves the tracked cursor position by the same delta (for hover), mirroring how a
+///   single physical mouse movement feeds both systems in reality regardless of which one a
+///   given game state is actually listening to.
+/// - `{"input":"move_to","x":640,"y":360}` — sets the cursor to an *absolute* position in the
+///   same 1280×720 pixel space `game/screenshot` captures, for UI hover/click testing when you
+///   already know where something is from a screenshot. Doesn't touch
+///   `AccumulatedMouseMotion` — this is a convenience teleport, not a simulated drag.
+/// - `{"input":"wheel","x":0,"y":1,"unit":"Line"}` — `unit` is `Line` (default) or `Pixel`,
+///   matching `MouseScrollUnit`.
+/// - `{"input":"reset"}` — releases every mouse button (both mechanisms) and zeros the motion/
+///   wheel accumulators. Doesn't move the cursor back to center.
+fn mouse_method(params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
+    use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
+    use bevy::input::touch::TouchPhase;
+    use bevy::picking::pointer::{Location, PointerAction, PointerButton, PointerInput};
+
+    let Some(params) = params.0 else {
+        return Err(BrpError::internal("missing params"));
+    };
+    let input = params
+        .get("input")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| BrpError::internal("missing params.input"))?;
+    let offscreen = world
+        .get_resource::<OffscreenRenderTarget>()
+        .map(|target| target.0.clone());
+
+    match input {
+        "button" => {
+            let button_name = params
+                .get("button")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| BrpError::internal("missing params.button"))?;
+            let button = parse_mouse_button(button_name)
+                .ok_or_else(|| BrpError::internal(&format!("unknown button {button_name:?}")))?;
+            let pressed = params
+                .get("pressed")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(true);
+            {
+                let mut buttons = world.resource_mut::<ButtonInput<MouseButton>>();
+                if pressed {
+                    buttons.press(button);
+                } else {
+                    buttons.release(button);
+                }
+            }
+            if let (Some(pointer_button), Some(offscreen)) =
+                (mouse_button_to_pointer_button(button), offscreen)
+            {
+                let location = current_pointer_location(world, &offscreen);
+                let action = if pressed {
+                    PointerAction::Press(pointer_button)
+                } else {
+                    PointerAction::Release(pointer_button)
+                };
+                world.write_message(PointerInput::new(AGENT_POINTER, location, action));
+            }
+            Ok(json!({"button": button_name, "pressed": pressed}).into())
+        }
+        "motion" => {
+            let dx = params.get("dx").and_then(serde_json::Value::as_f64).unwrap_or(0.0) as f32;
+            let dy = params.get("dy").and_then(serde_json::Value::as_f64).unwrap_or(0.0) as f32;
+            let delta = Vec2::new(dx, dy);
+            // A direct `insert_resource(AccumulatedMouseMotion{..})` doesn't stick: Bevy's own
+            // `accumulate_mouse_motion_system` (bevy_input-0.19.0/src/mouse.rs:259-268)
+            // unconditionally overwrites this resource from `MouseMotion` events every frame
+            // ("reset to zero every frame", per its own doc comment) — it ran before our BRP
+            // write reached the world in one live test, wiping the value before
+            // `bevy_enhanced_input`'s reader ever saw it (confirmed: `look_yaw` stayed exactly
+            // 0.0 after a `dx: 200` call that should have turned the camera). Writing a real
+            // `MouseMotion` event instead lets that system pick it up in its own scheduled slot,
+            // whichever frame that lands on — the same mechanism a real winit mouse-delta uses.
+            world.write_message(bevy::input::mouse::MouseMotion { delta });
+            if let Some(offscreen) = offscreen {
+                let mut location = current_pointer_location(world, &offscreen);
+                location.position += delta;
+                world.write_message(PointerInput::new(
+                    AGENT_POINTER,
+                    location,
+                    PointerAction::Move { delta },
+                ));
+            }
+            Ok(json!({"dx": dx, "dy": dy}).into())
+        }
+        "move_to" => {
+            let Some(offscreen) = offscreen else {
+                return Err(BrpError::internal("no OffscreenRenderTarget (desktop client?)"));
+            };
+            let x = params.get("x").and_then(serde_json::Value::as_f64).unwrap_or(0.0) as f32;
+            let y = params.get("y").and_then(serde_json::Value::as_f64).unwrap_or(0.0) as f32;
+            let previous = current_pointer_location(world, &offscreen);
+            let position = Vec2::new(x, y);
+            let location = Location {
+                target: previous.target,
+                position,
+            };
+            world.write_message(PointerInput::new(
+                AGENT_POINTER,
+                location,
+                PointerAction::Move {
+                    delta: position - previous.position,
+                },
+            ));
+            Ok(json!({"x": x, "y": y}).into())
+        }
+        "wheel" => {
+            let x = params.get("x").and_then(serde_json::Value::as_f64).unwrap_or(0.0) as f32;
+            let y = params.get("y").and_then(serde_json::Value::as_f64).unwrap_or(0.0) as f32;
+            let unit_name = params
+                .get("unit")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("Line");
+            let unit = match unit_name {
+                "Line" => MouseScrollUnit::Line,
+                "Pixel" => MouseScrollUnit::Pixel,
+                other => {
+                    return Err(BrpError::internal(&format!(
+                        "unknown scroll unit {other:?} (expected Line|Pixel)"
+                    )));
+                }
+            };
+            // Same reasoning as `"motion"` above: a real `MouseWheel` event, not a direct
+            // resource write, so `accumulate_mouse_scroll_system` computes
+            // `AccumulatedMouseScroll` on its own terms. `window: Entity::PLACEHOLDER` is safe
+            // here — that system never reads the field, it only exists for consumers that care
+            // which window received the scroll, which headless mode has none of.
+            world.write_message(bevy::input::mouse::MouseWheel {
+                unit,
+                x,
+                y,
+                window: Entity::PLACEHOLDER,
+                phase: TouchPhase::Moved,
+            });
+            if let Some(offscreen) = offscreen {
+                let location = current_pointer_location(world, &offscreen);
+                world.write_message(PointerInput::new(
+                    AGENT_POINTER,
+                    location,
+                    PointerAction::Scroll {
+                        unit,
+                        x,
+                        y,
+                        phase: TouchPhase::Moved,
+                    },
+                ));
+            }
+            Ok(json!({"x": x, "y": y, "unit": unit_name}).into())
+        }
+        "reset" => {
+            world.resource_mut::<ButtonInput<MouseButton>>().release_all();
+            if let Some(offscreen) = offscreen {
+                let location = current_pointer_location(world, &offscreen);
+                for button in [
+                    PointerButton::Primary,
+                    PointerButton::Secondary,
+                    PointerButton::Middle,
+                ] {
+                    world.write_message(PointerInput::new(
+                        AGENT_POINTER,
+                        location.clone(),
+                        PointerAction::Release(button),
+                    ));
+                }
+            }
+            world.insert_resource(AccumulatedMouseMotion { delta: Vec2::ZERO });
+            world.insert_resource(AccumulatedMouseScroll {
+                unit: MouseScrollUnit::Line,
+                delta: Vec2::ZERO,
+            });
+            Ok(json!({"reset": true}).into())
+        }
+        other => Err(BrpError::internal(&format!(
+            "unknown input {other:?} (expected button|motion|move_to|wheel|reset)"
+        ))),
+    }
+}
+
+fn parse_mouse_button(name: &str) -> Option<MouseButton> {
+    Some(match name {
+        "Left" => MouseButton::Left,
+        "Right" => MouseButton::Right,
+        "Middle" => MouseButton::Middle,
+        "Back" => MouseButton::Back,
+        "Forward" => MouseButton::Forward,
+        _ => return None,
+    })
+}
+
+fn mouse_button_to_pointer_button(
+    button: MouseButton,
+) -> Option<bevy::picking::pointer::PointerButton> {
+    match button {
+        MouseButton::Left => Some(bevy::picking::pointer::PointerButton::Primary),
+        MouseButton::Right => Some(bevy::picking::pointer::PointerButton::Secondary),
+        MouseButton::Middle => Some(bevy::picking::pointer::PointerButton::Middle),
+        MouseButton::Back | MouseButton::Forward | MouseButton::Other(_) => None,
+    }
+}
+
 /// `game/trigger` — triggers the app's own client-local events, the same ones the menu buttons
 /// fire. `connect` → the main menu's Connect (opens the lightyear connection); `play` → the
 /// lobby's Play (sends `InGameRequest` via the client's own `MessageSender`); `disconnect` →
@@ -695,6 +1004,44 @@ pub struct GamepadInputParams {
     pub value: Option<f64>,
 }
 
+/// The `keyboard_input` tool's parameters — see `keyboard_method`'s doc comment.
+#[derive(serde::Deserialize, schemars::JsonSchema)]
+pub struct KeyboardInputParams {
+    /// `true` to release every currently-pressed key, ignoring `key`/`pressed`.
+    pub reset: Option<bool>,
+    /// The exact Rust `KeyCode` variant name, e.g. `KeyW`, `Digit1`, `Escape`, `Space`, `Enter`,
+    /// `Tab`, `ArrowUp`, `ShiftLeft`, `ControlLeft`, `AltLeft`.
+    pub key: Option<String>,
+    /// `true` to press (default), `false` to release. Held until you explicitly release it —
+    /// level-triggered like a real key, not duration-based.
+    pub pressed: Option<bool>,
+}
+
+/// The `mouse_input` tool's parameters — see `mouse_method`'s doc comment for the full
+/// design (why cursor motion/clicks go through `bevy_picking`'s real event pipeline).
+#[derive(serde::Deserialize, schemars::JsonSchema)]
+pub struct MouseInputParams {
+    /// Which kind of input this call sets: `button`, `motion`, `move_to`, `wheel`, or `reset`.
+    pub input: String,
+    /// `button`: `Left`, `Right`, `Middle`, `Back`, or `Forward` (matches `MouseButton`).
+    pub button: Option<String>,
+    /// `button`: `true` to press (default), `false` to release. Held until released.
+    pub pressed: Option<bool>,
+    /// `motion`: relative X delta this call. `move_to`: absolute X in the 1280×720 screenshot
+    /// pixel space. `wheel`: horizontal scroll amount.
+    pub x: Option<f64>,
+    /// `motion`: relative Y delta this call. `move_to`: absolute Y. `wheel`: vertical scroll
+    /// amount (most wheels only use this one).
+    pub y: Option<f64>,
+    /// `motion`: alias for `x` (relative dx) — either name works, `dx`/`dy` mirror the BRP
+    /// method's own param names exactly.
+    pub dx: Option<f64>,
+    /// `motion`: alias for `y` (relative dy).
+    pub dy: Option<f64>,
+    /// `wheel`: `Line` (default, one detent per unit) or `Pixel` (raw pixel scroll).
+    pub unit: Option<String>,
+}
+
 /// The MCP tool surface — every tool is a thin proxy to a BRP method over loopback HTTP; all
 /// `World` access lives in the BRP handlers above.
 #[derive(Clone)]
@@ -839,6 +1186,81 @@ impl GameTools {
             }
         };
         let result = self.brp("game/gamepad", params).await?;
+        Ok(rmcp::model::CallToolResult::success(vec![rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&result).map_err(|err| rmcp::ErrorData::internal_error(format!("{err}"), None))?,
+        )]))
+    }
+
+    /// Mocks real keyboard key state (`ButtonInput<KeyCode>`). Held until explicitly
+    /// released/reset.
+    #[rmcp::tool(description = "Mock a real keyboard key, held until released — the same ButtonInput<KeyCode> resource bevy_enhanced_input's Binding::Keyboard reads for a physical key. `key` is the exact Rust KeyCode variant name (KeyW, KeyA..KeyZ, Digit0..Digit9, Escape, Space, Enter, Tab, ArrowUp/Down/Left/Right, ShiftLeft/Right, ControlLeft/Right, AltLeft/Right, etc — every KeyCode variant works). `pressed` true (default) or false. Or pass `reset: true` to release every held key.")]
+    async fn keyboard_input(
+        &self,
+        rmcp::handler::server::wrapper::Parameters(KeyboardInputParams { reset, key, pressed }):
+            rmcp::handler::server::wrapper::Parameters<KeyboardInputParams>,
+    ) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
+        let params = if reset == Some(true) {
+            json!({"reset": true})
+        } else {
+            let key = key.ok_or_else(|| {
+                rmcp::ErrorData::invalid_params("missing key (or pass reset: true)", None)
+            })?;
+            json!({"key": key, "pressed": pressed.unwrap_or(true)})
+        };
+        let result = self.brp("game/keyboard", params).await?;
+        Ok(rmcp::model::CallToolResult::success(vec![rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&result).map_err(|err| rmcp::ErrorData::internal_error(format!("{err}"), None))?,
+        )]))
+    }
+
+    /// Mocks real mouse button/motion/wheel state plus cursor position, driving both raw input
+    /// resources and `bevy_picking`'s real event pipeline so UI clicks/hover work too.
+    #[rmcp::tool(description = "Mock real mouse input — buttons, motion, absolute cursor position, and wheel — through both the raw ButtonInput<MouseButton>/AccumulatedMouseMotion/AccumulatedMouseScroll resources bevy_enhanced_input reads AND bevy_picking's real PointerInput event pipeline, so this can click actual UI buttons (not just drive mouse-bound gameplay actions). `input`: `button` (`button`: Left|Right|Middle|Back|Forward, `pressed` true/default or false — held until released), `motion` (`dx`/`dy` relative delta, like a mouse-look turn), `move_to` (`x`/`y` absolute position in the 1280x720 screenshot pixel space — use this to click something you can see at a known pixel from a screenshot), `wheel` (`x`/`y` scroll amount, `unit`: Line|Pixel), `reset` (releases all buttons, zeros motion/scroll — does not recenter the cursor). To click a UI button: move_to its position, then button press, then button release.")]
+    async fn mouse_input(
+        &self,
+        rmcp::handler::server::wrapper::Parameters(MouseInputParams { input, button, pressed, x, y, dx, dy, unit }):
+            rmcp::handler::server::wrapper::Parameters<MouseInputParams>,
+    ) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
+        let params = match input.as_str() {
+            "button" => {
+                let button = button.ok_or_else(|| {
+                    rmcp::ErrorData::invalid_params("missing button for input=\"button\"", None)
+                })?;
+                json!({"input": "button", "button": button, "pressed": pressed.unwrap_or(true)})
+            }
+            "motion" => {
+                json!({
+                    "input": "motion",
+                    "dx": dx.or(x).unwrap_or(0.0),
+                    "dy": dy.or(y).unwrap_or(0.0),
+                })
+            }
+            "move_to" => {
+                let x = x.ok_or_else(|| {
+                    rmcp::ErrorData::invalid_params("missing x for input=\"move_to\"", None)
+                })?;
+                let y = y.ok_or_else(|| {
+                    rmcp::ErrorData::invalid_params("missing y for input=\"move_to\"", None)
+                })?;
+                json!({"input": "move_to", "x": x, "y": y})
+            }
+            "wheel" => {
+                json!({
+                    "input": "wheel",
+                    "x": x.unwrap_or(0.0),
+                    "y": y.unwrap_or(0.0),
+                    "unit": unit.unwrap_or_else(|| "Line".to_string()),
+                })
+            }
+            "reset" => json!({"input": "reset"}),
+            other => {
+                return Err(rmcp::ErrorData::invalid_params(
+                    format!("unknown input {other:?} (expected button|motion|move_to|wheel|reset)"),
+                    None,
+                ))
+            }
+        };
+        let result = self.brp("game/mouse", params).await?;
         Ok(rmcp::model::CallToolResult::success(vec![rmcp::model::ContentBlock::text(
             serde_json::to_string_pretty(&result).map_err(|err| rmcp::ErrorData::internal_error(format!("{err}"), None))?,
         )]))
