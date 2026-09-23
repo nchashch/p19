@@ -34,6 +34,17 @@ pub fn is_mcp_mode_presync() -> bool {
     is_config_flag_enabled("mcp")
 }
 
+/// `--no-common-assets` (CLI-only): skips the whole `CommonAssets` collection load (no manifest
+/// read at all) and boots with `CommonAssets::placeholder()` instead, transitioning straight to
+/// `GameState::MainMenu` — the "barest boot" mode for playtest asset roots that carry no engine
+/// furniture (no textures, fonts, sounds, skyboxes). Content then arrives only via the
+/// `ClientWorldAsset` path, which loads by path rather than through the manifest. Like `--mcp`,
+/// decided *pre-sync* (it changes whether the loading state is even registered); CLI-only since
+/// it's a per-playtest-run choice, not a config-file property of an asset root.
+pub fn is_no_common_assets_presync() -> bool {
+    std::env::args().any(|arg| arg == "--no-common-assets")
+}
+
 /// Whether the game runs in desktop-VR mode (`vr = true` in `assets/config.toml`) — decided
 /// *pre-sync* (which plugin group even gets added is a build-time choice); see `main.rs`.
 pub fn is_vr_enabled_presync() -> bool {

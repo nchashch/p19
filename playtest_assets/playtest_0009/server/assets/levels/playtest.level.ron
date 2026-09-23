@@ -1,0 +1,5 @@
+(
+    name: "level-playtest-name",
+    model: "rigs/playtest_level.gltf",
+    skybox: "skyboxes/night_sky.ktx2",
+)

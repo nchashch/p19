@@ -1,0 +1,61 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "hand-authored for playtest_0009"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "Scene",
+      "nodes": [
+        0,
+        1
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "floor-visual",
+      "extras": {
+        "skein": [
+          {
+            "shared::mesh_primitive::MeshPrimitive": {
+              "Cuboid": {
+                "size": [
+                  40.0,
+                  0.5,
+                  40.0
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "rotation": [
+        -1.0,
+        0.0,
+        0.0,
+        6.123233995736766e-17
+      ]
+    },
+    {
+      "name": "floating-sphere",
+      "translation": [
+        0.0,
+        3.0,
+        -5.0
+      ],
+      "extras": {
+        "skein": [
+          {
+            "shared::mesh_primitive::MeshPrimitive": {
+              "Sphere": {
+                "radius": 2.0
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

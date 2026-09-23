@@ -240,7 +240,9 @@ fn show_tooltip(
         }
     }
     let text = localized(&localization, tip.key, &fluent_args);
-    let font = common_assets.serif_font.clone();
+    // `unwrap_or_default()` = Bevy's embedded default font when the playtest-assets mode
+    // omitted the font (`None`) — see `collections.rs`'s furniture-field doc comment.
+    let font = common_assets.serif_font.clone().unwrap_or_default();
     let position = if let Some(above) = above {
         Node {
             position_type: PositionType::Absolute, // escape flex flow, free to overlap

@@ -192,6 +192,17 @@ impl IconAtlas {
         self.indices.get(name).copied()
     }
 
+    /// Fallback for the playtest-assets/`--no-common-assets` mode (an atlas pair omitted from
+    /// `CommonAssets`): the default image handle + an empty layout with no icon rects. Every
+    /// `get` misses (`None`), so icon quads degrade to absent while text labels still render.
+    fn empty(layouts: &mut Assets<TextureAtlasLayout>) -> Self {
+        Self {
+            image: Handle::default(),
+            layout: layouts.add(TextureAtlasLayout::new_empty(UVec2::ZERO)),
+            indices: HashMap::default(),
+        }
+    }
+
     fn image_node(&self, index: usize) -> ImageNode {
         ImageNode::from_atlas_image(
             self.image.clone(),
@@ -249,28 +260,50 @@ fn finalize_input_icon_atlases(
     manifests: Res<Assets<SparrowAtlasManifest>>,
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {
-    // `CommonAssets` guarantees both manifests are already loaded by the time
-    // `GameState::MainMenu` is entered (that's the whole point of `GameState::AssetLoading`
-    // blocking on the collection) — `None` here would mean that guarantee broke.
-    let keyboard_mouse_manifest = manifests
-        .get(&common_assets.keyboard_mouse_atlas_manifest)
-        .expect("keyboard/mouse atlas manifest should already be loaded");
-    let steam_deck_manifest = manifests
-        .get(&common_assets.steam_deck_atlas_manifest)
-        .expect("Steam Deck atlas manifest should already be loaded");
+    // Both fields of each pair are `Option` for the playtest-assets/`--no-common-assets` mode: a
+    // manifest that omits the atlas keys gets `None` here, degrading to an empty fallback
+    // `IconAtlas` (icon lookups all miss → tips render without icons; labels still render).
+    // In the normal mode both keys are present and `CommonAssets` guarantees they're already
+    // loaded by the time `GameState::MainMenu` is entered (that's the whole point of
+    // `GameState::AssetLoading` blocking on the collection) — hence the `expect`s on the
+    // resolved assets stay valid there.
+    let keyboard_mouse = match (
+        common_assets.keyboard_mouse_atlas_image.clone(),
+        common_assets.keyboard_mouse_atlas_manifest.clone(),
+    ) {
+        (Some(image), Some(manifest)) => finalize_icon_atlas(
+            image,
+            manifests
+                .get(&manifest)
+                .expect("keyboard/mouse atlas manifest should already be loaded"),
+            &images,
+            &mut layouts,
+        ),
+        _ => {
+            warn!("keyboard/mouse input-icon atlas omitted from CommonAssets — control tips render without icons");
+            IconAtlas::empty(&mut layouts)
+        }
+    };
+    let steam_deck = match (
+        common_assets.steam_deck_atlas_image.clone(),
+        common_assets.steam_deck_atlas_manifest.clone(),
+    ) {
+        (Some(image), Some(manifest)) => finalize_icon_atlas(
+            image,
+            manifests
+                .get(&manifest)
+                .expect("Steam Deck atlas manifest should already be loaded"),
+            &images,
+            &mut layouts,
+        ),
+        _ => {
+            warn!("Steam Deck input-icon atlas omitted from CommonAssets — control tips render without icons");
+            IconAtlas::empty(&mut layouts)
+        }
+    };
     commands.insert_resource(InputIconAtlases {
-        keyboard_mouse: finalize_icon_atlas(
-            common_assets.keyboard_mouse_atlas_image.clone(),
-            keyboard_mouse_manifest,
-            &images,
-            &mut layouts,
-        ),
-        steam_deck: finalize_icon_atlas(
-            common_assets.steam_deck_atlas_image.clone(),
-            steam_deck_manifest,
-            &images,
-            &mut layouts,
-        ),
+        keyboard_mouse,
+        steam_deck,
     });
 }
 

@@ -69,25 +69,31 @@ pub struct CommonAssets {
     pub menu_background: Handle<WorldAsset>,
 
     /// The lobby background scene.
-    #[asset(key = "menu_background")]
+    #[asset(key = "lobby_background")]
     pub lobby_background: Handle<WorldAsset>,
 
-    #[asset(key = "crunch")]
-    pub crunch: Handle<AudioSample>,
-    #[asset(key = "explosion")]
-    pub explosion: Handle<AudioSample>,
+    /// Furniture fields are `Option` so an asset manifest can omit them entirely — that's the
+    /// `--no-common-assets`/playtest-assets mode: the playtest's own
+    /// `collections/common_assets.assets.ron` lists only the world keys, and these come back
+    /// `None` (the consumers degrade to Bevy's built-in defaults: the embedded default font,
+    /// no skybox pass, no icon quads, no sample playback). The normal `client/assets` manifest
+    /// lists every key, so production behavior is unchanged.
+    #[asset(key = "crunch", optional)]
+    pub crunch: Option<Handle<AudioSample>>,
+    #[asset(key = "explosion", optional)]
+    pub explosion: Option<Handle<AudioSample>>,
 
     /// See `scripts/hdri_to_skybox.py`'s doc comment for how this KTX2 cubemap is built.
-    #[asset(key = "skybox")]
-    pub skybox: Handle<Image>,
+    #[asset(key = "skybox", optional)]
+    pub skybox: Option<Handle<Image>>,
 
     /// The client's main UI font — IosevkaSlabQP (a slab-serif face), replacing IBM Plex Serif.
     /// Field name kept as `serif_font` rather than renamed to match: "slab serif" is still a
     /// serif, and every call site (`widgets.rs`, `hud.rs`, `npc_ui_quad.rs`,
     /// `override_default_font` below) already reads `serif_font` for "the UI font," not
     /// specifically IBM Plex — renaming would've been a pure churn edit with no behavior change.
-    #[asset(key = "serif_font")]
-    pub serif_font: Handle<Font>,
+    #[asset(key = "serif_font", optional)]
+    pub serif_font: Option<Handle<Font>>,
 
     /// Noto Sans JP — kept loaded purely so `parley` (Bevy 0.19's text-shaping stack) has a
     /// CJK-capable font actually registered in its font collection to fall back to for glyphs
@@ -97,8 +103,8 @@ pub struct CommonAssets {
     /// field's own `Handle` never needs to be read anywhere else). Replaces relying on
     /// `system_font_discovery` (a host-machine-dependent CJK font, not a shipped one) for the
     /// `ja-JP` locale added alongside it — see `ui.rs`'s `language_options`.
-    #[asset(key = "noto_sans_jp_font")]
-    pub noto_sans_jp_font: Handle<Font>,
+    #[asset(key = "noto_sans_jp_font", optional)]
+    pub noto_sans_jp_font: Option<Handle<Font>>,
 
     /// Kenney's own pre-built texture atlas for the keyboard/mouse "Input Prompts" pack — a single
     /// sheet PNG plus a Sparrow/Starling-format XML manifest (`input_icons::SparrowAtlasManifest`
@@ -106,15 +112,42 @@ pub struct CommonAssets {
     /// pack's ~85 individual per-icon PNGs is deliberate — see `input_icons.rs`'s module doc
     /// comment for why building our own atlas at runtime from the individual files was dropped in
     /// favor of this.
-    #[asset(key = "keyboard_mouse_atlas_image")]
-    pub keyboard_mouse_atlas_image: Handle<Image>,
-    #[asset(key = "keyboard_mouse_atlas_manifest")]
-    pub keyboard_mouse_atlas_manifest: Handle<SparrowAtlasManifest>,
+    #[asset(key = "keyboard_mouse_atlas_image", optional)]
+    pub keyboard_mouse_atlas_image: Option<Handle<Image>>,
+    #[asset(key = "keyboard_mouse_atlas_manifest", optional)]
+    pub keyboard_mouse_atlas_manifest: Option<Handle<SparrowAtlasManifest>>,
     /// Same idea as `keyboard_mouse_atlas_image`/`_manifest`, for the Steam Deck button/stick pack.
-    #[asset(key = "steam_deck_atlas_image")]
-    pub steam_deck_atlas_image: Handle<Image>,
-    #[asset(key = "steam_deck_atlas_manifest")]
-    pub steam_deck_atlas_manifest: Handle<SparrowAtlasManifest>,
+    #[asset(key = "steam_deck_atlas_image", optional)]
+    pub steam_deck_atlas_image: Option<Handle<Image>>,
+    #[asset(key = "steam_deck_atlas_manifest", optional)]
+    pub steam_deck_atlas_manifest: Option<Handle<SparrowAtlasManifest>>,
+}
+
+impl CommonAssets {
+    /// The `--no-common-assets` barest-boot mode's stand-in for a real collection load (see
+    /// `main.rs`): no manifest is read at all, so the world keys get dangling handles
+    /// (`Handle::default()` — the "default asset" id; the background/menu worlds simply never
+    /// resolve, which is the point) and every furniture field is `None`, exactly as if a
+    /// manifest had omitted them — every consumer's degradation path is the same one the
+    /// `optional` fields above already implement.
+    pub fn placeholder() -> Self {
+        Self {
+            cube_world: Handle::default(),
+            rig_world: Handle::default(),
+            rig_gltf: Handle::default(),
+            menu_background: Handle::default(),
+            lobby_background: Handle::default(),
+            crunch: None,
+            explosion: None,
+            skybox: None,
+            serif_font: None,
+            noto_sans_jp_font: None,
+            keyboard_mouse_atlas_image: None,
+            keyboard_mouse_atlas_manifest: None,
+            steam_deck_atlas_image: None,
+            steam_deck_atlas_manifest: None,
+        }
+    }
 }
 
 #[derive(AssetCollection, Resource)]
@@ -180,7 +213,11 @@ struct SpawnTrigger {
 /// `Res<CommonAssets>` "resource does not exist"). `OnEnter(GameState::MainMenu)` is the earliest
 /// point `Res<CommonAssets>` is guaranteed to exist.
 pub fn override_default_font(common_assets: Res<CommonAssets>, mut fonts: ResMut<Assets<Font>>) {
-    let Some(font) = fonts.get(&common_assets.serif_font).cloned() else {
+    // `None` = the playtest-assets mode omitted the font keys; keep Bevy's embedded default.
+    let Some(serif_font) = &common_assets.serif_font else {
+        return;
+    };
+    let Some(font) = fonts.get(serif_font).cloned() else {
         // Shouldn't happen — every handle in `CommonAssets` is guaranteed fully loaded by the
         // time the collection resource itself exists — but fail soft rather than panic/unwrap if
         // that guarantee is ever violated.
@@ -227,8 +264,12 @@ pub fn override_feathers_button_font(
     common_assets: Res<CommonAssets>,
 ) {
     for (entity, font) in &fonts {
+        // `None` (playtest-assets mode): leave the feathers default font alone.
+        let Some(serif_font) = &common_assets.serif_font else {
+            return;
+        };
         commands.entity(entity).insert(InheritableFont {
-            font: common_assets.serif_font.clone(),
+            font: serif_font.clone(),
             ..font.clone()
         });
     }

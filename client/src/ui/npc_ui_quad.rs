@@ -121,7 +121,7 @@ fn setup_npc_ui_quad(
     mut materials: ResMut<Assets<StandardMaterial>>,
     common_assets: Res<CommonAssets>,
 ) {
-    let font = common_assets.serif_font.clone();
+    let font = common_assets.serif_font.clone().unwrap_or_default();
     let size = Extent3d {
         width: TEXTURE_SIZE,
         height: TEXTURE_SIZE,

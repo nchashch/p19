@@ -348,7 +348,8 @@ fn input_method(params: In<Option<serde_json::Value>>, world: &mut World) -> Brp
                     // mock is active, so the value is a PER-TICK RATE: `ticks` total is
                     // `ticks * value`. Divide the requested total turn by the tick count.
                     // `rotate_camera`'s `delta_yaw = -value.x` makes positive yaw_delta turn
-                    // right (Bevy yaw decreases clockwise); positive pitch_delta looks up.
+                    // right (Bevy yaw decreases clockwise); positive pitch_delta looks DOWN
+                    // (look_pitch reads positive when looking up — verified visually).
                     action_entity_mut.insert(ActionMock::new(
                         TriggerState::Fired,
                         ActionValue::Axis2D(Vec2::new(

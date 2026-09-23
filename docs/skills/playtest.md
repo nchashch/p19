@@ -156,7 +156,8 @@ active).
 # injecting a small amount and reading look_yaw/look_pitch in game/state — the
 # conventions are empirically inverted relative to intuition:
 #   negative yaw_delta → look_yaw increases (view rotates toward −X from +Z)
-#   negative pitch_delta → look_pitch increases (looks down)
+#   negative pitch_delta → look_pitch increases → looks UP (look_pitch positive = UP;
+#   positive pitch_delta = look DOWN — verified visually against a known scene)
 {"action":"rotate","yaw_delta":-1.5708,"ticks":30}
 ```
 
@@ -568,6 +569,25 @@ one-off check while debugging something else — gets a filed report. "This was 
 informal to write up" is exactly the case this rule exists to rule out: the value is in the
 accumulating, searchable history (what was tried, what was observed, on what date, against
 what commit), not in any single run being significant. Don't wait to be asked.
+
+**Isolate the run's assets too (since playtest 0009)**: ship what the run needs under
+`playtest_assets/playtest_NNNN/{server,client}/assets/` as plaintext — hand-written JSON
+`.gltf` whose content is Skein components (`ClientReplicate`, `ClientWorldAsset`,
+`ColliderConstructor`, `MeshPrimitive` for zero-baked-data visuals), a per-run
+`collections/common_assets.assets.ron` remap, `.level.ron`, `config.toml`, one en-US locale.
+Launch with `BEVY_ASSET_ROOT` aimed at those directories. **Fully plaintext since playtest
+0010**: `CommonAssets`'s furniture fields (fonts, WAVs, the skybox, the atlas PNGs) are
+`#[asset(key = "…", optional)]` `Option<Handle<T>>` now, so the manifest can list only the
+five world keys and the run needs *no* copied engine furniture at all — every consumer
+degrades gracefully (Bevy's embedded default font, no skybox pass, no sample playback, empty
+icon-atlas fallbacks). There's also a pre-sync `--no-common-assets` CLI flag for the even
+barest boot: no loading state at all (the manifest is never read), a
+`CommonAssets::placeholder()` resource, and an immediate `AssetLoading → MainMenu`
+transition — in-game visuals still arrive via the `ClientWorldAsset` path, which loads by
+path, not through the manifest. The recommended playtest mode is still the manifest-driven
+one (trimmed manifest, no flag) since it keeps the `MeshPrimitive` world visuals; see
+`playtest_assets/playtest_0009/` (stripped to 100% plaintext by 0010) as the template and
+its report, plus `docs/playtests/playtest_0010/`, for the mechanism and the gotchas.
 
 **Layout — three separate locations, not one directory, since only the screenshots need
 Git LFS and only the PDF needs to stay out of git entirely:**

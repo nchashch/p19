@@ -199,7 +199,9 @@ fn crosshair() -> impl Scene {
 }
 
 fn data_frame(common_assets: &CommonAssets) -> impl Scene {
-    let font = common_assets.serif_font.clone();
+    // `unwrap_or_default()` = Bevy's embedded default font when the playtest-assets mode
+    // omitted the font (`None`) — see `collections.rs`'s furniture-field doc comment.
+    let font = common_assets.serif_font.clone().unwrap_or_default();
     bsn! {
         DataFramePanel
         Visibility::Hidden
@@ -291,7 +293,7 @@ fn ability_slot(
     tooltip_args: Vec<(&'static str, TooltipArg)>,
     common_assets: &CommonAssets,
 ) -> impl Scene {
-    let font = common_assets.serif_font.clone();
+    let font = common_assets.serif_font.clone().unwrap_or_default();
     let hotkey_font = font.clone();
     bsn! {
         hotbar_slot()

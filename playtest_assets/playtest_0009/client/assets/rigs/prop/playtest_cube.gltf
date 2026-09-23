@@ -1,0 +1,13 @@
+{
+  "asset": { "version": "2.0", "generator": "hand-authored for playtest_0009" },
+  "scene": 0,
+  "scenes": [ { "name": "Scene", "nodes": [0] } ],
+  "nodes": [
+    {
+      "name": "cube-visual",
+      "extras": { "skein": [
+        { "shared::mesh_primitive::MeshPrimitive": { "Cuboid": { "size": [2.0, 2.0, 2.0] } } }
+      ] }
+    }
+  ]
+}

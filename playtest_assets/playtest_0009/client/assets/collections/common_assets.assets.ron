@@ -1,0 +1,15 @@
+// Playtest 0009's remapped manifest — same keys as `client/assets/collections/common_assets.assets.ron`,
+// playtest-local paths: every world is a hand-authored text `.gltf` whose only content is Skein
+// `MeshPrimitive` components (zero baked mesh data). This manifest lists ONLY the five world keys —
+// since `CommonAssets`'s furniture fields became `optional`, an omitted key resolves to `None` and
+// every consumer degrades gracefully (Bevy's embedded default font, no skybox pass, no icon quads,
+// no sample playback), so a playtest asset root can be 100% plaintext: no fonts, WAVs, KTX2s, or
+// atlas PNGs copied in at all. The `--no-common-assets` flag is the even-bareer mode: this manifest
+// isn't read either (see `main.rs`).
+({
+    "cube_world": File ( path: "rigs/prop/playtest_cube.gltf#Scene0" ),
+    "rig_world": File ( path: "rigs/armature/playtest_rig.gltf#Scene0" ),
+    "rig_gltf": File ( path: "rigs/armature/playtest_rig.gltf" ),
+    "menu_background": File ( path: "rigs/environment/playtest_menu.gltf#Scene0" ),
+    "lobby_background": File ( path: "rigs/environment/playtest_lobby.gltf#Scene0" ),
+})

@@ -89,6 +89,9 @@ impl Plugin for Prototype19 {
         // VR (the XR swapchain needs a session, and this mode's purpose is display-less hosts);
         // `--mcp` wins when both are set.
         let mcp_headless = config::is_mcp_mode_presync() && !vr_enabled;
+        // `--no-common-assets`: barest boot for fully-plaintext playtest asset roots — no
+        // `CommonAssets` collection load at all (see the branch at the bottom of this method).
+        let no_common_assets = config::is_no_common_assets_presync();
 
         if vr_enabled {
             app.add_plugins(add_xr_plugins(
@@ -290,14 +293,6 @@ impl Plugin for Prototype19 {
             .register_type::<ColliderConstructor>()
             .init_asset::<assets::character::Character>()
             .register_asset_loader(assets::character::CharacterAssetLoader)
-            .add_loading_state(
-                LoadingState::new(GameState::AssetLoading)
-                    .continue_to_state(GameState::MainMenu)
-                    .with_dynamic_assets_file::<StandardDynamicAssetCollection>(
-                        "collections/common_assets.assets.ron",
-                    )
-                    .load_collection::<assets::collections::CommonAssets>(),
-            )
             .add_systems(
                 OnEnter(GameState::MainMenu),
                 (
@@ -310,5 +305,30 @@ impl Plugin for Prototype19 {
                 assets::collections::override_feathers_button_font
                     .run_if(resource_exists::<assets::collections::CommonAssets>),
             );
+
+        if no_common_assets {
+            // The `--no-common-assets` barest boot: no `LoadingState` is registered (so no
+            // manifest is read, and nothing blocks on asset completion) — instead a placeholder
+            // collection (dangling world handles, `None` furniture; see its doc comment) is
+            // inserted up front and `Startup` performs the `AssetLoading → MainMenu` transition
+            // the loading state's completion normally would. UI spawns against the placeholder
+            // and every consumer degrades via the `None` furniture fields; world content still
+            // arrives via `ClientWorldAsset`s, which load by path, not through this manifest.
+            app.insert_resource(assets::collections::CommonAssets::placeholder()).add_systems(
+                Startup,
+                |mut next_state: ResMut<NextState<GameState>>| {
+                    next_state.set(GameState::MainMenu);
+                },
+            );
+        } else {
+            app.add_loading_state(
+                LoadingState::new(GameState::AssetLoading)
+                    .continue_to_state(GameState::MainMenu)
+                    .with_dynamic_assets_file::<StandardDynamicAssetCollection>(
+                        "collections/common_assets.assets.ron",
+                    )
+                    .load_collection::<assets::collections::CommonAssets>(),
+            );
+        }
     }
 }

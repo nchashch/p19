@@ -43,7 +43,10 @@ fn skybox(common_assets: &CommonAssets) -> Skybox {
     // `CommonAssets` (see `assets.rs`) rather than `asset_server.load(...)` here, so it's already
     // resident by the time any camera is spawned instead of streaming in after the fact.
     Skybox {
-        image: Some(common_assets.skybox.clone()),
+        // `None` (playtest-assets/`--no-common-assets` mode omitted the key) passes straight
+        // through — `Skybox.image` is itself an `Option`, and the skybox pass simply doesn't
+        // run for a camera without one (the clear color shows instead).
+        image: common_assets.skybox.clone(),
         brightness: SKYBOX_BRIGHTNESS,
         ..default()
     }

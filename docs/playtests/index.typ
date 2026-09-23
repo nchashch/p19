@@ -13,6 +13,57 @@ filed — that's part of filing it, not a separate later chore.
 
 #outline(title: none, indent: auto)
 
+== `playtest_0010` --- Optional `CommonAssets` Furniture / `--no-common-assets`
+
+#table(
+  columns: (auto, auto),
+  stroke: 0.5pt,
+  inset: 5pt,
+  [*Date*], [2026-09-23 17:23 -- 17:32 UTC],
+  [*Commit*], [`5e71215` "Implement Skein mesh primitives for agent testing"; the `CommonAssets` changes not yet committed as of this entry],
+  [*Agent*], [opencode agent (GLM-5.3-Flash)],
+  [*Report*], [`docs/playtests/playtest_0010/report.typ`],
+)
+
+Implements playtest 0009's closing proposal: the 9 engine-furniture fields of `CommonAssets`
+(fonts, WAVs, KTX2 skybox, atlas PNG pairs) became `#[asset(key = "…", optional)]`
+`Option<Handle<T>>` fields --- a manifest that omits the keys resolves them to `None` and
+every consumer degrades gracefully (Bevy's embedded default font, no skybox pass, no sample
+playback, an empty icon-atlas fallback) --- plus a pre-sync `--no-common-assets` CLI flag
+for the even-bareer boot (no manifest read at all, a `CommonAssets::placeholder()`
+resource, and an immediate `AssetLoading → MainMenu` transition; the dev console's hardcoded
+font path suppressed too). Verified in three modes: playtest 0009's tree stripped *in place*
+to 100% plaintext (only text files remain, full loop works, clear color replaces the
+skybox), the flag mode (UI-only menu, in-game `ClientWorldAsset` visuals still render ---
+that path loads by path, not manifest), and a production regression check (skybox renders,
+zero degradation warns). Also noted: the manifest's `lobby_background` key is dead in every
+mode (the code aliases it to `menu_background` --- pre-existing), and a pre-existing
+connect-time `Disconnected` re-entry into `MainMenu` observed in both modes.
+
+== `playtest_0009` --- Isolated, All-Plaintext Playtest Assets
+
+#table(
+  columns: (auto, auto),
+  stroke: 0.5pt,
+  inset: 5pt,
+  [*Date*], [2026-09-23 16:00 -- 16:40 UTC],
+  [*Commit*], [`5e71215` "Implement Skein mesh primitives for agent testing"],
+  [*Agent*], [opencode agent (GLM-5.3-Flash)],
+  [*Report*], [`docs/playtests/playtest_0009/report.typ`],
+)
+
+First experiment with the owner's isolated-asset idea: each playtest ships its own
+server/client assets under `playtest_assets/playtest_NNNN/` as *plaintext* --- hand-written
+JSON `.gltf` scenes whose only content is Skein components (`ClientReplicate`,
+`ClientWorldAsset`, `ColliderConstructor`, and the new `MeshPrimitive` for zero-baked-data
+visuals), a per-playtest dynamic-asset manifest, config, and a single en-US locale. The whole
+get-in-game loop runs on the isolated assets: level list, colliders (the player grounds on the
+authored Skein collider), MeshPrimitive visuals rendering, starfield skybox, HUD --- with the
+only non-text files being copied engine furniture (fonts, WAVs, KTX2, atlas PNGs). Two
+self-inflicted asset bugs found and documented en route (a glTF node-index typo; the pitch
+sign convention), plus a new playtest technique: injecting lights via BRP
+`world.insert_resources`.
+
 == `playtest_0008` --- Full Keyboard+Mouse / Gamepad Reachability Sweep
 
 #table(
