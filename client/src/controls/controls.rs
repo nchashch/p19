@@ -2,7 +2,7 @@ use crate::add_observers_run_if;
 use crate::controls::actions::*;
 use crate::controls::fps_controller::FpsCamera;
 use crate::controls::targeting::{Hovered, SELECT_RANGE, Selected, TargetingPlugin};
-use crate::events::{SpawnCube, SpawnNpc};
+use crate::events::{Disconnect, SpawnCube, SpawnNpc};
 use crate::gameplay::player_character::LocalPlayer;
 use crate::ui::hud::DataFrameVisible;
 use bevy::ecs::relationship::Relationship;
@@ -137,8 +137,20 @@ fn main_menu(_: On<Start<MainMenu>>, commands: Commands) {
 /// Menu" button, and its in-game VR wrist-panel equivalent — all three close the connection and
 /// drop the player back to `GameState::MainMenu` the same way, so this is factored out rather than
 /// duplicated across input surfaces.
+///
+/// Mirrors `ui/lobby.rs`'s `lobby_main_menu_button` exactly (the one place this pattern already
+/// worked before this function existed): `Disconnect` is *this crate's* local event
+/// (`crate::events::Disconnect`, not `lightyear::prelude::Disconnect`), routing through
+/// `lifecycle::networking::on_disconnect_request`, which is the only correct way to disconnect —
+/// see that function's own doc comment for why triggering lightyear's `Disconnect` alone (skipping
+/// `Unlink`) leaves a stale `Linked` marker that panics `lightyear_udp` on the *next* connect
+/// attempt. `set_state(GameState::MainMenu)` here is technically redundant with
+/// `on_disconnected`'s own `On<Add, Disconnected>` transition once the disconnect actually
+/// completes, but harmless, and kept for consistency with the lobby button's working reference
+/// implementation rather than relying solely on the observer from here specifically.
 pub(crate) fn return_to_main_menu(mut commands: Commands) {
-    todo!();
+    commands.trigger(Disconnect);
+    commands.set_state(GameState::MainMenu);
 }
 
 /// Opens/closes the pause modal (`modal_menu.rs`) — toggling rather than only-opening lets Tab

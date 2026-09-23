@@ -13,6 +13,28 @@ filed — that's part of filing it, not a separate later chore.
 
 #outline(title: none, indent: auto)
 
+== `playtest_0005` --- Fix the return_to_main_menu Crash
+
+#table(
+  columns: (auto, auto),
+  stroke: 0.5pt,
+  inset: 5pt,
+  [*Date*], [2026-09-23 01:22 -- 01:24 UTC],
+  [*Commit*], [Started at `80b6f0f`; fix not yet committed as of this entry],
+  [*Agent*], [Claude (Sonnet 5)],
+  [*Report*], [`docs/playtests/playtest_0005/report.typ`],
+)
+
+User-reported crash on the real windowed client: in-game -> pause modal -> "Main Menu" ->
+client panics. Matched a documented gap: `return_to_main_menu` was a live `todo!()`. Fixed to
+mirror `lobby_main_menu_button`'s already-working pattern (`commands.trigger(Disconnect);
+commands.set_state(GameState::MainMenu);`), routing through the crate-local `Disconnect` event
+and its established two-part-disconnect handler rather than a fresh implementation. Verified via
+the equivalent code path (`game/trigger disconnect` while genuinely in-game) since the tool API
+has no way to simulate the actual keypress/button-click yet -- no crash, clean return to
+`MainMenu`, UI correctly rendered. Also fixed a stale doc comment in `modal_menu.rs` caught
+along the way (no behavior change).
+
 == `playtest_0004` --- Fix the Headless UI Render-Order Bug
 
 #table(

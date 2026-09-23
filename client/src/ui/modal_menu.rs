@@ -30,9 +30,11 @@ impl Plugin for ModalMenuPlugin {
             (spawn_modal_menu, spawn_modal_menu_controls),
         );
         app.add_observer(on_pending_icon);
-        // Resets the modal back to `Closed` whenever gameplay ends, regardless of how — the "Main
-        // Menu" button below already sets it directly, but this also covers e.g. a future
-        // disconnect/kick path, so a later `Play` never starts with a stale `Open` state.
+        // Resets the modal back to `Closed` whenever gameplay ends, regardless of how — this is
+        // the *only* place that happens; the "Main Menu" button below (`return_to_main_menu`)
+        // doesn't touch `ModalMenuState` itself, it just leaves `GameState::InGame`, which fires
+        // this. Also covers any other way `InGame` might end (a future disconnect/kick path from
+        // the server, say), so a later `Play` never starts with a stale `Open` state.
         app.add_systems(OnExit(GameState::InGame), close_modal_menu);
         app.add_systems(Update, update_controls_tips_visibility);
         app.add_systems(
