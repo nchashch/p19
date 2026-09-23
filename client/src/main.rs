@@ -14,6 +14,7 @@ use lightyear::prelude::*;
 use lightyear_avian3d::plugin::{AvianReplicationMode, LightyearAvianPlugin};
 use shared::assets::SharedAssetsPlugin;
 use shared::inputs::SharedInputsPlugin;
+use shared::mesh_primitive::SharedMeshPrimitivePlugin;
 use shared::replication::SharedReplicationPlugin;
 use std::time::Duration;
 
@@ -26,6 +27,7 @@ use controls::input_device::InputDevicePlugin;
 use dev::console::PConsolePlugin;
 use gameplay::cube_spawner::CubeSpawnerPlugin;
 use gameplay::player_character::PlayerCharacterPlugin;
+use presentation::mesh_primitive::ClientMeshPrimitivePlugin;
 use presentation::particles::ParticleEffectsPlugin;
 use shared::game_state::{GameState, GameStatePlugin};
 
@@ -220,12 +222,18 @@ impl Plugin for Prototype19 {
                 },
                 ..default()
             },
-            (SharedReplicationPlugin, SharedAssetsPlugin, SharedInputsPlugin),
+            (
+                SharedReplicationPlugin,
+                SharedAssetsPlugin,
+                SharedInputsPlugin,
+                SharedMeshPrimitivePlugin,
+            ),
             (
                 CubeSpawnerPlugin,
                 NpcSpawnerPlugin,
                 NpcUiQuadPlugin,
                 PlayerCharacterPlugin,
+                ClientMeshPrimitivePlugin,
                 // `bevy_ahoy` (Bevy + Avian + BEI kinematic character controller) — wired in
                 // ahead of the actual controller migration, deliberately inert for now: no
                 // entity carries ahoy's `CharacterController` and none of its own input actions

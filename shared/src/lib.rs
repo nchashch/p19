@@ -11,6 +11,7 @@ pub mod cube_spawner;
 pub mod game_state;
 pub mod inputs;
 pub mod level;
+pub mod mesh_primitive;
 pub mod npc_spawner;
 pub mod player;
 pub mod replication;
