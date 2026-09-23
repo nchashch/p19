@@ -329,6 +329,137 @@ trigger) — so don't conflate "Enter doesn't work" there with this limitation;
 if Enter fails on a `widgets::button()`-based surface, that's a real bug, not
 this ceiling.
 
+## 5c. Real desktop-window testing (no `--mcp`) — xdotool/ydotool/wtype quirks
+
+Everything above (§5-§5b) is the `--mcp` headless harness: agent-injected input
+mocked at the ECS level, no real window, no real OS input device. Sometimes you
+need the *other* thing — a real windowed client (`target/debug/client`, no
+`--mcp` flag, still needs `--features dev-tools` built in) driven by genuine
+synthetic OS input (a real uinput/Wayland device, indistinguishable from actual
+hardware to the app) — e.g. to close the loop on something `--mcp` can't test
+(the `dispatch_focused_input`/`PrimaryWindow` ceiling above is the standing
+example: literal Enter on a `FeathersButton` needs a real `PrimaryWindow` to
+work, so the only way to *prove* it works is a real window). BRP/MCP still
+work identically in this mode — `game/state`, `game/screenshot`
+(falls back to `Screenshot::primary_window()` when `OffscreenRenderTarget`
+doesn't exist), `game/keyboard`/`game/gamepad`, `world.query`/
+`world.get_resources`/`world.trigger_event` — only `game/mouse`'s `move_to`/
+click are `--mcp`-only right now (see below).
+
+This was tried for the first time on a real Sway (wlroots) session with two
+monitors; take the specifics with a grain of salt on a different compositor,
+but the *shape* of each gotcha (especially the acceleration one) is likely to
+recur anywhere.
+
+**Tool availability, this compositor**: `xdotool` **does not work at all** —
+it's X11/XWayland-only, and this game's window is a native Wayland surface
+(`xdotool search --name ...` finds nothing). `wtype` (the Wayland
+virtual-keyboard-protocol tool) installed and ran with no error, but its key
+events **never reached the app** — no visible effect, not even the dev
+console toggle (backtick) — despite the window holding real compositor
+keyboard focus (confirmed via `swaymsg -t get_tree`'s `focused: true`). Didn't
+root-cause this (Sway config restricting the virtual-keyboard protocol to
+specific clients is one guess), just confirmed `ydotool` works in its place —
+don't burn time on `wtype` first if it's not already known-working on the
+target compositor.
+
+**`ydotool` is the one that reliably works**, but needs setup, all one-time
+per session:
+```sh
+# ydotoold needs /dev/uinput access — check for an existing ACL first
+getfacl /dev/uinput   # if it grants your user rw, no sudo needed at all
+ydotoold --socket-path=/tmp/.ydotool_socket --socket-own=$(id -u):$(id -g) &
+disown
+export YDOTOOL_SOCKET=/tmp/.ydotool_socket   # needed by every ydotool call after this
+```
+`ydotool key <code>:1 <code>:0` (press+release) and `ydotool key <code>:1`/
+`<code>:0` (hold/release separately) take raw Linux keycodes from
+`/usr/include/linux/input-event-codes.h` (`KEY_W`=17, `KEY_ENTER`=28,
+`KEY_ESC`=1, `KEY_UP`=103, `KEY_DOWN`=108, `KEY_GRAVE`=41, …) — not X11
+keysyms, not the `KeyCode` names `game/keyboard` uses. `ydotool click <mask>`
+buttons are **bit-flag hex**, not plain enum values — read the mask, don't
+guess: `0x00` alone means "left button, do nothing" (down bit *and* up bit
+both unset — a real, easy-to-make mistake, confirmed by testing: it compiles/
+runs/exits 0 and produces literally no click at all); `0xC0` is a real
+down-then-up left click; `0x40`/`0x80` are down-only/up-only (for a deliberate
+held-drag). Mouse movement (`ydotool mousemove`) is **relative-only on this
+compositor** — checking `cat /sys/class/input/eventNN/device/uevent` for the
+`ydotoold virtual device` node showed `EV=7` (SYN|KEY|REL, no ABS bit at all),
+meaning `--absolute` isn't backed by real absolute positioning hardware and is
+at best a software approximation on top of relative deltas — don't trust it
+for pixel-accurate targeting.
+
+**The real gotcha, the one that cost the most time**: `ydotool mousemove`'s
+relative deltas get warped by **libinput pointer acceleration** by default
+("adaptive" profile) — a single large synthetic jump (e.g. "move by 900px to
+reach a button") does not land 900px away, because acceleration curves are
+tuned for continuous human motion, not one instantaneous synthetic delta.
+Confirmed by testing: an absolute-feeling two-step move (pin to a corner with
+a huge relative jump, then move by the exact target offset) landed wildly off
+target with acceleration on, then landed pixel-exact once acceleration was
+disabled. Fix, **per input device**, no restart needed:
+```sh
+swaymsg input "9011:26214:ydotoold_virtual_device" accel_profile flat
+swaymsg input "9011:26214:ydotoold_virtual_device" pointer_accel 0
+```
+(get the exact device identifier from `swaymsg -t get_seats`, under
+`ydotoold virtual device` — the vendor:product pair shown above is what this
+session's `ydotoold` happened to register as, not guaranteed stable). With
+acceleration flat, the pin-then-move-by-exact-delta pattern is reliable:
+```sh
+ydotool mousemove -x -5000 -y -5000   # slams into the top-left corner (0,0), any compositor clamps this
+ydotool mousemove -x <target_x> -y <target_y>   # now a true relative delta from a known origin
+```
+**Re-pin before every click**, don't reuse a previously-computed origin — the
+compositor's cursor-position bookkeeping does not appear to survive every
+`grab_mode` transition (cursor lock/unlock, e.g. entering/leaving the game
+world) cleanly; a move that worked right after pinning silently no-op'd once
+the cursor had been locked (in-game, camera-look mode) and unlocked again
+(pause menu) in between, even with acceleration still flat. When in doubt,
+`grim -o <output>` (see below) and re-derive the cursor's actual last-known
+position from the image rather than trusting your last computed target.
+
+**Confirm target pixel coordinates from a *real* screenshot of the *actual*
+resolution**, not a guess scaled from a downsampled preview — a rendered chat
+image's stated "displayed at WxH, multiply by N" note is for *your* viewing
+math only; once you load the actual PNG file (`PIL.Image.open(...)`), its
+`.size` **is already the real resolution** — multiplying by the display
+scale factor *again* on top of that is a real, easy mistake (confirmed by
+testing: sampled the wrong pixels searching for a button, found nothing,
+before realizing the file was already full-res). `grim -o <output-name>`
+(`swaymsg -t get_outputs` for the name, e.g. `DP-2`) grabs the *whole
+desktop*, not just the game window — use it over `game/screenshot` whenever
+you need to see the **real OS cursor** (a real screenshot shows the actual
+system cursor arrow; `game/screenshot`'s in-app capture does not, since the
+cursor is compositor-side, not part of the rendered frame) or confirm a
+window's actual on-screen position/size (`swaymsg -t get_tree`, cross-checked
+against `swaymsg -t get_outputs` for the output's own origin offset if there's
+more than one monitor — a window's own `rect`/`geometry` is relative to its
+output, not the global compositor space, unless that output happens to sit at
+`(0,0)`).
+
+**Real-window-only quirks confirmed distinct from `--mcp`'s**:
+- On a cold-started windowed client, `InputFocus` (`world.get_resources` on
+  `bevy_input_focus::InputFocus`) started at `None` even though `AutoFocus` is
+  present on the main menu's "Connect" button (`world.query` for
+  `bevy_input_focus::autofocus::AutoFocus` found it) — unlike `--mcp` mode,
+  where `AutoFocus` reliably grants focus immediately. `game/keyboard`
+  arrow-key navigation and `game/gamepad` D-pad navigation both had nothing to
+  move *from* until a real click happened once; after that, focus tracking
+  behaved normally. Not root-caused (a window-focus-timing race between the
+  compositor actually granting the new window focus and the UI scene spawning
+  is the leading guess); if a mock-input script targets a windowed client
+  immediately after launch and nothing seems to respond, try one real click
+  first, or don't assume `--mcp`'s "focus already works" baseline transfers.
+- `game/mouse`'s `move_to`/`button` (the click-injection path) require the
+  `OffscreenRenderTarget` resource that only exists in `--mcp` mode — in a
+  real window it errors cleanly (`move_to`) or silently skips the
+  `PointerInput` firing (`button`, still sets the raw `ButtonInput<MouseButton>`
+  resource but never generates a real click). Not fixed — `game/keyboard`/
+  `game/gamepad` have no such dependency and work identically in both modes;
+  for real UI clicks on a real window, use `ydotool`/real hardware, not
+  `game/mouse`.
+
 ## 6. Probing the world (BRP)
 
 Type paths must be **exact and fully qualified**. When in doubt, grep the source:
