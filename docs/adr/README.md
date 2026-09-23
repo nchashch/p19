@@ -25,5 +25,6 @@ Each record uses the same shape: **Context** (the problem, forces, constraints),
 | [0007](./0007-adopt-agents-md-standard.md) | Adopt the AGENTS.md standard for the agent-guidance file | Accepted |
 | [0008](./0008-adopt-bevy-ahoy-character-controller.md) | Adopt bevy_ahoy as the character controller, over lightyear-replicated BEI input | Accepted |
 | [0009](./0009-agent-tool-api-via-brp.md) | Expose an agent tool API on the client via the Bevy Remote Protocol, MCP-wrappable | Accepted |
+| [0010](./0010-device-level-input-mocking-for-agent-tool-api.md) | Device-level input mocking (gamepad, keyboard, mouse) for the agent tool API | Accepted |
 
 New records should be added to this index in the same PR/commit that adds the file.
