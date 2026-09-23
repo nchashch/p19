@@ -325,6 +325,17 @@ chore — the index only stays useful for navigation if every playtest actually 
 Recompile it too (`typst compile --root docs/playtests docs/playtests/index.typ
 docs/playtests/dist/index.pdf`) and check the exit code.
 
+**Both the report's own metadata table and its index entry need a `Commit` field** — the git
+`HEAD` the run was actually performed against, so the chronology and the actual code under
+test stay unambiguous later. Don't guess from memory or approximate dates: cross-reference the
+run's own screenshot timestamps (millisecond epoch in the filename — `date -d @<ms/1000>` or
+equivalent) against `git log --format="%h %ci %s"`, then confirm the candidate commit's changed
+files actually match what the session touched (`git show --stat <hash>`) before trusting a
+timestamp match alone. If code changed *during* the run (a diagnose-and-fix playtest, not a
+pure state tour), a single hash can be actively misleading — record both the starting commit
+and the one any fix landed as, and say so explicitly, rather than picking one and implying it
+covers the whole run.
+
 ## 11. Practical flow summary
 
 1. Teardown (`pkill -x` both), verify ports free.

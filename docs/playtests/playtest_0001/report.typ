@@ -14,6 +14,9 @@
   inset: 6pt,
   [*Field*], [*Value*],
   [Date], [2026-09-23 ~02:38 local (2026-09-22 22:38 UTC)],
+  [Commit], [`89f5eca` "Implement headless --mcp mode for client" — HEAD throughout this run
+  (next commit, `329c9bc` "Add playtest.md skill", landed after, informed in part by what this
+  run found)],
   [Agent], [opencode session, GLM-5.3-Flash, driving the tool API over loopback HTTP],
   [Client], [`target/debug/client --mcp` — headless agent host, `dev` profile + `dev-tools` feature],
   [Server], [`target/release/server` — freshly started for this playtest, empty state],

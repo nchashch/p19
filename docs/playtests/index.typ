@@ -20,6 +20,8 @@ filed — that's part of filing it, not a separate later chore.
   stroke: 0.5pt,
   inset: 5pt,
   [*Date*], [2026-09-22 23:00 -- 2026-09-23 00:15 UTC],
+  [*Commit*], [Started at `329c9bc`; fix landed as `e5fe6c6` (committed after this run's
+  verification) -- spans both sides of a code change, not a static state],
   [*Agent*], [Claude (Sonnet 5)],
   [*Report*], [`docs/playtests/playtest_0003/report.typ`],
 )
@@ -44,6 +46,7 @@ reverted" section for what was tried and why it's not safe to re-attempt casuall
   stroke: 0.5pt,
   inset: 5pt,
   [*Date*], [2026-09-22 ~23:25 UTC],
+  [*Commit*], [`329c9bc` "Add playtest.md skill"],
   [*Agent*], [Claude (Sonnet 5)],
   [*Report*], [`docs/playtests/playtest_0002/report.typ`],
 )
@@ -64,6 +67,7 @@ and fix.
   stroke: 0.5pt,
   inset: 5pt,
   [*Date*], [2026-09-23 ~02:38 local (2026-09-22 22:38 UTC)],
+  [*Commit*], [`89f5eca` "Implement headless --mcp mode for client"],
   [*Agent*], [opencode session, GLM-5.3-Flash],
   [*Report*], [`docs/playtests/playtest_0001/report.typ`],
 )

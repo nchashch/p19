@@ -14,6 +14,11 @@
   inset: 6pt,
   [*Field*], [*Value*],
   [Date], [2026-09-22 23:00 -- 2026-09-23 00:15 UTC (multiple build/run cycles)],
+  [Commit], [Started at `329c9bc` "Add playtest.md skill" (the still-broken state reproduced in
+  @ordering-revert's regression screenshot and earlier in this run); the fix landed as `e5fe6c6`
+  "Make progress on fixing --mcp client rendering bugs", committed after this run's verification
+  -- no single commit covers this whole run, since it documents behavior on both sides of a code
+  change made during it, not a static state],
   [Agent], [Claude (Sonnet 5), driving the tool API over loopback HTTP, editing code between runs],
   [Client], [`target/debug/client --mcp` -- dev profile + `dev-tools` feature, rebuilt repeatedly],
   [Server], [`target/release/server`, restarted alongside each client rebuild],

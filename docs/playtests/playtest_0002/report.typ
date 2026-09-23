@@ -14,6 +14,7 @@
   inset: 6pt,
   [*Field*], [*Value*],
   [Date], [2026-09-22 ~23:25 UTC],
+  [Commit], [`329c9bc` "Add playtest.md skill" — HEAD throughout this run],
   [Agent], [Claude (Sonnet 5), driving the tool API over loopback HTTP from a shell],
   [Client], [`target/debug/client --mcp` — dev profile + `dev-tools` feature, freshly built],
   [Server], [`target/release/server` — freshly built and started, empty state],
