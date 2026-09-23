@@ -13,6 +13,32 @@ filed — that's part of filing it, not a separate later chore.
 
 #outline(title: none, indent: auto)
 
+== `playtest_0004` --- Fix the Headless UI Render-Order Bug
+
+#table(
+  columns: (auto, auto),
+  stroke: 0.5pt,
+  inset: 5pt,
+  [*Date*], [2026-09-23 00:53 UTC],
+  [*Commit*], [Started at `41e29a9`; fix not yet committed as of this entry],
+  [*Agent*], [Claude (Sonnet 5)],
+  [*Report*], [`docs/playtests/playtest_0004/report.typ`],
+)
+
+Root-caused and fixed `playtest_0003`'s open follow-on: the menu/lobby UI panel rendering
+*under* the background instead of on top of it. Real cause: `bevy_ui`'s `DefaultUiCamera::get()`
+fallback only ever considers `Window(Primary)`-targeting cameras -- structurally dead in `--mcp`
+mode, where everything targets `Image` -- so headless mode's permanent bootstrap UI camera and
+`player_camera()`'s own self-tagged `IsDefaultUiCamera` collided the moment a player existed,
+breaking `bevy_ui`'s camera selection entirely (not an ordering problem, despite looking like
+one). Very likely explains why all three of `playtest_0003`'s ordering-only fix attempts
+regressed in-game rendering in ways that resisted explanation at the time. Fixed by actively
+maintaining "exactly one live `IsDefaultUiCamera` holder" as an invariant, handed off between
+the bootstrap camera and `player_camera()` as they come and go. Verified end-to-end: main menu,
+lobby, in-game (HUD now renders too, not just the world), and -- newly tested, not covered by
+any earlier playtest -- the full disconnect-back-to-main-menu round-trip all composite
+correctly.
+
 == `playtest_0003` --- Diagnose and Fix the Headless Camera Rendering Bug
 
 #table(
@@ -31,13 +57,13 @@ never rendered anything, because `bevy_render::camera::camera_system`'s `target_
 silently never fires for a camera retargeted after `Startup` (a one-line fix,
 `projection.set_changed()`, in `retarget_cameras_to_offscreen`). This also explained the
 previously-separate "KTX2 skybox kills offscreen rendering" finding -- same root cause, not a
-real skybox bug; the skybox/TAA/SSAO strip workaround is removed. *Open follow-on*: fixing this
-surfaced a UI-panel-renders-under-the-background ordering bug in menu/lobby specifically; three
-fix attempts were tried and reverted (each one regressed in-game rendering worse than the
-ordering bug itself) -- still broken, see the report's "A follow-on issue found, attempted, and
-reverted" section for what was tried and why it's not safe to re-attempt casually. Also found, unrelated: the
-"minimal" level has no light source anywhere in its content (renders black on any client, not a
-`--mcp`-specific issue).
+real skybox bug; the skybox/TAA/SSAO strip workaround is removed. Surfaced a follow-on
+UI-panel-renders-under-the-background ordering bug in menu/lobby specifically; three fix
+attempts were tried and reverted here (each one regressed in-game rendering worse than the
+ordering bug itself) -- see the report's "A follow-on issue found, attempted, and reverted"
+section for what was tried and why. *Fixed in `playtest_0004`*, once the real (non-ordering)
+cause was found. Also found, unrelated: the "minimal" level has no light source anywhere in its
+content (renders black on any client, not a `--mcp`-specific issue).
 
 == `playtest_0002` --- Bug Reproduction Pass (Caster-Resolution + Headless Camera)
 

@@ -99,23 +99,47 @@ impl OffscreenRenderTarget {
 /// arrived camera's 3D view wins — the player camera arrives after the level's authored one,
 /// so the agent sees through the player's eyes in game.
 ///
-/// **Known, deliberately unfixed follow-on issue**: with this scheme, the menu/lobby UI panel
-/// (Connect/Play/etc.) ends up drawn *under* the menu/lobby background once that background
-/// actually renders (see the `target_info` fix below) — the background arrives on a later
-/// frame than the UI camera and, correctly per this scheme, draws on top of it with no clear.
-/// Three different attempts at making the UI camera draw last *without* breaking in-game
-/// rendering were tried and reverted in the same session this fix landed (bumping the UI
-/// camera's order dynamically; re-deriving clear ownership every tick; giving the UI camera a
-/// fixed high sentinel order) — each fixed the menu/lobby ordering but regressed in-game
-/// rendering back to a blank frame, for reasons not fully root-caused (suspected: something
-/// order-dependent downstream of `camera.order`, e.g. frustum/visible-entities computation,
-/// which isn't BRP-inspectable to confirm directly since `VisibleEntities` is
-/// `#[reflect(ignore)]`). Reverted to this known-good version rather than ship an unverified
-/// fix for a cosmetic issue at the cost of the actual rendering-works-at-all fix. Worth
-/// revisiting with more room to instrument the render world directly (e.g. a temporary custom
-/// extract-schedule system logging `VisibleEntities` counts) rather than only BRP-probing the
-/// main world's `Camera` component, which reports "correct" configuration even on the runs
-/// where nothing actually rendered.
+/// **The menu/lobby-UI-under-background bug, and what actually caused three earlier fix
+/// attempts to regress in-game rendering instead** (root-caused via a direct read of
+/// `bevy_ui::ui_node::DefaultUiCamera::get()`, `bevy_ui-0.19.0/src/ui_node.rs`): with this
+/// scheme alone, the UI panel ends up drawn *under* the menu/lobby background once that
+/// background actually renders — the background arrives on a later frame than the UI camera
+/// and, correctly per this scheme, draws on top of it with no clear. That part *looks* like a
+/// pure ordering problem, and three earlier attempts (bumping the UI camera's order
+/// dynamically; re-deriving clear ownership every tick; a fixed high sentinel order) all
+/// treated it as one — each produced a `Camera` configuration BRP confirmed was correct, and
+/// each still regressed in-game rendering to a blank frame anyway, for reasons that resisted
+/// explanation at the time.
+///
+/// The actual mechanism: `DefaultUiCamera::get()` picks the sole `IsDefaultUiCamera`-bearing
+/// entity via `.single()` if exactly one exists; **its fallback path — used when zero or more
+/// than one exist — only ever considers cameras whose `RenderTarget` is `Window(Primary)`**,
+/// structurally excluding `RenderTarget::Image` entirely. In headless mode every camera targets
+/// `Image`, so that fallback can never succeed here, full stop — unlike on desktop, where it's
+/// *why* UI compositing needs zero custom code at all (no persistent UI camera exists there;
+/// whichever real content camera happens to be the sole `Window(Primary)` candidate is picked
+/// by elimination). Headless mode's `Startup`-spawned bootstrap camera below exists specifically
+/// because that fallback can't do the same job here — but it never despawned, and
+/// `player_camera()` *also* tags itself `IsDefaultUiCamera` once it spawns, so the instant a
+/// player exists there were **two** simultaneous holders, `.single()` failed, the
+/// (headless-dead) fallback couldn't rescue it, and `DefaultUiCamera::get()` returned `None`.
+/// All three earlier ordering-only fixes were tried against this same standing ambiguity —
+/// consistent with it being the actual cause of their unexplained in-game regressions, not
+/// anything about `order` itself, though this wasn't independently re-tested against each of
+/// those three specific reverted attempts individually once the ambiguity fix below was in
+/// place (only against the current, simple order/clear scheme).
+///
+/// The fix, confirmed working end-to-end (`docs/playtests/playtest_0004/`: main menu, lobby,
+/// in-game — including the HUD, which never rendered at all before this either — and a full
+/// disconnect-back-to-main-menu round-trip), has two independent parts, in
+/// `maintain_default_ui_camera`/`keep_ui_camera_drawn_last` below: (1) keep the invariant
+/// "exactly one live entity carries `IsDefaultUiCamera`" true at all times, handing it off
+/// between the bootstrap camera and `player_camera()` as they come and go, instead of letting
+/// them collide; (2) *given* that
+/// invariant, re-derive every tick which entity currently holds the marker and keep it drawn
+/// last (highest order, no clear) among the cameras sharing this offscreen target — this is the
+/// same "re-derive fresh every tick" shape one of the earlier reverted attempts used, now
+/// resting on a real invariant instead of an assumption that never held once a player existed.
 ///
 /// Only run in headless mode: on desktop, `Window(Primary)` is exactly right.
 ///
@@ -171,6 +195,120 @@ pub fn retarget_cameras_to_offscreen(
             // above don't by themselves satisfy its recompute gate.
             projection.set_changed();
             info!("retargeted camera {entity} to the offscreen target (order {})", *next_order);
+        }
+    }
+}
+
+/// Marks headless mode's `Startup`-spawned UI camera specifically, distinguishing it from
+/// `player_camera()`'s own `Camera3d` (which also carries `IsDefaultUiCamera` — see the doc
+/// comment on [`retarget_cameras_to_offscreen`]). Only ever inserted in `main.rs`'s headless
+/// branch.
+#[derive(Component)]
+pub struct HeadlessUiCameraBootstrap;
+
+/// Keeps "exactly one live entity carries `IsDefaultUiCamera`" true at all times, headless-only.
+/// `bevy_ui`'s own fallback for "no unique holder" only considers `RenderTarget::Window(_)`
+/// cameras (see the doc comment above) — structurally dead in headless mode, where every camera
+/// targets `Image` — so this project has to maintain that invariant itself rather than relying
+/// on upstream to recover from a momentary zero- or two-holder state the way desktop implicitly
+/// can. Hands the marker to the bootstrap camera whenever nothing else holds it (covers boot,
+/// and every return trip from `InGame` back to `Lobby`/`MainMenu` once the player camera
+/// despawns), and strips it the instant a real content camera claims it on its own
+/// (`player_camera()` self-tags at spawn) — a one-tick window where both exist is possible but
+/// harmless, since the next run of this system resolves it before `camera_system`/`bevy_ui` do
+/// anything observably wrong with it.
+pub fn maintain_default_ui_camera(
+    bootstrap: Query<(Entity, Has<IsDefaultUiCamera>), With<HeadlessUiCameraBootstrap>>,
+    other_holders: Query<Entity, (With<IsDefaultUiCamera>, Without<HeadlessUiCameraBootstrap>)>,
+    mut commands: Commands,
+) {
+    let Ok((bootstrap_entity, bootstrap_has_marker)) = bootstrap.single() else {
+        return;
+    };
+    let other_holder_exists = !other_holders.is_empty();
+    if other_holder_exists && bootstrap_has_marker {
+        commands.entity(bootstrap_entity).remove::<IsDefaultUiCamera>();
+    } else if !other_holder_exists && !bootstrap_has_marker {
+        commands.entity(bootstrap_entity).insert(IsDefaultUiCamera);
+    }
+}
+
+/// Given `maintain_default_ui_camera`'s invariant (exactly one live `IsDefaultUiCamera` holder),
+/// keeps whichever entity currently holds it drawn *last* — highest order, no clear — among the
+/// cameras sharing this offscreen target, so it actually composites on top of a later-arriving
+/// opaque 3D world camera instead of being painted over by one. Re-derived fresh every tick
+/// (not decided once at claim time) because *which* entity holds the marker changes over a
+/// session (bootstrap camera → `player_camera()` → back to the bootstrap camera on disconnect).
+/// Write-if-different throughout: `Mut<Camera>` flags `Changed<Camera>` on any dereference for
+/// write even when the assigned value doesn't change, and this runs every tick.
+pub fn keep_ui_camera_drawn_last(
+    offscreen: Option<Res<OffscreenRenderTarget>>,
+    mut cameras: Query<(Entity, &RenderTarget, &mut Camera, Has<IsDefaultUiCamera>)>,
+) {
+    let Some(offscreen) = offscreen else {
+        return;
+    };
+    let on_our_target = |target: &RenderTarget| {
+        matches!(target, RenderTarget::Image(image) if image.handle == offscreen.0)
+    };
+
+    // Phase 1: bump the UI camera above whatever else currently exists, if anything does.
+    // Highest order *excluding* the UI camera itself — the bump target has to be a fixed point
+    // that doesn't move just because the UI camera's own order changed, or bumping it to
+    // "highest + 1" every tick would increment it forever (its own new value becomes next
+    // tick's "highest", so "+1" keeps climbing). `None` when no other camera exists yet (the
+    // sole-bootstrap-camera moment) — nothing to bump above, so the UI camera just keeps
+    // whatever order it already has from `retarget_cameras_to_offscreen`'s initial claim.
+    let highest_non_ui_order = cameras
+        .iter()
+        .filter(|(_, target, _, is_ui_camera)| on_our_target(target) && !is_ui_camera)
+        .map(|(_, _, camera, _)| camera.order)
+        .max();
+    if let Some(highest_non_ui_order) = highest_non_ui_order {
+        let wanted = highest_non_ui_order + 1;
+        for (_, target, mut camera, is_ui_camera) in &mut cameras {
+            if is_ui_camera && on_our_target(target) && camera.order != wanted {
+                camera.order = wanted;
+            }
+        }
+    }
+
+    // Phase 2: re-derive lowest order fresh, *after* any Phase 1 bump — computing it before
+    // would use the UI camera's stale pre-bump order, meaning on the exact tick it first moves
+    // away from being lowest, nothing would end up matching (its old order no longer belongs to
+    // any camera, and nothing else has moved down to claim it) and the target would go
+    // unrendered-to (not cleared) for that one tick. Cheap to just not have that gap at all.
+    let Some(lowest_order) = cameras
+        .iter()
+        .filter(|(_, target, ..)| on_our_target(target))
+        .map(|(_, _, camera, _)| camera.order)
+        .min()
+    else {
+        return;
+    };
+
+    // Phase 3: whichever camera now has that lowest order clears; everyone else on this target
+    // doesn't. Deliberately not excluding the UI camera here — when it's the only camera that
+    // exists (nothing to bump above yet, Phase 1 was a no-op), it's trivially both lowest and
+    // highest, and correctly keeps `Default` (the bootstrap-alone case, same as before this
+    // system existed). Once a non-UI camera also exists and Phase 1 has bumped the UI camera
+    // above it, the UI camera naturally stops being lowest on its own.
+    for (entity, target, mut camera, _) in &mut cameras {
+        if !on_our_target(target) {
+            continue;
+        }
+        let wants_default = camera.order == lowest_order;
+        let is_default = matches!(camera.clear_color, ClearColorConfig::Default);
+        if wants_default != is_default {
+            camera.clear_color = if wants_default {
+                ClearColorConfig::Default
+            } else {
+                ClearColorConfig::None
+            };
+            info!(
+                "camera {entity} clear -> {}",
+                if wants_default { "Default" } else { "None" }
+            );
         }
     }
 }

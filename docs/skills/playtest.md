@@ -223,15 +223,14 @@ Retry once after ~2s before concluding anything.
   compile command exits 0 (§10).
 
 Known visual divergences in `--mcp` (see AGENTS.md for the full root-cause writeup —
-the "nothing renders at all" version of this is fixed; one cosmetic ordering issue
-remains):
+both the "nothing renders at all" bug and the follow-on UI-render-order bug are fixed):
 
-- Menu/lobby: both UI *and* the real `.glb` background now render correctly. The UI
-  panel currently draws *underneath* the background rather than on top of it
-  (background arrives on a later frame than the UI camera and draws over it, per
-  the retarget scheme's ordering rules) — a known, deliberately unfixed follow-on,
-  not the original bug. Top of frames still cut off (2× `UI_SCALE` vs 720p, unrelated,
-  cosmetic).
+- Menu/lobby: UI and the real `.glb` background both render correctly, UI properly
+  composited on top (was: UI drawn underneath the background — a `bevy_ui`
+  `IsDefaultUiCamera`-ambiguity bug, not an ordering problem; see AGENTS.md). The
+  in-game HUD (including the crosshair) also renders now, for the same reason — it
+  never did before this fix either. Top of frames still cut off (2× `UI_SCALE` vs
+  720p, unrelated, cosmetic).
 - In-game: the real starfield HDRI skybox and level geometry now render correctly.
   `levels/minimal.level.ron`'s floor renders black specifically because that level's
   content has zero light entities anywhere — not a `--mcp` bug, confirmed via BRP,

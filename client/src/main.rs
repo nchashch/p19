@@ -18,7 +18,10 @@ use shared::replication::SharedReplicationPlugin;
 use std::time::Duration;
 
 use controls::fps_controller::FpsControllerPlugin;
-use controls::camera::{OffscreenRenderTarget, retarget_cameras_to_offscreen};
+use controls::camera::{
+    HeadlessUiCameraBootstrap, OffscreenRenderTarget, keep_ui_camera_drawn_last,
+    maintain_default_ui_camera, retarget_cameras_to_offscreen,
+};
 use controls::input_device::InputDevicePlugin;
 use dev::console::PConsolePlugin;
 use gameplay::cube_spawner::CubeSpawnerPlugin;
@@ -115,10 +118,24 @@ impl Plugin for Prototype19 {
             // A camera for UI that exists before any player/menu-background camera does —
             // otherwise bevy_ui has nothing to render the main menu onto until the level's
             // cameras arrive. The retarget system aims it at the offscreen texture.
+            // `HeadlessUiCameraBootstrap` marks it specifically (distinct from `player_camera()`,
+            // which also carries `IsDefaultUiCamera`) so `maintain_default_ui_camera` can hand
+            // the marker back and forth between them instead of letting both hold it at once —
+            // see `retarget_cameras_to_offscreen`'s doc comment for why that ambiguity is the
+            // real cause of the menu/lobby-UI-render-order bug, not an ordering problem on its
+            // own.
             .add_systems(Startup, |mut commands: Commands| {
-                commands.spawn((Camera2d, IsDefaultUiCamera));
+                commands.spawn((Camera2d, IsDefaultUiCamera, HeadlessUiCameraBootstrap));
             })
-            .add_systems(Update, retarget_cameras_to_offscreen);
+            .add_systems(
+                Update,
+                (
+                    retarget_cameras_to_offscreen,
+                    maintain_default_ui_camera,
+                    keep_ui_camera_drawn_last,
+                )
+                    .chain(),
+            );
             // A prior version of this file stripped `Skybox`/`TemporalAntiAliasing`/
             // `ScreenSpaceAmbientOcclusion` from every camera here, believing the loaded KTX2
             // (BC6H) skybox specifically killed offscreen rendering (silently, no wgpu error) and

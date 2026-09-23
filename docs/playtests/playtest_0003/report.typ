@@ -83,6 +83,11 @@ above. No value mutation needed, just the change-detection flag.
 
 = A follow-on issue found, attempted, and reverted <ordering-revert>
 
+#emph[Fixed in `playtest_0004`, once the real cause (a `bevy_ui` `IsDefaultUiCamera` ambiguity,
+not an ordering problem) was found -- see that report. The section below is kept as-recorded,
+including the three approaches that didn't work and why, since that's exactly the kind of thing
+worth not re-attempting blind.]
+
 Fixing `target_info` surfaced a second, previously-latent problem: once the menu/lobby
 background actually renders, it draws *over* the UI panel instead of under it, since the
 background camera arrives on a later frame than the UI camera and, per the existing ordering
