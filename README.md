@@ -4,17 +4,34 @@ A Bevy 0.19 (Rust) 3D multiplayer game prototype, built "always multiplayer": a 
 authoritative `server` simulates the game world (physics, level loading, player spawning,
 combat), and a `client` renders whatever the server replicates back and sends player intent
 as network messages. Even singleplayer runs a local client *and* server — the idea is that
-hosting real multiplayer later is "open a port," not a rewrite.
+hosting real multiplayer later is "open a port," not a rewrite. Movement is real
+server-authoritative, client-predicted simulation (via `bevy_ahoy`'s kinematic character
+controller over `lightyear`'s replicated-input/rollback pipeline), not a stub — a player's
+local input is simulated immediately and reconciled against the server's authoritative result,
+the same architecture a shipped multiplayer game would use.
 
 **Status: pre-release prototype, actively evolving, not currently playable end-to-end.**
-In particular, the character controller has been deliberately gutted (every movement/physics
-system is a `todo!()` stub right now) pending a rewrite using lightyear's own client-side
-prediction — see [`AGENTS.md`](./AGENTS.md) and [`docs/adr/`](./docs/adr/) for the full story.
-Expect things to be broken or half-built; this is a live development snapshot, not a demo.
+Movement/prediction genuinely works now, but several specific interaction systems have known,
+confirmed-live bugs — a caster-resolution regression silently drops every spawn/attack/kill
+request, level reloading has no dedup protection, disconnected players' characters aren't
+cleaned up (blocking a clean reconnect), and more — see [`AGENTS.md`](./AGENTS.md)'s "what's
+still genuinely missing or actively broken" list for the current, specific set, and
+[`docs/adr/`](./docs/adr/) for the reasoning behind major decisions. Expect things to be broken
+or half-built; this is a live development snapshot, not a demo.
+
+An agent-driven QA tool API (BRP + MCP, gated behind the `dev-tools` cargo feature) lets an AI
+coding agent actually play the game headlessly — connect, navigate menus, move, inject input,
+take screenshots — to drive real regression testing and bug-hunting through the same replicated
+pipeline a human player uses, not a separate mock. Its findings accumulate as dated reports in
+[`docs/playtests/`](./docs/playtests/index.typ) (start at that index) rather than being lost
+after each session; several real bugs in this repo were found and root-caused this way.
 
 ## Getting started
 
-Requires a Rust toolchain supporting edition 2024.
+Requires a Rust toolchain supporting edition 2024, and [Git LFS](https://git-lfs.com/) (`git
+lfs install`, once per machine) to pull the actual screenshot images referenced by
+`docs/playtests/` reports — the repo still clones and builds fine without it, you'd just see
+LFS pointer text instead of images for those specific files.
 
 ```sh
 cargo check --workspace   # fastest way to confirm everything compiles
@@ -22,12 +39,20 @@ cargo run -p server --release   # start the authoritative server (listens on 0.0
 cargo run -p client --release   # start the game client (connects once you press Connect)
 ```
 
+To drive the client as an agent instead of a human — headless, no window, scriptable over
+HTTP — build with `--features dev-tools` and run with `--mcp`; see
+[`docs/skills/playtest.md`](./docs/skills/playtest.md) for the full playbook (launch recipe,
+tool API surface, known gotchas) and [`docs/adr/0009`](./docs/adr/0009-agent-tool-api-via-brp.md)
+for the design behind it.
+
 **Assets are not tracked in git** (`client/assets/`, `server/assets/`, and `assets_src/` are
 all gitignored) — there is currently no automated, documented process to provision them from
 a fresh clone. If you're picking this up on a new machine, you'll need to copy those
 directories over from an existing checkout by hand; there's no `cargo run` that "just works"
 from source alone yet. This is a known gap, not an oversight — worth fixing before this repo
-needs to support more than one working copy.
+needs to support more than one working copy. (This doesn't apply to `docs/playtests/screenshots/`
+specifically — those *are* tracked, via Git LFS, since they're small and meant as durable
+history rather than runtime content.)
 
 `cargo build -p <client|server> --release` on the host machine produces a binary linked
 against the host's glibc, which will *not* run correctly on a Steam Deck or inside the
@@ -60,6 +85,15 @@ Physics is [`avian3d`](https://github.com/Jondolf/avian). No test suite exists y
   specific significant decisions (and the alternatives/tradeoffs considered), kept separate
   from `AGENTS.md`'s "current state" description so the reasoning trail behind a decision
   doesn't get overwritten every time the doc is refreshed to match new code.
+- **[`docs/skills/`](./docs/skills/)** — task-specific playbooks for AI agents working in this
+  repo, e.g. [`playtest.md`](./docs/skills/playtest.md) (how to drive the game headlessly via
+  the agent tool API) — read the relevant one before attempting its task; it encodes gotchas
+  that otherwise cost the same debugging time again.
+- **[`docs/playtests/`](./docs/playtests/index.typ)** — dated reports from every agent-driven
+  playtest session (state tours, bug reproductions, fix verifications), each with screenshots
+  of what the agent actually saw. Start at the index; every report cites the exact git commit
+  it was run against. Written to be a real, searchable debugging history, not a one-off log —
+  several real bugs in this repo were root-caused by an agent reading back through these.
 
 There's no `CHANGELOG.md` yet — this is deeply pre-release, so a user-facing changelog isn't
 a priority right now; `git log` and the ADRs are the source of truth for what changed and why
