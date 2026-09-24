@@ -176,7 +176,14 @@ impl Plugin for Prototype19 {
             // explicitly typed (`AssetServer::load::<T>(path)`, never `load_untyped`). A
             // distinctive extension per type sidesteps that structurally instead of relying on it.
             RonAssetPlugin::<assets::controller::Controller>::new(&["controller.ron"]),
-            SkeinPlugin::default(),
+            // `handle_brp: false`: DevToolsPlugin owns the BRP server so `--brp-port` applies in
+            // dev builds too (Skein's default-add is hardwired to port 15702). Skein's own
+            // presets endpoint still registers in its `finish` because DevToolsPlugin adds
+            // `RemotePlugin` (hence the `RemoteMethods` resource) before `finish` runs.
+            SkeinPlugin {
+                handle_brp: false,
+                ..Default::default()
+            },
             // Full Avian simulation runs client-side now, same as the server — the client is no
             // longer just holding colliders for spatial queries while waiting on replicated
             // `Transform`s. The server remains authoritative (`LightyearAvianPlugin` below

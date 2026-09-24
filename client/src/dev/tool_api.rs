@@ -46,7 +46,7 @@ use bevy::text::TextSpan;
 use bevy::ui::{ComputedUiTargetCamera, Pressed as UiPressed, UiGlobalTransform, UiStack};
 use bevy::ui_widgets::Button as UiWidgetsButton;
 use std::collections::HashSet;
-use bevy::remote::http::{RemoteHttpPlugin, DEFAULT_PORT as BRP_PORT};
+use bevy::remote::http::RemoteHttpPlugin;
 use bevy::remote::{BrpError, BrpResult, RemotePlugin};
 use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured};
 use std::path::Path;
@@ -78,22 +78,20 @@ fn offscreen_center(world: &World) -> Vec2 {
         .unwrap_or(Vec2::new(640.0, 400.0))
 }
 
-/// The MCP surface's TCP port. NOT 15703: that's `bevy_remote`'s **render-subapp BRP port**
-/// (`DEFAULT_RENDER_PORT`, active whenever `bevy_render` runs) — binding our MCP listener
-/// there made the render app's BRP bind fail and the main BRP pipeline hang in release builds.
-const MCP_PORT: u16 = 15710;
-
 pub struct DevToolsPlugin;
 
 impl Plugin for DevToolsPlugin {
     fn build(&self, app: &mut App) {
-        // BRP: `bevy_skein` (via its default-on `brp` feature + `handle_brp`, which defaults
-        // to enabled under `debug_assertions`) may have already added `RemotePlugin` +
-        // `RemoteHttpPlugin` with the default method set — reuse that server when present and
-        // only add the plugins when Skein didn't (e.g. release builds, where `handle_brp`
-        // defaults off). Double-adding panics.
+        let brp_port = crate::config::brp_port_presync();
+        // BRP: DevToolsPlugin owns the BRP server (`main.rs` constructs `SkeinPlugin` with
+        // `handle_brp: false` for exactly this), so this is always the adder — and the port
+        // flag always applies, in dev and release alike. The `is_plugin_added` guard stays as
+        // belt-and-braces against a future plugin-ordering change (double-add panics).
         if !app.is_plugin_added::<bevy::remote::RemotePlugin>() {
-            app.add_plugins((RemotePlugin::default(), RemoteHttpPlugin::default()));
+            app.add_plugins((
+                RemotePlugin::default(),
+                RemoteHttpPlugin::default().with_port(brp_port),
+            ));
         }
 
         // Custom methods attach post-build via the `RemoteMethods` resource (the plugins'
@@ -133,7 +131,7 @@ impl Plugin for DevToolsPlugin {
 
         app.init_resource::<LastServedCapture>();
 
-        start_mcp_server();
+        start_mcp_server(crate::config::mcp_port_presync());
     }
 }
 
@@ -214,10 +212,22 @@ fn game_state_snapshot(world: &mut World) -> serde_json::Value {
 /// Anchored on `CARGO_MANIFEST_DIR` (set under `cargo run`/`cargo build`, and by the QA harness
 /// that launches the client) falling back to the CWD, matching how bevy itself resolves asset
 /// roots.
+///
+/// **Fleet isolation**: a client launched with a non-default `--brp-port` (multi-client
+/// testing, several clients on one machine against one server) captures into a per-client
+/// `screenshots/client-<port>/` directory instead. Both the capture target and
+/// `game/screenshot/get`'s "newest PNG in dir" answer derive from this directory, so a shared
+/// dir would cross-contaminate clients — client A's poll would return client B's capture.
 fn screenshots_dir() -> PathBuf {
-    std::env::var_os("CARGO_MANIFEST_DIR")
+    let base = std::env::var_os("CARGO_MANIFEST_DIR")
         .map(|manifest| PathBuf::from(manifest).join("../docs/playtests/dist/screenshots"))
-        .unwrap_or_else(|| PathBuf::from("docs/playtests/dist/screenshots"))
+        .unwrap_or_else(|| PathBuf::from("docs/playtests/dist/screenshots"));
+    let port = crate::config::brp_port_presync();
+    if port == bevy::remote::http::DEFAULT_PORT {
+        base
+    } else {
+        base.join(format!("client-{port}"))
+    }
 }
 
 /// A new unique capture path: `<utc-zulu>-<label>.png`, millisecond-resolution so names sort
@@ -1518,7 +1528,11 @@ fn select_level_method(params: In<Option<serde_json::Value>>, mut world: &mut Wo
 // tools proxy to the BRP methods above over loopback HTTP.
 // ---------------------------------------------------------------------------
 
-fn start_mcp_server() {
+/// Binds the MCP surface. The port is `--mcp-port N` (default 15710) — NOT 15703, which is
+/// `bevy_remote`'s **render-subapp BRP port** (`DEFAULT_RENDER_PORT`, active whenever
+/// `bevy_render` runs): binding our MCP listener there made the render app's BRP bind fail and
+/// the main BRP pipeline hang in release builds.
+fn start_mcp_server(mcp_port: u16) {
     std::thread::Builder::new()
         .name("mcp-server".into())
         .spawn(move || {
@@ -1527,14 +1541,14 @@ fn start_mcp_server() {
                 .enable_all()
                 .build()
                 .expect("mcp server: tokio runtime should build");
-            if let Err(err) = runtime.block_on(serve_mcp()) {
+            if let Err(err) = runtime.block_on(serve_mcp(mcp_port)) {
                 error!("mcp server stopped: {err:?}");
             }
         })
         .expect("mcp server: thread should spawn");
 }
 
-async fn serve_mcp() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn serve_mcp(mcp_port: u16) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use rmcp::transport::streamable_http_server::{
         session::local::LocalSessionManager, StreamableHttpService,
     };
@@ -1546,8 +1560,8 @@ async fn serve_mcp() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Default::default(),
     );
     let router = axum::Router::new().nest_service("/mcp", service);
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", MCP_PORT)).await?;
-    info!("mcp tool server listening on http://127.0.0.1:{MCP_PORT}/mcp");
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", mcp_port)).await?;
+    info!("mcp tool server listening on http://127.0.0.1:{mcp_port}/mcp");
     axum::serve(listener, router).await?;
     Ok(())
 }
@@ -1653,7 +1667,9 @@ pub struct ScreenshotParams {
 impl Default for GameTools {
     fn default() -> Self {
         Self {
-            brp_url: format!("http://127.0.0.1:{BRP_PORT}"),
+            // Same port the BRP server binds (this client's own `--brp-port`): the MCP tools
+            // proxy to *this* client's BRP over loopback.
+            brp_url: format!("http://127.0.0.1:{}", crate::config::brp_port_presync()),
         }
     }
 }

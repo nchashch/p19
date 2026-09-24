@@ -45,6 +45,29 @@ pub fn is_no_common_assets_presync() -> bool {
     std::env::args().any(|arg| arg == "--no-common-assets")
 }
 
+/// `--brp-port N` (CLI-only): the port the client's BRP HTTP server binds. Default 15702.
+/// Fleet/multi-client testing starts each client at its own port so one machine can host many
+/// against one server; the agent then addresses a specific client simply by addressing its
+/// port. Decided *pre-sync* (the port is needed when the remote plugins are constructed).
+pub fn brp_port_presync() -> u16 {
+    port_flag("--brp-port").unwrap_or(bevy::remote::http::DEFAULT_PORT)
+}
+
+/// `--mcp-port N` (CLI-only): the port the MCP surface binds. Default 15710; same fleet
+/// rationale as [`brp_port_presync`].
+pub fn mcp_port_presync() -> u16 {
+    port_flag("--mcp-port").unwrap_or(15710)
+}
+
+/// Reads `<flag> N` out of the process args. `None` when absent or malformed.
+fn port_flag(flag: &str) -> Option<u16> {
+    let args: Vec<String> = std::env::args().collect();
+    args.iter()
+        .position(|arg| arg == flag)
+        .and_then(|i| args.get(i + 1))
+        .and_then(|value| value.parse().ok())
+}
+
 /// Whether the game runs in desktop-VR mode (`vr = true` in `assets/config.toml`) — decided
 /// *pre-sync* (which plugin group even gets added is a build-time choice); see `main.rs`.
 pub fn is_vr_enabled_presync() -> bool {

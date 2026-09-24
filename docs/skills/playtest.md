@@ -597,6 +597,25 @@ The user's windowed client and your headless client can share a server:
 4. Expect the benign `server_late_input_mismatch` burst on the server during
    your join (~10 ticks of 1-tick-late input corrections).
 
+**Fleet mode — many headless clients on one machine** (`--brp-port` /
+`--mcp-port`): every extra `--mcp` client past the first needs its own ports
+(the defaults are per-host singletons — a second client on the defaults fails
+with `AddrInUse`):
+
+```sh
+# client N: BRP on 1600N, MCP on 1700N
+./target/debug/client --mcp --brp-port 1600$N --mcp-port 1700$N
+# address client N's BRP at http://127.0.0.1:1600$N (JSON-RPC POST, same methods)
+```
+
+A non-default BRP port also isolates captures into a per-client
+`docs/playtests/dist/screenshots/client-<port>/` dir (a shared dir would make
+one client's `game/screenshot/get` return another's capture). Routing needs no
+proxy — BRP is stateless JSON-RPC POST, so "talk to client N" is just
+addressing its port. Capacity: each client is a software-Vulkan (lavapipe) Bevy
+instance; measured ~10 clients ≈ 13 cores + ~1 GB each — budget accordingly,
+and note server-side player count + the zombie-player disconnect gap (§8).
+
 Each client instance generates a fresh nanosecond netcode client-id — no
 collision by design.
 
