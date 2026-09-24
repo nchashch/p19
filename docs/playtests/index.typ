@@ -13,6 +13,26 @@ filed — that's part of filing it, not a separate later chore.
 
 #outline(title: none, indent: auto)
 
+== `playtest_0012` --- Desync Reproduction Attempt: Instrumented, Multi-Mode, Intermittent
+
+#table(
+  columns: (auto, auto),
+  stroke: 0.5pt,
+  inset: 5pt,
+  [*Date*], [2026-09-25 00:30 -- 01:45 local (+04)],
+  [*Commit*], [`f4180af` + temporary desync instrumentation in `controls.rs` (marked for removal) as of this entry],
+  [*Agent*], [opencode agent (GLM-5.3-Flash)],
+  [*Report*], [`docs/playtests/playtest_0012/report.typ`],
+)
+
+Loops playtest 0011's intermittent multi-client look/movement desync across client modes with
+new instrumentation (LOOK-DIVERGENCE / ROTATE-FIRE logging in `controls.rs`). Finds a real
+spawn invariant violation (`FpsCamera::new()` yaw = −π vs the identity rig transform),
+eliminates the remote-action cross-fire theory (zero ROTATE-FIRE on the second client while
+the first rotated), confirms the server's ground truth stayed correct in every sample, and
+records the windowed-client harness gap (BRP unreachable at poll time) as the blocker for an
+instrumented reproduction on the owner's exact configuration.
+
 == `playtest_0011` --- Vision Tooling, Client Configurations, Server BRP/MCP, and the Multi-Client Desync
 
 #table(

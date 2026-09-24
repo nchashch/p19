@@ -10,3 +10,4 @@
 # The curated docs/playtests/screenshots/playtest_NNNN/ subset (referenced by report.typ, LFS-
 # tracked — see .gitattributes) is NOT covered by this and stays tracked.
 /docs/playtests/dist
+/docs/playtests/*.pdf
