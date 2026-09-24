@@ -21,6 +21,7 @@ mod lobby;
 mod networking;
 mod rooms;
 mod spawn;
+mod tools;
 
 use combat::ServerCombatPlugin;
 use input::ServerInputPlugin;
@@ -28,6 +29,7 @@ use level_state::LevelStatePlugin;
 use lobby::LobbyPlugin;
 use rooms::GameRoomPlugin;
 use spawn::ServerSpawnPlugin;
+use tools::ServerToolsPlugin;
 
 fn main() {
     App::new()
@@ -101,6 +103,9 @@ fn main() {
                 LevelStatePlugin,
                 GameRoomPlugin,
                 LobbyPlugin,
+                // BRP (localhost:15701, `--brp-port`) + MCP (15711, `--mcp-port`) debugging
+                // surface — authoritative server state for desync debugging; see `tools.rs`.
+                ServerToolsPlugin,
                 // Registers `MeshPrimitive`'s reflection (shared with `client` — see
                 // `shared::mesh_primitive`'s own doc comment) so this binary's `AppTypeRegistry`
                 // recognizes the type too, whether or not anything on this side ever reacts to

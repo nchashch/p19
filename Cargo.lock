@@ -8916,6 +8916,7 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "avian3d",
+ "axum",
  "bevy",
  "bevy_ahoy",
  "bevy_asset_loader",
@@ -8924,7 +8925,11 @@ dependencies = [
  "lightyear",
  "lightyear_inputs_bei",
  "noiz",
+ "reqwest",
+ "rmcp",
+ "serde_json",
  "shared",
+ "tokio",
 ]
 
 [[package]]

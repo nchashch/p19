@@ -24,7 +24,13 @@ impl Plugin for PlayerCharacterPlugin {
             Update,
             (
                 on_player_spawned,
-                decorate_other_players,
+                // `--no-render` skips `bevy_mod_outline` (its plugin needs `RenderApp`), and
+                // spawning the rig-model child here goes through outline's world serialisation
+                // — which panics on the missing outline resources the moment a second player
+                // replicates in. There is nothing to decorate render-less anyway.
+                decorate_other_players.run_if(not(resource_exists::<
+                    crate::controls::camera::NoRenderMode,
+                >)),
                 // The local predicted entity's `Grounded`, kept in sync with ahoy's ground
                 // state so animation/HUD reactions stay latency-free (the replicated copy
                 // would lag by the round-trip).

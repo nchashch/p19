@@ -13,6 +13,28 @@ filed — that's part of filing it, not a separate later chore.
 
 #outline(title: none, indent: auto)
 
+== `playtest_0011` --- Vision Tooling, Client Configurations, Server BRP/MCP, and the Multi-Client Desync
+
+#table(
+  columns: (auto, auto),
+  stroke: 0.5pt,
+  inset: 5pt,
+  [*Date*], [2026-09-24 17:20 -- 20:30 UTC (one long session, several restarts)],
+  [*Commit*], [`f4180af` "Fix no dev-tools feature build failure" at the end; the session's work (server tools, `ObserveRequest`, no-render decorate fix, playbook updates) uncommitted as of this entry],
+  [*Agent*], [opencode agent (GLM-5.3-Flash), with the project owner co-driving a windowed client],
+  [*Report*], [`docs/playtests/playtest_0011/report.typ`],
+)
+
+Three linked verifications on live sessions: the data-first vision tooling (`game/ui`,
+agent cursor, state-fused/cropped/unchanged-suppressed captures, 1280×800 viewport), the
+client-configuration matrix (rendered headless, `--no-render`, `--headless-render`
+observer, fleet ports) including a live two-client desync reproduction on full-render
+clients --- second client spawns with its look pitch-pinned at the clamp, first client
+unaffected --- and the new server-side BRP/MCP surface (`server/state`) whose very first
+use caught a client-vs-server divergence red-handed. Findings include the no-render
+second-player crash (found and fixed during the session), a measured zombie-player census,
+and the next-step instrumentation plan for the desync.
+
 == `playtest_0010` --- Optional `CommonAssets` Furniture / `--no-common-assets`
 
 #table(
