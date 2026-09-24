@@ -20,8 +20,8 @@ use std::time::Duration;
 
 use controls::fps_controller::FpsControllerPlugin;
 use controls::camera::{
-    HeadlessUiCameraBootstrap, OffscreenRenderTarget, keep_ui_camera_drawn_last,
-    maintain_default_ui_camera, retarget_cameras_to_offscreen,
+    HeadlessUiCameraBootstrap, NoRenderMode, OffscreenRenderTarget, keep_ui_camera_drawn_last,
+    maintain_default_ui_camera, retarget_cameras_to_offscreen, shim_camera_computed,
 };
 use controls::input_device::InputDevicePlugin;
 use dev::console::PConsolePlugin;
@@ -83,15 +83,23 @@ impl Plugin for Prototype19 {
         // way, via the `AssetServer`) could run. See `is_vr_enabled_presync`'s doc comment for why
         // this can't just reuse that later, `AssetServer`-based path.
         let vr_enabled = config::is_vr_enabled_presync();
+        // `--no-render`: headless agent host with the render plugins disabled entirely — no
+        // wgpu/Vulkan instance at all (a bare GPU-less VPS runs it). Implies `--mcp` (its only
+        // purpose is the tool API; there is no windowed variant of "no rendering") and
+        // `--no-common-assets` (the image/mesh loaders live with the render-side asset
+        // machinery). Incompatible with VR by the same reasoning as `--mcp`; `--no-render`
+        // wins when both are set.
+        let no_render = config::is_no_render_presync();
         // `--mcp` (or config.toml's `mcp = true`): run as a headless agent host — no window at
         // all, every camera rendered into an offscreen texture, the tool API (BRP + MCP)
         // serving localhost. Same pre-sync reasoning as `vr_enabled` above. Incompatible with
         // VR (the XR swapchain needs a session, and this mode's purpose is display-less hosts);
-        // `--mcp` wins when both are set.
-        let mcp_headless = config::is_mcp_mode_presync() && !vr_enabled;
+        // `--mcp` wins when both are set. `--no-render` implies this mode.
+        let mcp_headless = (config::is_mcp_mode_presync() || no_render) && !vr_enabled;
         // `--no-common-assets`: barest boot for fully-plaintext playtest asset roots — no
         // `CommonAssets` collection load at all (see the branch at the bottom of this method).
-        let no_common_assets = config::is_no_common_assets_presync();
+        // Implied by `--no-render`.
+        let no_common_assets = config::is_no_common_assets_presync() || no_render;
 
         if vr_enabled {
             app.add_plugins(add_xr_plugins(
@@ -104,17 +112,60 @@ impl Plugin for Prototype19 {
             // lavapipe), and every camera renders into [`OffscreenRenderTarget`] via the
             // retarget system below. UI renders into the same texture (the UI camera is a
             // normal camera).
-            app.add_plugins(
-                DefaultPlugins.build()
-                    .disable::<WinitPlugin>()
-                    .disable::<PipelinedRenderingPlugin>()
-                    .set(WindowPlugin {
-                        primary_window: None,
-                        exit_condition: ExitCondition::DontExit,
-                        ..default()
-                    }),
-            )
-            .add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(1.0 / 60.0)));
+            //
+            // `--no-render` variant: also disable the render plugins entirely — no wgpu
+            // instance, no Vulkan driver requirement. UI *layout* survives (bevy_ui 0.19's
+            // layout/picking is render-app-free logic; [`shim_camera_computed`] feeds the one
+            // thing `bevy_ui` and `bevy_picking` read back from the render side, each camera's
+            // `Camera.computed.target_info`), so `game/ui`, hover, and clicks all work; only
+            // screenshots are unavailable (`dev::tool_api` reports that cleanly via the
+            // [`NoRenderMode`] marker). `Assets<Image>` is initialized by hand here —
+            // `ImagePlugin` (disabled above) is what normally registers it, and the offscreen
+            // target + UI-camera filtering read it. The retarget/keep-drawn-last systems stay
+            // registered: they only touch plain components, and keeping the single code path
+            // means a mode flip doesn't change which systems exist.
+            let plugin_group = DefaultPlugins
+                .build()
+                .disable::<WinitPlugin>()
+                .disable::<PipelinedRenderingPlugin>()
+                .set(WindowPlugin {
+                    primary_window: None,
+                    exit_condition: ExitCondition::DontExit,
+                    ..default()
+                });
+            if no_render {
+                // bevy 0.19 splits rendering into per-crate plugins; every render-half plugin
+                // goes. `bevy_ui` itself is layout-only (the UI render half is the separate
+                // `UiRenderPlugin`), which is why UI layout/picking survive this list.
+                app.add_plugins(
+                    plugin_group
+                        .disable::<bevy::render::RenderPlugin>()
+                        .disable::<bevy::image::ImagePlugin>()
+                        .disable::<bevy::core_pipeline::CorePipelinePlugin>()
+                        .disable::<bevy::anti_alias::AntiAliasPlugin>()
+                        .disable::<bevy::sprite_render::SpriteRenderPlugin>()
+                        .disable::<bevy::ui_render::UiRenderPlugin>()
+                        .disable::<bevy::gizmos_render::GizmoRenderPlugin>()
+                        .disable::<bevy::pbr::PbrPlugin>()
+                        // `PostProcessPlugin` loads a Shader handle in `build()` — render-side
+                        // chrome that would panic on the uninitialized Shader asset.
+                        .disable::<bevy::post_process::PostProcessPlugin>(),
+                )
+                .init_asset::<Image>()
+                // `Shader` assets are normally registered by a render-side plugin; some
+                // always-added plugins (feathers' shaders) insert handles regardless.
+                .init_asset::<bevy::shader::Shader>()
+                // Same for the visual-material stores: UI/logic systems (e.g. the NPC-quad
+                // setup) insert into them unconditionally. With no render app they're inert
+                // stores — inserting components/assets into them costs nothing.
+                .init_asset::<bevy::pbr::StandardMaterial>()
+                .init_asset::<bevy::mesh::Mesh>()
+                .insert_resource(NoRenderMode)
+                .add_systems(Update, shim_camera_computed);
+            } else {
+                app.add_plugins(plugin_group);
+            }
+            app.add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(1.0 / 60.0)));
         let offscreen_target = {
             let mut images = app.world_mut().resource_mut::<Assets<Image>>();
             // 1280×800 — the Steam Deck's native (800p) resolution, this project's primary

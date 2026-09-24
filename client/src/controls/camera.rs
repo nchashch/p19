@@ -82,6 +82,41 @@ impl OffscreenRenderTarget {
     }
 }
 
+/// Marker for `--no-render` mode (headless agent host with the render plugins disabled — no
+/// wgpu/Vulkan at all). Consumers: `dev::tool_api`'s screenshot methods return a clean error
+/// instead of waiting on a capture that can never complete, and `lifecycle::loading` skips
+/// client world visuals (their image/mesh loading needs the render-side asset machinery).
+/// Note the mode still lays out UI and computes UI rects — see [`shim_camera_computed`].
+#[derive(Resource)]
+pub struct NoRenderMode;
+
+/// `--no-render` shim: feeds each camera's `Camera.computed.target_info` by hand, because the
+/// system that normally computes it (`camera_system` in `bevy_render`) doesn't run without the
+/// render app. `bevy_ui`'s camera propagation, layout, and `bevy_picking`'s UI backend all
+/// read exactly these accessors (`target_scaling_factor()` / `physical_target_size()` →
+/// `computed.target_info`), so with the shim in place UI *layout*, the `game/ui` dump, hover,
+/// and clicks all work with zero rendering — the same 1280×800 logical/physical space as the
+/// rendered headless mode (scale factor 1: image targets have no DPI scaling). `clip_from_view`
+/// stays identity, which nothing in a render-less app consumes.
+pub fn shim_camera_computed(mut cameras: Query<&mut Camera>) {
+    const SIZE: UVec2 = UVec2::new(1280, 800);
+    for mut camera in &mut cameras {
+        let needs_shim = !matches!(
+            camera.computed.target_info,
+            Some(bevy::camera::RenderTargetInfo {
+                physical_size: SIZE,
+                scale_factor: 1.0,
+            })
+        );
+        if needs_shim {
+            camera.computed.target_info = Some(bevy::camera::RenderTargetInfo {
+                physical_size: SIZE,
+                scale_factor: 1.0,
+            });
+        }
+    }
+}
+
 /// Rewrites every camera that would render nowhere to render into
 /// [`OffscreenRenderTarget`] instead — the loaded level/background worlds carry their own
 /// cameras that would otherwise render nowhere, and the player camera and menu UI camera are

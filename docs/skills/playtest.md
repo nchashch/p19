@@ -23,6 +23,18 @@ need, report the API gap rather than falling back to screenshots.
 | Client (headless agent host) | `target/debug/client --mcp` | `CARGO_MANIFEST_DIR=$PWD/client BEVY_ASSET_ROOT=$PWD/client` | BRP HTTP :15702 · MCP :15710 |
 | You (the agent) | shell + `curl`/python | — | talks to :15702 |
 
+`--no-render` client variant: everything in this playbook works **except
+screenshots** — it is the rendered headless mode with the render plugins (and
+the wgpu/Vulkan instance) disabled, so it needs no GPU driver at all and runs
+at a fraction of the CPU (~0.7 core vs ~1.3 per client). UI layout, `game/ui`,
+hover/clicks, input mocking, and netcode are identical (`bevy_ui` 0.19's
+layout/picking is render-free logic; a shim feeds the one camera value UI reads
+back from the render side). `game/screenshot` returns a clean error; world
+visuals never load (implied `--no-common-assets`). Default choice for
+gameplay/UI/logic fleets on small boxes; use rendered mode when a check is
+inherently visual (§7). Rationale and implementation notes:
+[ADR 0012](../adr/0012-no-render-agent-client-mode.md).
+
 - Build first, and **verify the build actually succeeded**:
 
   ```sh

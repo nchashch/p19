@@ -12,7 +12,14 @@ pub struct TargetingPlugin;
 impl Plugin for TargetingPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(LocalPlayer(None));
-        app.add_plugins(OutlinePlugin::JUMP_FLOOD);
+        // `bevy_mod_outline`'s plugin unwraps `RenderApp` in `build()`, so it can't be added in
+        // `--no-render` mode. Outlines are selection *visuals* — the targeting logic below
+        // (raycast, `Hovered`/`Selected` resources, `game/ui`-visible state) is independent of
+        // them. (A guard inside the vendored crate would be the more general fix and is worth
+        // upstreaming alongside its other local patches.)
+        if !crate::config::is_no_render_presync() {
+            app.add_plugins(OutlinePlugin::JUMP_FLOOD);
+        }
         app.add_systems(
             Update,
             (

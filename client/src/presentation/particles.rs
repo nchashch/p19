@@ -5,6 +5,12 @@ pub struct ParticleEffectsPlugin;
 
 impl Plugin for ParticleEffectsPlugin {
     fn build(&self, app: &mut App) {
+        // Hanabi's plugin `finish` requires `RenderApp` — particles are pure visuals, so
+        // `--no-render` skips the plugin *and* the effect authoring (which allocates
+        // `EffectAsset` handles the skip makes pointless).
+        if crate::config::is_no_render_presync() {
+            return;
+        }
         app.add_plugins(HanabiPlugin);
         app.add_systems(Startup, setup);
     }

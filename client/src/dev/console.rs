@@ -35,6 +35,14 @@ pub struct PConsolePlugin;
 
 impl Plugin for PConsolePlugin {
     fn build(&self, app: &mut App) {
+        // The FPS overlay is an on-screen visual whose plugin's `setup` system needs
+        // render-side `Assets<ShaderBuffer>` — absent in `--no-render` mode, where the plugin
+        // (and the startup toggle that writes its config) is skipped entirely. (The `fps`
+        // console command is likewise a no-op-with-error there.)
+        if !crate::config::is_no_render_presync() {
+            app.add_plugins(FpsOverlayPlugin::default());
+            app.add_systems(Startup, disable_fps_overlay);
+        }
         app.add_plugins((
             ChillConsole {
                 // `font_path` resolves via a normal `asset_server.load(path)` (see
@@ -54,9 +62,8 @@ impl Plugin for PConsolePlugin {
                 ..default()
             },
             PhysicsDebugPlugin::default(),
-            FpsOverlayPlugin::default(),
         ))
-        .add_systems(Startup, (disable_fps_overlay, disable_physics_debug))
+        .add_systems(Startup, disable_physics_debug)
         .add_console_command(ConsoleCommand::new(
             "controls",
             "controls - get control scheme",

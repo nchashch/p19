@@ -16,7 +16,13 @@ impl Plugin for LoadingPlugin {
         );
         app.add_systems(
             Update,
-            spawn_client_world_assets.run_if(in_state(GameState::InGame)),
+            spawn_client_world_assets.run_if(in_state(GameState::InGame)).run_if(
+                // `--no-render`: world visuals reference image/mesh assets whose loaders live
+                // with the (disabled) render-side asset machinery — and there is nothing to
+                // show them on anyway. Everything else about InGame (netcode, player spawn,
+                // movement, `game/ui`, input) works unchanged.
+                not(resource_exists::<crate::controls::camera::NoRenderMode>),
+            ),
         );
     }
 }

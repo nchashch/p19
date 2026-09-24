@@ -286,6 +286,12 @@ fn screenshot_start_method(
         .as_ref()
         .and_then(|p| p.get("label"))
         .and_then(serde_json::Value::as_str);
+    if world.get_resource::<crate::controls::camera::NoRenderMode>().is_some() {
+        return Err(BrpError::internal(
+            "no rendering enabled (--no-render): screenshots are unavailable; use game/ui for \
+             on-screen content and game/state for ground truth",
+        ));
+    }
     let crop = match params.0.as_ref().and_then(|p| p.get("crop")) {
         Some(value) => Some(parse_crop(value).ok_or_else(|| {
             BrpError::internal("crop must be [x, y, w, h] — four pixel numbers")

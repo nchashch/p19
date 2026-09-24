@@ -59,6 +59,18 @@ pub fn mcp_port_presync() -> u16 {
     port_flag("--mcp-port").unwrap_or(15710)
 }
 
+/// `--no-render` (CLI-only): run the headless agent host with **no rendering at all** — no
+/// wgpu/Vulkan instance, no lavapipe, no GPU driver requirement. Implies `--mcp` and
+/// `--no-common-assets`. Everything data-side keeps working (`game/state`, `game/ui` — UI
+/// *layout* is pure logic and never needed the render app — input mocking, netcode, the whole
+/// input/prediction pipeline); only screenshots are unavailable, and world visuals never load.
+/// The point: a GPU-less VPS runs it, and per-client CPU drops by ~an order of magnitude (the
+/// software-Vulkan frame loop was nearly all of it). Decided *pre-sync* like `--mcp` — it
+/// changes which plugins even get added.
+pub fn is_no_render_presync() -> bool {
+    std::env::args().any(|arg| arg == "--no-render")
+}
+
 /// Reads `<flag> N` out of the process args. `None` when absent or malformed.
 fn port_flag(flag: &str) -> Option<u16> {
     let args: Vec<String> = std::env::args().collect();
