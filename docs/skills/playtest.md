@@ -9,7 +9,8 @@ Supplements (does not replace) `AGENTS.md` and `docs/adr/0009-agent-tool-api-via
 the primary target platform. Use keyboard+mouse only when the task explicitly
 targets them.
 
-**Default observation method: data, not pixels** (§7) — understand the world
+**Default observation method: data, not pixels** (§7, rationale in
+[ADR 0011](../adr/0011-agent-vision-and-fleet-improvements.md)) — understand the world
 via `game/state`/`game/ui`/BRP queries; screenshot only when asked or when the
 thing under test is inherently visual. If the data surface is missing what you
 need, report the API gap rather than falling back to screenshots.
