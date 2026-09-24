@@ -48,6 +48,21 @@ are meaningful here, without trusting whatever launch line someone else used.
 | `--no-common-assets` | `--no-common-assets` (alone or implied) | yes | ✓ | none via manifest — content only via `ClientWorldAsset`s by path; fonts/sounds/icons fall back to embedded/`None` | Plaintext-asset-root playtesting (§10) |
 | Windowed dev client | none (dev build has `dev-tools`) | yes, real window | ✓ via `Screenshot::primary_window` | ✓ | Human-visible sessions; BRP still on :15702, but `game/mouse move_to`/clicks are `--mcp`-only |
 | Fleet member | `--mcp --brp-port N --mcp-port N` | per above flags | ✓ (isolated `screenshots/client-N/` dir) | per above flags | Many clients, one server (§9) |
+| **Observer** | `--mcp --headless-render` | yes, at **2 fps** (logic still 60 Hz via catch-up) | ✓ on demand | ✓ load + replicate | The fleet's *eye*: ~1.3 cores + GPU VRAM, but one observer serves vision for a fleet of `--no-render` clients |
+
+Observer mode particularities (`--headless-render`):
+
+- Join the world with `game/trigger {"event":"observe"}` instead of `play` —
+  this sends `ObserveRequest`, which joins the game room (full replicated world
+  state) but spawns **no player character**. `game/state` will never show a
+  `position` on the observer; that's correct, not a bug.
+- `game/cameras` lists every camera (including the spawned `ObserverCamera` at
+  0, 2, 8). Aim it via `world.mutate_components` on its `Transform`, then
+  capture `game/screenshot {"camera": <entity-id>}` — that renders *that
+  camera's* view (its `RenderTarget` is borrowed for one frame, then restored).
+- The 2 fps loop means logic runs in batched catch-up ticks; replication and
+  state stay correct, but don't use the observer for timing-sensitive
+  measurement.
 
 Particularities worth remembering:
 

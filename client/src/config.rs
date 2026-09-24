@@ -71,6 +71,18 @@ pub fn is_no_render_presync() -> bool {
     std::env::args().any(|arg| arg == "--no-render")
 }
 
+/// `--headless-render` (CLI-only): a headless agent host that **includes the renderer** but
+/// runs it at a low fixed rate (2 fps — logic stays at 60 Hz via fixed-timestep catch-up), and
+/// whose `connect`-style session is expected to send `ObserveRequest` (via
+/// `game/trigger observe`) instead of `play`, so joining the world spawns **no player**. Its
+/// purpose is world *vision on demand* for fleets of `--no-render` clients: the observer sees
+/// every other client's replicated player capsule, and `game/screenshot` accepts a `camera`
+/// entity (from `game/cameras`) to render from. Implies `--mcp`; incompatible with VR and with
+/// `--no-render` (mutually exclusive modes; `--no-render` wins).
+pub fn is_headless_render_presync() -> bool {
+    std::env::args().any(|arg| arg == "--headless-render")
+}
+
 /// Reads `<flag> N` out of the process args. `None` when absent or malformed.
 fn port_flag(flag: &str) -> Option<u16> {
     let args: Vec<String> = std::env::args().collect();

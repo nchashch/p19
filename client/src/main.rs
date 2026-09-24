@@ -90,12 +90,17 @@ impl Plugin for Prototype19 {
         // machinery). Incompatible with VR by the same reasoning as `--mcp`; `--no-render`
         // wins when both are set.
         let no_render = config::is_no_render_presync();
+        // `--headless-render`: rendered headless host at a low frame rate, for *observing* —
+        // joins the world via `ObserveRequest` (no player spawn) and renders on demand (see
+        // `game/cameras` / `game/screenshot {"camera": …}`). Implies `--mcp`.
+        let headless_render = config::is_headless_render_presync() && !no_render;
         // `--mcp` (or config.toml's `mcp = true`): run as a headless agent host — no window at
         // all, every camera rendered into an offscreen texture, the tool API (BRP + MCP)
         // serving localhost. Same pre-sync reasoning as `vr_enabled` above. Incompatible with
         // VR (the XR swapchain needs a session, and this mode's purpose is display-less hosts);
-        // `--mcp` wins when both are set. `--no-render` implies this mode.
-        let mcp_headless = (config::is_mcp_mode_presync() || no_render) && !vr_enabled;
+        // `--mcp` wins when both are set. `--no-render` and `--headless-render` imply this mode.
+        let mcp_headless =
+            (config::is_mcp_mode_presync() || no_render || headless_render) && !vr_enabled;
         // `--no-common-assets`: barest boot for fully-plaintext playtest asset roots — no
         // `CommonAssets` collection load at all (see the branch at the bottom of this method).
         // Implied by `--no-render`.
@@ -165,7 +170,32 @@ impl Plugin for Prototype19 {
             } else {
                 app.add_plugins(plugin_group);
             }
-            app.add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(1.0 / 60.0)));
+            app.add_plugins(ScheduleRunnerPlugin::run_loop(
+                // `--headless-render`: 2 fps — logic stays at 60 Hz through fixed-timestep
+                // catch-up (Time<Virtual>'s 250 ms default max_delta is lifted below so two
+                // real seconds of ticks still land every update), while the render cost drops
+                // to ~2 frames/sec. Screenshots complete within one poll loop either way.
+                if headless_render {
+                    Duration::from_secs_f64(1.0 / 2.0)
+                } else {
+                    Duration::from_secs_f64(1.0 / 60.0)
+                },
+            ));
+            if headless_render {
+                app.world_mut()
+                    .resource_mut::<Time<Virtual>>()
+                    .set_max_delta(Duration::from_millis(600));
+                // The observer's free camera — no player is ever spawned in this mode, so this
+                // is the only 3D view; agents reposition it via `world.mutate_components`
+                // (Transform) and render it via `game/screenshot {"camera": …}`.
+                app.add_systems(Startup, |mut commands: Commands| {
+                    commands.spawn((
+                        Camera3d::default(),
+                        Transform::from_xyz(0.0, 2.0, 8.0),
+                        Name::new("ObserverCamera"),
+                    ));
+                });
+            }
         let offscreen_target = {
             let mut images = app.world_mut().resource_mut::<Assets<Image>>();
             // 1280×800 — the Steam Deck's native (800p) resolution, this project's primary

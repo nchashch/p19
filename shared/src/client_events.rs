@@ -5,6 +5,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Event, Serialize, Deserialize, Clone)]
 pub struct InGameRequest;
 
+/// Join the game room (receive replicated world state) **without** spawning a player
+/// character. Sent by observer clients (e.g. a `--headless-render` agent host) that want
+/// vision over the shared world but no in-game avatar.
+#[derive(Event, Serialize, Deserialize, Clone)]
+pub struct ObserveRequest;
+
 #[derive(Event, Serialize, Deserialize, Clone)]
 pub struct LobbyRequest;
 

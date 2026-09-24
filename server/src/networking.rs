@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
 use lightyear::prelude::*;
 use shared::assets::level::{ClientReplicate, Level};
-use shared::client_events::{InGameRequest, LoadLevelRequest};
+use shared::client_events::{InGameRequest, LoadLevelRequest, ObserveRequest};
 use shared::replication::ClientInGame;
 use shared::{
     game_state::ServerState,
@@ -41,9 +41,26 @@ impl Plugin for NetworkingPlugin {
             .add_observer(on_client_disconnected);
         app.add_systems(
             Update,
-            in_game_request.run_if(in_state(ServerState::InGame)),
+            (in_game_request, observe_request).run_if(in_state(ServerState::InGame)),
         );
         app.add_systems(Update, (load_level_request, setup_client_replicate));
+    }
+}
+
+/// Handles `ObserveRequest` — the player-free counterpart to `in_game_request`: joins the
+/// sending client to the game room (so it receives all replicated world state) but spawns
+/// **no player character** and no `ClientInGame`. Used by observer clients
+/// (`--headless-render` agent hosts) that exist to render the shared world on demand.
+fn observe_request(
+    receivers: Query<(Entity, &mut MessageReceiver<ObserveRequest>)>,
+    game_room: Res<GameRoom>,
+    mut commands: Commands,
+) {
+    for (entity, mut receiver) in receivers {
+        for _request in receiver.receive() {
+            info!("client `{entity}` is now observing (no player spawned)");
+            commands.entity(entity).insert(Rooms::single(game_room.0));
+        }
     }
 }
 

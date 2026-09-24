@@ -54,6 +54,7 @@ use bevy_enhanced_input::prelude::{Action, ActionMock, ActionValue, Actions, Moc
 use serde_json::json;
 
 use bevy_ahoy::{CharacterControllerState, CharacterLook};
+use shared::client_events::{InGameRequest, ObserveRequest};
 use shared::combat::{Dead, Gcd, HitPoints};
 use shared::game_state::GameState;
 use shared::inputs::PlayerInputContext;
@@ -109,6 +110,7 @@ impl Plugin for DevToolsPlugin {
         let select_level_method = app.register_system(select_level_method);
         let ui_method = app.register_system(ui_dump_method);
         let client_info_method = app.register_system(client_info_method);
+        let cameras_method = app.register_system(cameras_method);
         let mut methods = app
             .world_mut()
             .resource_mut::<bevy::remote::RemoteMethods>();
@@ -124,6 +126,7 @@ impl Plugin for DevToolsPlugin {
         methods.insert("game/select_level", bevy::remote::RemoteMethodSystemId::Instant(select_level_method));
         methods.insert("game/ui", bevy::remote::RemoteMethodSystemId::Instant(ui_method));
         methods.insert("game/client_info", bevy::remote::RemoteMethodSystemId::Instant(client_info_method));
+        methods.insert("game/cameras", bevy::remote::RemoteMethodSystemId::Instant(cameras_method));
 
         // The agent cursor overlay (headless-only; both systems no-op otherwise).
         app.add_systems(
@@ -222,6 +225,9 @@ pub struct ClientInfo {
     pub no_common_assets: bool,
     /// Desktop-VR mode (mutually exclusive with the headless modes).
     pub vr: bool,
+    /// Rendered headless host at 2 fps running as an *observer* (no player spawn; renders the
+    /// shared world on demand via `game/screenshot {"camera": …}`).
+    pub headless_render: bool,
     /// The BRP surface's port (default 15702; `--brp-port` under fleet testing).
     pub brp_port: u16,
     /// The MCP surface's port (default 15710; `--mcp-port` under fleet testing).
@@ -237,6 +243,7 @@ fn client_info_resource() -> ClientInfo {
         no_render,
         no_common_assets: crate::config::is_no_common_assets_presync() || no_render,
         vr: crate::config::is_vr_enabled_presync(),
+        headless_render: crate::config::is_headless_render_presync() && !no_render,
         brp_port: crate::config::brp_port_presync(),
         mcp_port: crate::config::mcp_port_presync(),
     }
@@ -252,6 +259,7 @@ fn client_info_method(_params: In<Option<serde_json::Value>>, world: &mut World)
     Ok(json!({
         "mcp": info.mcp,
         "no_render": info.no_render,
+        "headless_render": info.headless_render,
         "no_common_assets": info.no_common_assets,
         "vr": info.vr,
         "brp_port": info.brp_port,
@@ -266,6 +274,41 @@ fn client_info_method(_params: In<Option<serde_json::Value>>, world: &mut World)
                     .and_then(|images| images.get(&target.0))
                     .map(|image| vec![image.size().x, image.size().y])
             }),
+    })
+    .into())
+}
+
+/// `game/cameras` — lists every camera: entity id (usable as `game/screenshot`'s `camera`
+/// param), position, look angles, name/observer marker, and whether it's active. On a
+/// `--headless-render` observer this is how an agent finds the `ObserverCamera` to aim and
+/// render from.
+fn cameras_method(_params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
+    let mut cameras = world.query_filtered::<(
+        Entity,
+        &bevy::camera::Camera,
+        Option<&Transform>,
+        Option<&Name>,
+        Option<&bevy::camera::visibility::VisibleEntities>,
+    ), ()>();
+    let mut rows = Vec::new();
+    for (entity, camera, transform, name, _) in cameras.iter(world) {
+        let transform = transform.cloned().unwrap_or_default();
+        let forward = *transform.forward();
+        let yaw = forward.z.atan2(forward.x);
+        let pitch = forward.y.asin();
+        rows.push(json!({
+            "entity": entity,
+            "name": name.map(|name| name.as_str()),
+            "position": [transform.translation.x, transform.translation.y, transform.translation.z],
+            "forward": [forward.x, forward.y, forward.z],
+            "yaw": yaw, "pitch": pitch,
+            "active": camera.is_active,
+            "observer_camera": name.is_some_and(|n| n.as_str() == "ObserverCamera"),
+        }));
+    }
+    Ok(json!({
+        "note": "Camera entities. entity = u64 id usable as game/screenshot's `camera` param. yaw/pitch in radians (forward = +X at yaw 0). Reposition via world.mutate_components (Transform).",
+        "cameras": rows,
     })
     .into())
 }
@@ -366,7 +409,62 @@ fn screenshot_start_method(
         })?),
         None => None,
     };
+    // Optional camera entity (as the u64 id `game/cameras` reports): temporarily retarget that
+    // camera into a dedicated capture texture, render, and restore its original target. Only
+    // meaningful when a render app exists (rendered headless / windowed / `--headless-render`).
+    let capture_camera = match params.0.as_ref().and_then(|p| p.get("camera")) {
+        Some(value) => {
+            if world.get_resource::<crate::controls::camera::NoRenderMode>().is_some() {
+                return Err(BrpError::internal(
+                    "camera captures are unavailable with --no-render (nothing renders)",
+                ));
+            }
+            let bits = value
+                .as_u64()
+                .or_else(|| value.as_str().and_then(|s| s.parse().ok()))
+                .ok_or_else(|| BrpError::internal("camera must be the u64 entity id game/cameras reports"))?;
+            let entity = bevy::ecs::entity::Entity::from_bits(bits);
+            if world.get_entity(entity).is_err() {
+                return Err(BrpError::internal(&format!(
+                    "camera entity {bits} does not exist (use game/cameras to list cameras)"
+                )));
+            }
+            Some(entity)
+        }
+        None => None,
+    };
     let path = next_screenshot_path(label);
+    // Camera-targeted capture: raise the requested camera's draw order above everything else
+    // for this frame, screenshot the shared offscreen texture (which every camera here renders
+    // into), and restore order/clear afterwards. Reusing the offscreen texture (instead of a
+    // fresh one) matters: the render app only knows textures it has already prepared — a
+    // brand-new image makes `Screenshot` warn "Unknown image … skipping" forever. The raised
+    // order makes the requested camera the last *opaque* draw, and since `keep_ui_camera_drawn_last`
+    // still draws the UI above it, the capture is that camera's view plus UI.
+    if let Some(camera_entity) = capture_camera {
+        let (original_order, original_clear) = match world.get::<Camera>(camera_entity) {
+            Some(camera) => (camera.order, camera.clear_color),
+            None => {
+                return Err(BrpError::internal(&format!(
+                    "camera entity {camera_entity:?} does not exist (use game/cameras to list cameras)"
+                )));
+            }
+        };
+        match world.get_mut::<Camera>(camera_entity) {
+            Some(mut camera) => {
+                camera.order = 900_000;
+                camera.clear_color = ClearColorConfig::Default;
+            }
+            None => {
+                return Err(BrpError::internal("camera despawned"));
+            }
+        }
+        world.insert_resource(CameraCaptureRestore {
+            entity: camera_entity,
+            original_order,
+            original_clear,
+        });
+    }
     // Headless (`--mcp`) mode: the cameras render into the offscreen texture — capture THAT.
     // Windowed: capture the primary window.
     let capture_target = world
@@ -375,7 +473,8 @@ fn screenshot_start_method(
         .unwrap_or_else(Screenshot::primary_window);
     world
         .spawn(capture_target)
-        .observe(save_cropped_to_disk(path.clone(), crop));
+        .observe(save_cropped_to_disk(path.clone(), crop))
+        .observe(restore_camera_order);
     Ok(json!({
         "status": "capturing",
         "poll": "game/screenshot/get",
@@ -383,6 +482,33 @@ fn screenshot_start_method(
         "crop": crop,
     })
     .into())
+}
+
+/// The camera whose draw order was raised for a camera-targeted capture, and what to put back.
+/// Written by `screenshot_start_method`, consumed by [`restore_camera_order`].
+#[derive(Resource)]
+struct CameraCaptureRestore {
+    entity: Entity,
+    original_order: isize,
+    original_clear: ClearColorConfig,
+}
+
+/// Runs on the capture entity when it completes: puts the borrowed camera's original draw
+/// order/clear config back. Runs after [`save_cropped_to_disk`] (which only reads the
+/// already-transferred image), so the restore never races the encode.
+fn restore_camera_order(
+    _captured: On<ScreenshotCaptured>,
+    restore: Option<Res<CameraCaptureRestore>>,
+    mut cameras: Query<&mut Camera>,
+    mut commands: Commands,
+) {
+    if let Some(restore) = restore {
+        if let Ok(mut camera) = cameras.get_mut(restore.entity) {
+            camera.order = restore.original_order;
+            camera.clear_color = restore.original_clear;
+        }
+        commands.remove_resource::<CameraCaptureRestore>();
+    }
 }
 
 /// Parses `game/screenshot`'s `crop` param: `[x, y, w, h]`, four finite pixel numbers
@@ -1530,6 +1656,17 @@ fn trigger_method(params: In<Option<serde_json::Value>>, mut world: &mut World) 
             sender.send::<shared::replication::OrderedReliable>(InGameRequest);
             Ok(json!({"triggered": "play", "sent": "InGameRequest"}).into())
         }
+        "observe" => {
+            // The observer's counterpart to `play` (`--headless-render` clients): joins the
+            // game room / receives replicated world state WITHOUT spawning a player character.
+            let mut sender = world
+                .query::<&mut lightyear::prelude::MessageSender<ObserveRequest>>()
+                .iter_mut(world)
+                .next()
+                .ok_or_else(|| BrpError::internal("no MessageSender<ObserveRequest> (not connected?)"))?;
+            sender.send::<shared::replication::OrderedReliable>(ObserveRequest);
+            Ok(json!({"triggered": "observe", "sent": "ObserveRequest"}).into())
+        }
         // The spawn hotkeys: client-local triggers whose observers wrap the player's current
         // aim/camera into the server request, so the cube/NPC appears where the player is
         // looking.
@@ -1542,7 +1679,7 @@ fn trigger_method(params: In<Option<serde_json::Value>>, mut world: &mut World) 
             Ok(json!({"triggered": "spawn_npc"}).into())
         }
         other => Err(BrpError::internal(&format!(
-            "unknown event {other:?} (expected connect|play|disconnect)"
+            "unknown event {other:?} (expected connect|play|observe|disconnect)"
         ))),
     }
 }

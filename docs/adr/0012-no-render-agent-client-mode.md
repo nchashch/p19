@@ -91,3 +91,32 @@ fleet port flags.
 - Still open: long fleet churn remains limited by the server-side zombie-player gap (AGENTS.md
   top-level list) — a render-less client makes churn *cheaper*, which makes fixing that gap
   more urgent, not less.
+
+## Follow-up (same day): the `--headless-render` observer
+
+The fleet needed a vision counterpart to `--no-render`: one client that **includes the
+renderer but barely runs it**, and never spawns a player. Implemented as a third mode:
+
+- `--headless-render` = the rendered headless branch with `run_loop(1/2)` — two frames/sec.
+  Logic stays at 60 Hz through fixed-timestep catch-up (`Time<Virtual>::max_delta` lifted to
+  600 ms so two real seconds of ticks land per update); render cost drops to ~2 frames/sec.
+- Joining uses a new `ObserveRequest` client→server message (shared + server handler in
+  `server::networking`): identical to `InGameRequest` minus the player spawn — game-room join +
+  replicated world state, no avatar, no `ClientInGame`. Triggered via
+  `game/trigger {"event":"observe"}`. The mode spawns one `ObserverCamera` (named, at 0/2/8);
+  agents reposition it via `world.mutate_components` (Transform) and list cameras via the new
+  `game/cameras` (entity ids, positions, yaw/pitch).
+- `game/screenshot {"camera": <entity-id>}` renders *that camera's* view: the camera's draw
+  order is raised above all others for the frame (so the shared offscreen texture contains
+  exactly its view, UI still drawn above it), captured offscreen as usual, and order/clear are
+  restored in the capture observer. A first implementation created a *fresh* capture image per
+  capture instead — it silently never completes: the render app doesn't know a brand-new
+  image, so the screenshot system logs "Unknown image … skipping" every frame. Reusing the
+  long-lived offscreen texture avoids the whole class of problem.
+- ClientInfo gained `headless_render`; the playbook's configuration matrix (§1a) documents the
+  observer alongside the other modes.
+
+Verified end-to-end: observer (observe, no player spawn — server logs it) + one `--no-render`
+playing client; the observer's world contains the replicated `PlayerCharacter` at the
+server-authoritative position, and a camera-targeted capture from the aimed `ObserverCamera`
+renders the scene containing it.

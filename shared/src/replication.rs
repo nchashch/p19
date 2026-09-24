@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::assets::level::ClientWorldAsset;
 use crate::character_controller::{Character, Grounded, Idle};
 use crate::client_events::{
-    AttackAttempt, InGameRequest, KillAttempt, LoadLevelRequest, LobbyRequest, SpawnCubeRequest,
-    SpawnNpcRequest,
+    AttackAttempt, InGameRequest, KillAttempt, LoadLevelRequest, LobbyRequest, ObserveRequest,
+    SpawnCubeRequest, SpawnNpcRequest,
 };
 use crate::combat::{Dead, Gcd, HitPoints};
 use crate::cube_spawner::Cube;
@@ -83,6 +83,8 @@ impl Plugin for SharedReplicationPlugin {
         app.register_message::<LoadLevelRequest>()
             .add_direction(NetworkDirection::ClientToServer);
         app.register_message::<InGameRequest>()
+            .add_direction(NetworkDirection::ClientToServer);
+        app.register_message::<ObserveRequest>()
             .add_direction(NetworkDirection::ClientToServer);
         app.register_message::<LobbyRequest>()
             .add_direction(NetworkDirection::ClientToServer);
