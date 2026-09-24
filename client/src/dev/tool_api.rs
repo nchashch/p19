@@ -48,7 +48,8 @@ use bevy::ui_widgets::Button as UiWidgetsButton;
 use std::collections::HashSet;
 use bevy::remote::http::{RemoteHttpPlugin, DEFAULT_PORT as BRP_PORT};
 use bevy::remote::{BrpError, BrpResult, RemotePlugin};
-use bevy::render::view::screenshot::{save_to_disk, Screenshot, ScreenshotCaptured};
+use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured};
+use std::path::Path;
 use bevy_enhanced_input::prelude::{Action, ActionMock, ActionValue, Actions, MockSpan, TriggerState};
 use serde_json::json;
 
@@ -114,6 +115,8 @@ impl Plugin for DevToolsPlugin {
             Update,
             (spawn_agent_cursor_if_headless, update_agent_cursor),
         );
+
+        app.init_resource::<LastServedCapture>();
 
         start_mcp_server();
     }
@@ -241,10 +244,14 @@ fn newest_screenshot() -> Option<PathBuf> {
 }
 
 /// `game/screenshot` — starts an async capture of the primary window. The PNG is written under
-/// `docs/playtests/dist/screenshots/` by bevy's own `save_to_disk`, which encodes the PNG (async!); poll
-/// `game/screenshot/get` until it reports `ready`. Takes an optional `{"label": "..."}` param
-/// for the filename. The file PERSISTS (it is the human-browsable record of what the agent
-/// saw), so this also returns the path immediately.
+/// `docs/playtests/dist/screenshots/` (encoded by [`save_cropped_to_disk`], async); poll
+/// `game/screenshot/get` until it reports `ready`. Optional params: `{"label": "..."}` for the
+/// filename, `{"crop": [x, y, w, h]}` to save only that sub-rect — in the same screenshot pixel
+/// space `game/ui` dumps, so "crop to a button's rect from the dump" just works. A crop costs
+/// the model fewer vision tokens (cost is dimension-driven) and, unlike a full frame, a small
+/// crop survives the provider's downscale unscaled — full effective resolution on the region
+/// of interest. The file PERSISTS (it is the human-browsable record of what the agent saw), so
+/// this also returns the path immediately.
 fn screenshot_start_method(
     params: In<Option<serde_json::Value>>,
     world: &mut World,
@@ -254,6 +261,12 @@ fn screenshot_start_method(
         .as_ref()
         .and_then(|p| p.get("label"))
         .and_then(serde_json::Value::as_str);
+    let crop = match params.0.as_ref().and_then(|p| p.get("crop")) {
+        Some(value) => Some(parse_crop(value).ok_or_else(|| {
+            BrpError::internal("crop must be [x, y, w, h] — four pixel numbers")
+        })?),
+        None => None,
+    };
     let path = next_screenshot_path(label);
     // Headless (`--mcp`) mode: the cameras render into the offscreen texture — capture THAT.
     // Windowed: capture the primary window.
@@ -263,20 +276,88 @@ fn screenshot_start_method(
         .unwrap_or_else(Screenshot::primary_window);
     world
         .spawn(capture_target)
-        .observe(save_to_disk(path.clone()))
-        .observe(|_trigger: On<ScreenshotCaptured>| {
-            // The entity is despawned after capture; nothing extra to do — the file is the
-            // delivery mechanism.
-        });
-    Ok(
-        json!({"status": "capturing", "poll": "game/screenshot/get", "path": path.display().to_string()})
-            .into(),
-    )
+        .observe(save_cropped_to_disk(path.clone(), crop));
+    Ok(json!({
+        "status": "capturing",
+        "poll": "game/screenshot/get",
+        "path": path.display().to_string(),
+        "crop": crop,
+    })
+    .into())
+}
+
+/// Parses `game/screenshot`'s `crop` param: `[x, y, w, h]`, four finite pixel numbers
+/// (floats rounded), all non-negative. `None` on anything else.
+fn parse_crop(value: &serde_json::Value) -> Option<[u32; 4]> {
+    let array = value.as_array()?;
+    if array.len() != 4 {
+        return None;
+    }
+    array
+        .iter()
+        .map(|v| {
+            let n = v.as_f64()?;
+            if !n.is_finite() || n < 0.0 {
+                return None;
+            }
+            Some(n.round() as u32)
+        })
+        .collect::<Option<Vec<_>>>()
+        .map(|parts| [parts[0], parts[1], parts[2], parts[3]])
+}
+
+/// [`save_to_disk`]'s crop-capable twin: encodes the captured frame's sub-rect `crop` (or the
+/// whole frame when `None`) to `<path>` as PNG, clamping the rect to the frame's bounds so an
+/// out-of-range crop degrades to the intersection instead of panicking. Mirrors
+/// `save_to_disk`'s HDR-safety (`to_rgb8` drops the alpha channel). The capture itself is
+/// always of the full render target — the crop is applied at encode time.
+fn save_cropped_to_disk(
+    path: impl AsRef<Path>,
+    crop: Option<[u32; 4]>,
+) -> impl FnMut(On<ScreenshotCaptured>) {
+    let path = path.as_ref().to_owned();
+    move |captured: On<ScreenshotCaptured>| {
+        let Ok(dyn_img) = captured.image.clone().try_into_dynamic() else {
+            error!("screenshot crop: unsupported capture format at {}", path.display());
+            return;
+        };
+        let rgb = dyn_img.to_rgb8();
+        let cropped = match crop {
+            None => image::DynamicImage::ImageRgb8(rgb),
+            Some([x, y, w, h]) => {
+                let x = x.min(rgb.width().saturating_sub(1));
+                let y = y.min(rgb.height().saturating_sub(1));
+                let w = w.min(rgb.width() - x).max(1);
+                let h = h.min(rgb.height() - y).max(1);
+                image::DynamicImage::ImageRgb8(image::imageops::crop_imm(&rgb, x, y, w, h).to_image())
+            }
+        };
+        match cropped.save_with_format(&path, image::ImageFormat::Png) {
+            Ok(_) => info!("Screenshot saved to {} (crop: {crop:?})", path.display()),
+            Err(e) => error!("Cannot save screenshot, IO error: {e}"),
+        }
+    }
+}
+
+/// The pixels of the last capture `game/screenshot/get` served in full (hash of the PNG bytes +
+/// the file). If the newest capture's pixels hash identically, the poll answers
+/// `unchanged: true` without re-sending the image — agents poll while waiting on state
+/// transitions and routinely re-read pixel-identical frames (e.g. a static view while
+/// `game/state` changes underneath). Resource rather than `Local` because the handlers are
+/// registered as plain systems.
+#[derive(Resource, Default)]
+struct LastServedCapture {
+    hash: Option<u64>,
+    path: Option<std::path::PathBuf>,
 }
 
 /// `game/screenshot/get` — polls the newest capture: `{"ready": true, "png_base64": …, "path":
-/// …, "state": …}` once a PNG is on disk, `{"ready": false}` while still rendering. The
-/// response embeds the [`game_state_snapshot`] ground truth, and the same snapshot is written
+/// …, "state": …}` once a PNG is on disk, `{"ready": false}` while still rendering. If the
+/// newest capture's pixels are identical to the last capture served in full, responds
+/// `{"ready": true, "unchanged": true, "path", "state"}` WITHOUT `png_base64` — the agent
+/// already has this exact image; the fresh `state` is still included since the world can
+/// change under a static view. The response otherwise embeds the [`game_state_snapshot`]
+/// ground truth, and the same snapshot is written
 /// once to a `.json` sidecar beside the PNG (`<capture>.json`) so the human-browsable record
 /// carries state too. The file is NOT consumed — captures persist in
 /// `docs/playtests/dist/screenshots/` for human review.
@@ -284,30 +365,54 @@ fn screenshot_get_method(_params: In<Option<serde_json::Value>>, world: &mut Wor
     let Some(path) = newest_screenshot() else {
         return Ok(json!({"ready": false}).into());
     };
-    match std::fs::read(&path) {
-        Ok(bytes) => {
-            use base64::Engine as _;
-            let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
-            let state = game_state_snapshot(world);
-            let sidecar = path.with_extension("json");
-            if !sidecar.exists() {
-                let record = json!({
-                    "screenshot": path.display().to_string(),
-                    "state": state,
-                });
-                if let Ok(text) = serde_json::to_string_pretty(&record) {
-                    let _ = std::fs::write(&sidecar, text);
-                }
-            }
-            Ok(json!({
-                "ready": true,
-                "png_base64": encoded,
-                "path": path.display().to_string(),
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(_) => return Ok(json!({"ready": false}).into()),
+    };
+    let state = game_state_snapshot(world);
+
+    // Unchanged-frame suppression: PNG bytes are a deterministic function of the frame
+    // (same encoder, same pixels → same bytes), so hashing the file hashes the frame.
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    std::hash::Hash::hash(&bytes, &mut hasher);
+    let hash = std::hash::Hasher::finish(&hasher);
+    let unchanged = world
+        .get_resource::<LastServedCapture>()
+        .is_some_and(|last| last.hash == Some(hash));
+    if unchanged {
+        return Ok(json!({
+            "ready": true,
+            "unchanged": true,
+            "path": path.display().to_string(),
+            "state": state,
+        })
+        .into());
+    }
+    if let Some(mut last) = world.get_resource_mut::<LastServedCapture>() {
+        last.hash = Some(hash);
+        last.path = Some(path.clone());
+    }
+
+    {
+        use base64::Engine as _;
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        let sidecar = path.with_extension("json");
+        if !sidecar.exists() {
+            let record = json!({
+                "screenshot": path.display().to_string(),
                 "state": state,
-            })
-            .into())
+            });
+            if let Ok(text) = serde_json::to_string_pretty(&record) {
+                let _ = std::fs::write(&sidecar, text);
+            }
         }
-        Err(_) => Ok(json!({"ready": false}).into()),
+        Ok(json!({
+            "ready": true,
+            "png_base64": encoded,
+            "path": path.display().to_string(),
+            "state": state,
+        })
+        .into())
     }
 }
 
@@ -1510,6 +1615,18 @@ struct GameTools {
     brp_url: String,
 }
 
+/// The `screenshot` tool's parameters — both optional; omit them for a full-frame capture.
+#[derive(serde::Deserialize, schemars::JsonSchema)]
+pub struct ScreenshotParams {
+    /// Optional filename label; the PNG lands as `<millistamp>-<label>.png` under
+    /// docs/playtests/dist/screenshots/.
+    pub label: Option<String>,
+    /// Optional `[x, y, w, h]` sub-rect to capture, in the same screenshot pixel space game/ui
+    /// dumps (e.g. a button's rect). A crop costs fewer vision tokens and keeps full effective
+    /// resolution on the region of interest. Clamped to frame bounds.
+    pub crop: Option<Vec<f64>>,
+}
+
 impl Default for GameTools {
     fn default() -> Self {
         Self {
@@ -1558,28 +1675,55 @@ impl GameTools {
         )]))
     }
 
-    /// Captures a screenshot of the game window (PNG) and returns it as image content. The
-    /// capture is async (one render frame), so this polls `game/screenshot/get` briefly.
-    #[rmcp::tool(description = "Capture a screenshot of the game window. Returns the PNG as image content PLUS the game's ground-truth state as JSON text (same payload as game_state), so you never need to read numbers off the HUD. The camera view IS the player's view; a visible crosshair marks your mocked mouse cursor (red = idle, yellow = hovering something, white = left button held). Pair with game/ui for clickable element coordinates.")]
-    async fn screenshot(&self) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
-        self.brp("game/screenshot", json!({})).await?;
+    /// Captures a screenshot of the game (PNG) and returns it as image content PLUS the game's
+    /// ground-truth state as JSON. The capture is async (one render frame), so this polls
+    /// `game/screenshot/get` briefly. Optional `crop` targets a region of interest.
+    #[rmcp::tool(description = "Capture a screenshot of the game. Returns the PNG as image content PLUS the game's ground-truth state as JSON text (same payload as game_state), so you never need to read numbers off the HUD. Optional `crop` [x,y,w,h] captures just a region (read the rect off game/ui first) — cheaper and sharper than a full frame. A visible crosshair marks your mocked mouse cursor (red = idle, yellow = hovering, white = left held). If the response says unchanged:true, the pixels are IDENTICAL to the last image you were served — do not ask for it again; read the included state instead.")]
+    async fn screenshot(
+        &self,
+        rmcp::handler::server::wrapper::Parameters(ScreenshotParams { label, crop }): rmcp::handler::server::wrapper::Parameters<ScreenshotParams>,
+    ) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
+        let mut params = json!({});
+        if let Some(label) = label {
+            params["label"] = json!(label);
+        }
+        if let Some(crop) = crop {
+            if crop.len() != 4 || crop.iter().any(|v| !v.is_finite() || *v < 0.0) {
+                return Err(rmcp::ErrorData::invalid_params(
+                    "crop must be [x, y, w, h] — four non-negative pixel numbers".to_owned(),
+                    None,
+                ));
+            }
+            params["crop"] = json!(crop);
+        }
+        self.brp("game/screenshot", params).await?;
         for _ in 0..40 {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             let result = self.brp("game/screenshot/get", json!({})).await?;
-            if result.get("ready").and_then(serde_json::Value::as_bool) == Some(true) {
-                let png_base64 = result
-                    .get("png_base64")
-                    .and_then(serde_json::Value::as_str)
-                    .ok_or_else(|| rmcp::ErrorData::internal_error("screenshot missing data", None))?;
-                let state = result.get("state").cloned().unwrap_or(json!(null));
-                let path = result.get("path").and_then(serde_json::Value::as_str).unwrap_or("");
-                let mut blocks = vec![rmcp::model::ContentBlock::image(png_base64.to_string(), "image/png")];
-                blocks.push(rmcp::model::ContentBlock::text(serde_json::to_string_pretty(&json!({
-                    "path": path,
-                    "state": state,
-                })).map_err(|err| rmcp::ErrorData::internal_error(format!("{err}"), None))?));
-                return Ok(rmcp::model::CallToolResult::success(blocks));
+            if result.get("ready").and_then(serde_json::Value::as_bool) != Some(true) {
+                continue;
             }
+            let state = result.get("state").cloned().unwrap_or(json!(null));
+            let path = result.get("path").and_then(serde_json::Value::as_str).unwrap_or("");
+            let state_json = serde_json::to_string_pretty(&json!({
+                "path": path,
+                "state": state,
+            }))
+            .map_err(|err| rmcp::ErrorData::internal_error(format!("{err}"), None))?;
+            if result.get("unchanged").and_then(serde_json::Value::as_bool) == Some(true) {
+                return Ok(rmcp::model::CallToolResult::success(vec![
+                    rmcp::model::ContentBlock::text(format!(
+                        "unchanged: the newest capture has PIXEL-IDENTICAL content to the last image you were served — it is not attached again.\n{state_json}"
+                    )),
+                ]));
+            }
+            let png_base64 = result
+                .get("png_base64")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| rmcp::ErrorData::internal_error("screenshot missing data", None))?;
+            let mut blocks = vec![rmcp::model::ContentBlock::image(png_base64.to_string(), "image/png")];
+            blocks.push(rmcp::model::ContentBlock::text(state_json));
+            return Ok(rmcp::model::CallToolResult::success(blocks));
         }
         Err(rmcp::ErrorData::internal_error(
             "screenshot timed out (is the game rendering?)",

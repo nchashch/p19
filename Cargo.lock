@@ -3065,6 +3065,7 @@ dependencies = [
  "fluent",
  "fluent_content",
  "futures-lite",
+ "image",
  "lightyear",
  "lightyear_avian3d",
  "lightyear_inputs_bei",

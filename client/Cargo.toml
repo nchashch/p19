@@ -28,6 +28,7 @@ dev-tools = [
     "dep:tokio",
     "dep:reqwest",
     "dep:base64",
+    "dep:image",
     "dep:serde_json",
     "dep:schemars",
 ]
@@ -91,5 +92,8 @@ reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls",
 ], optional = true }
 base64 = { version = "0.22", optional = true }
+# Same 0.25 line bevy_render pulls transitively for screenshot encoding — declared so
+# `dev::tool_api` can crop captures (`imageops::crop_imm`) and PNG-encode them itself.
+image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
 serde_json = { version = "1", optional = true }
 schemars = { version = "1.0", optional = true }
