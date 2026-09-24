@@ -49,12 +49,16 @@ pub fn is_no_common_assets_presync() -> bool {
 /// Fleet/multi-client testing starts each client at its own port so one machine can host many
 /// against one server; the agent then addresses a specific client simply by addressing its
 /// port. Decided *pre-sync* (the port is needed when the remote plugins are constructed).
+/// `dev-tools`-gated: `bevy::remote` (hence the default port constant) only exists with the
+/// feature on, and the only consumers are the tool API.
+#[cfg(feature = "dev-tools")]
 pub fn brp_port_presync() -> u16 {
     port_flag("--brp-port").unwrap_or(bevy::remote::http::DEFAULT_PORT)
 }
 
 /// `--mcp-port N` (CLI-only): the port the MCP surface binds. Default 15710; same fleet
 /// rationale as [`brp_port_presync`].
+#[cfg(feature = "dev-tools")]
 pub fn mcp_port_presync() -> u16 {
     port_flag("--mcp-port").unwrap_or(15710)
 }
@@ -84,6 +88,7 @@ pub fn is_headless_render_presync() -> bool {
 }
 
 /// Reads `<flag> N` out of the process args. `None` when absent or malformed.
+#[cfg(feature = "dev-tools")]
 fn port_flag(flag: &str) -> Option<u16> {
     let args: Vec<String> = std::env::args().collect();
     args.iter()
