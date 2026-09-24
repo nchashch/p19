@@ -6,6 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use bevy::prelude::*;
 use lightyear::prelude::*;
+use shared::client_events::ClientDespawn;
 use shared::game_state::GameState;
 use shared::replication::ClientInGame;
 
@@ -32,6 +33,11 @@ impl Plugin for NetworkingPlugin {
         app.add_observer(on_disconnect_request);
         app.add_observer(on_in_game);
         app.add_observer(on_out_of_game);
+        // `AppExit` is a Message (not an observer event) in bevy 0.19 — a `MessageReader`
+        // system in `Update` sees it during the *final* frame, and this runs before
+        // lightyear's post-update packet flush, so the `ClientDespawn` enqueued here still
+        // rides the socket before the process ends.
+        app.add_systems(Update, send_client_despawn_on_exit);
     }
 }
 
@@ -50,10 +56,18 @@ fn on_in_game(
 fn on_out_of_game(
     remove: On<Remove, Controlled>,
     is_controlled: Query<Has<Controlled>>,
+    mut senders: Query<&mut MessageSender<ClientDespawn>>,
     mut commands: Commands,
 ) {
     if is_controlled.get(remove.entity) == Ok(true) {
         info!("client is now out of game");
+        // Normally redundant — this transition *means* the server already despawned our
+        // player (that's what removed `Controlled`) — but kept as the user-requested safety
+        // net for any future leave path where the client goes to Lobby while its
+        // `Lifetime::Persistent` player somehow survives server-side.
+        if let Ok(mut sender) = senders.single_mut() {
+            sender.send::<shared::replication::OrderedReliable>(ClientDespawn);
+        }
         commands.set_state(GameState::Lobby);
     }
 }
@@ -164,12 +178,47 @@ fn on_connect_request(
 /// UdpIo)` alone and unconditionally unwraps `UdpIo::socket` — the observed crash
 /// ("`Option::unwrap()` on a `None` value" in `lightyear_udp`) on a second `Connect` after
 /// returning to the main menu.
-fn on_disconnect_request(_: On<Disconnect>, link: Res<ClientLink>, mut commands: Commands) {
+fn on_disconnect_request(
+    _: On<Disconnect>,
+    link: Res<ClientLink>,
+    mut senders: Query<&mut MessageSender<ClientDespawn>>,
+    mut commands: Commands,
+) {
+    // Tell the server to drop our player *before* tearing the connection down, so the
+    // message rides the still-live link and its `Lifetime::Persistent` player despawns
+    // immediately instead of waiting for the netcode timeout (see `on_app_exit` for the
+    // shutdown variant of the same concern).
+    if let Ok(mut sender) = senders.single_mut() {
+        sender.send::<shared::replication::OrderedReliable>(ClientDespawn);
+    }
     commands.trigger(lightyear::prelude::Disconnect { entity: link.0 });
     commands.trigger(Unlink {
         entity: link.0,
         reason: UnlinkReason::UserRequested(None),
     });
+}
+
+/// Sends `ClientDespawn` on a clean app shutdown while a connection is still up — the server
+/// drops the player immediately rather than at netcode-timeout. Best-effort: the message is
+/// enqueued during the exit frame and flushed by lightyear's post-update send systems; a hard
+/// kill (`SIGKILL`/`process::exit`) never gets here, and in those cases the server-side
+/// `Disconnected`-observer cleanup is the fallback (it fires when the netcode times the dead
+/// client out).
+fn send_client_despawn_on_exit(
+    mut exits: MessageReader<AppExit>,
+    link: Res<ClientLink>,
+    connected: Query<(), With<lightyear::prelude::Connected>>,
+    mut senders: Query<&mut MessageSender<ClientDespawn>>,
+) {
+    for exit in exits.read() {
+        if exit.is_error() {
+            continue; // a crashing exit has no graceful-connection guarantees anyway
+        }
+        if connected.contains(link.0) && let Ok(mut sender) = senders.single_mut() {
+            info!("app exit: sending ClientDespawn before shutdown");
+            sender.send::<shared::replication::OrderedReliable>(ClientDespawn);
+        }
+    }
 }
 
 fn on_connected(_: On<Add, lightyear::prelude::Connected>, mut commands: Commands) {

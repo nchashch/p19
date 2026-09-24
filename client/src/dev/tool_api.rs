@@ -42,6 +42,7 @@ use bevy::ecs::query::QueryState;
 use bevy::feathers::controls::FeathersButton;
 use bevy::picking::Pickable;
 use bevy::picking::hover::Hovered as PickHovered;
+use bevy::ecs::relationship::Relationship;
 use bevy::text::TextSpan;
 use bevy::ui::{ComputedUiTargetCamera, Pressed as UiPressed, UiGlobalTransform, UiStack};
 use bevy::ui_widgets::Button as UiWidgetsButton;
@@ -204,6 +205,44 @@ fn game_state_snapshot(world: &mut World) -> serde_json::Value {
     } else {
         out.insert("dead".into(), json!(false));
     }
+
+    // Binding introspection (playtest 0012's F7): whether `bind_replicated_ahoy_actions`
+    // actually bound the local player's action entities. `game/input`'s action-mocks bypass
+    // bindings, so a broken-bindings desync (e.g. the second client's locked look/movement)
+    // is invisible to everything else here — this makes it visible: one row per action,
+    // `bound` = Bindings present, `context_is_local` = the action's context is this client's
+    // own context (vs another player's replicated action, which must never be bound here).
+    let local = Some(player);
+    let mut bindings_rows = Vec::new();
+    for (entity, action_of, bound) in world
+        .query_filtered::<(Entity, &bevy_enhanced_input::prelude::ActionOf<PlayerInputContext>, Has<bevy_enhanced_input::prelude::Bindings>), With<bevy_enhanced_input::prelude::Action<bevy_ahoy::input::Movement>>>()
+        .iter(world)
+    {
+        bindings_rows.push(json!({
+            "action": "movement", "entity": entity, "context": action_of.get(),
+            "bound": bound, "context_is_local": Some(action_of.get()) == local,
+        }));
+    }
+    for (entity, action_of, bound) in world
+        .query_filtered::<(Entity, &bevy_enhanced_input::prelude::ActionOf<PlayerInputContext>, Has<bevy_enhanced_input::prelude::Bindings>), With<bevy_enhanced_input::prelude::Action<bevy_ahoy::input::Jump>>>()
+        .iter(world)
+    {
+        bindings_rows.push(json!({
+            "action": "jump", "entity": entity, "context": action_of.get(),
+            "bound": bound, "context_is_local": Some(action_of.get()) == local,
+        }));
+    }
+    for (entity, action_of, bound, mouse_look, stick_look) in world
+        .query_filtered::<(Entity, &bevy_enhanced_input::prelude::ActionOf<PlayerInputContext>, Has<bevy_enhanced_input::prelude::Bindings>, Has<shared::inputs::MouseLook>, Has<shared::inputs::StickLook>), With<bevy_enhanced_input::prelude::Action<bevy_ahoy::input::RotateCamera>>>()
+        .iter(world)
+    {
+        let name = if mouse_look { "rotate_mouse" } else if stick_look { "rotate_stick" } else { "rotate?" };
+        bindings_rows.push(json!({
+            "action": name, "entity": entity, "context": action_of.get(),
+            "bound": bound, "context_is_local": Some(action_of.get()) == local,
+        }));
+    }
+    out.insert("bindings".into(), json!(bindings_rows));
 
     serde_json::Value::Object(out)
 }

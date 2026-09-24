@@ -11,6 +11,13 @@ pub struct InGameRequest;
 #[derive(Event, Serialize, Deserialize, Clone)]
 pub struct ObserveRequest;
 
+/// The sender's player character should be despawned. Fired by the client when it leaves the
+/// game (its `Controlled` is going away — main-menu return, disconnect, app shutdown), so the
+/// server can drop its `Lifetime::Persistent` player immediately instead of letting it linger
+/// as a zombie until the netcode timeout.
+#[derive(Event, Serialize, Deserialize, Clone)]
+pub struct ClientDespawn;
+
 #[derive(Event, Serialize, Deserialize, Clone)]
 pub struct LobbyRequest;
 

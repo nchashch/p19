@@ -68,20 +68,24 @@ fn server_state_method(_params: In<Option<serde_json::Value>>, world: &mut World
 
     // Players: everything the server spawned for a connection (`player()` bundle) —
     // PlayerCharacter + ControlledBy (owner = connection entity) + Transform + HitPoints.
+    // CharacterLook is included per playtest 0012's F7: it is the desync-diagnosis field
+    // (server-authoritative yaw/pitch to compare against each client's own view).
     let mut players = world.query_filtered::<(
         Entity,
         &Transform,
         &shared::player::PlayerCharacter,
         &shared::combat::HitPoints,
         &lightyear::prelude::ControlledBy,
+        &bevy_ahoy::CharacterLook,
     ), ()>();
     let mut player_rows = Vec::new();
-    for (entity, transform, _, hit_points, controlled_by) in players.iter(world) {
+    for (entity, transform, _, hit_points, controlled_by, look) in players.iter(world) {
         player_rows.push(json!({
             "entity": entity,
             "position": [transform.translation.x, transform.translation.y, transform.translation.z],
             "owner_connection": controlled_by.owner,
             "hit_points": hit_points.hit_points,
+            "look": {"yaw": look.yaw, "pitch": look.pitch},
         }));
     }
     out.insert("player_count".into(), json!(player_rows.len()));

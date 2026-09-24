@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
 use lightyear::prelude::*;
 use shared::assets::level::{ClientReplicate, Level};
-use shared::client_events::{InGameRequest, LoadLevelRequest, ObserveRequest};
+use shared::client_events::{ClientDespawn, InGameRequest, LoadLevelRequest, ObserveRequest};
 use shared::replication::ClientInGame;
 use shared::{
     game_state::ServerState,
@@ -41,9 +41,45 @@ impl Plugin for NetworkingPlugin {
             .add_observer(on_client_disconnected);
         app.add_systems(
             Update,
-            (in_game_request, observe_request).run_if(in_state(ServerState::InGame)),
+            (in_game_request, observe_request, client_despawn).run_if(in_state(ServerState::InGame)),
         );
         app.add_systems(Update, (load_level_request, setup_client_replicate));
+    }
+}
+
+/// The player(s) belonging to a connection, for cleanup: everything the server spawned for
+/// that client's `player()` bundle is `ControlledBy { owner: <connection> }` — including the
+/// `Lifetime::Persistent` player that would otherwise linger after the client leaves.
+fn owned_players(
+    connection: Entity,
+    controlled: Query<(Entity, &ControlledBy)>,
+) -> Vec<Entity> {
+    controlled
+        .iter()
+        .filter(|(_, controlled_by)| controlled_by.owner == connection)
+        .map(|(entity, _)| entity)
+        .collect()
+}
+
+/// Handles `ClientDespawn` — the client saying "my player should go away now" (it is leaving
+/// the game / shutting down while the connection is still alive, so the message rides it).
+/// Despawns everything the server spawned for that connection. Complements
+/// [`cleanup_disconnected_players`]: the message path is immediate for graceful leaves, the
+/// `Disconnected`-observer path catches every other kind of disconnect (netcode timeout,
+/// hard crash) once lightyear notices.
+fn client_despawn(
+    receivers: Query<(Entity, &mut MessageReceiver<ClientDespawn>)>,
+    controlled: Query<(Entity, &ControlledBy)>,
+    mut commands: Commands,
+) {
+    for (entity, mut receiver) in receivers {
+        for _request in receiver.receive() {
+            let owned = owned_players(entity, controlled);
+            info!("client `{entity}` despawn request: dropping {owned:?}");
+            for player in owned {
+                commands.entity(player).despawn();
+            }
+        }
     }
 }
 
@@ -211,6 +247,26 @@ fn on_client_connected(add: On<Add, LinkOf>) {
     info!("client `{}` connected", add.entity);
 }
 
-fn on_client_disconnected(disconnected: On<Add, Disconnected>) {
+fn on_client_disconnected(
+    disconnected: On<Add, Disconnected>,
+    controlled: Query<(Entity, &ControlledBy)>,
+    mut commands: Commands,
+) {
     info!("client `{}` disconnected", disconnected.entity);
+    // Zombie-player fix: the player bundle is `Lifetime::Persistent` (lightyear deliberately
+    // does not despawn it when the owner disconnects) — so without this, every client that
+    // leaves leaves its player behind in the world forever (playtest 0011 F4 measured four
+    // static corpses polluting one session). `Disconnected` covers graceful netcode
+    // disconnects *and* timeouts after a hard crash; the immediate path for clean leaves is
+    // the `ClientDespawn` message.
+    let owned = owned_players(disconnected.entity, controlled);
+    if !owned.is_empty() {
+        info!(
+            "client `{}` disconnected: despawning {owned:?}",
+            disconnected.entity
+        );
+        for player in owned {
+            commands.entity(player).despawn();
+        }
+    }
 }
