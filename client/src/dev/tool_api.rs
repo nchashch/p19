@@ -108,6 +108,7 @@ impl Plugin for DevToolsPlugin {
         let levels_method = app.register_system(levels_method);
         let select_level_method = app.register_system(select_level_method);
         let ui_method = app.register_system(ui_dump_method);
+        let client_info_method = app.register_system(client_info_method);
         let mut methods = app
             .world_mut()
             .resource_mut::<bevy::remote::RemoteMethods>();
@@ -122,6 +123,7 @@ impl Plugin for DevToolsPlugin {
         methods.insert("game/levels", bevy::remote::RemoteMethodSystemId::Instant(levels_method));
         methods.insert("game/select_level", bevy::remote::RemoteMethodSystemId::Instant(select_level_method));
         methods.insert("game/ui", bevy::remote::RemoteMethodSystemId::Instant(ui_method));
+        methods.insert("game/client_info", bevy::remote::RemoteMethodSystemId::Instant(client_info_method));
 
         // The agent cursor overlay (headless-only; both systems no-op otherwise).
         app.add_systems(
@@ -130,6 +132,7 @@ impl Plugin for DevToolsPlugin {
         );
 
         app.init_resource::<LastServedCapture>();
+        app.insert_resource(client_info_resource());
 
         start_mcp_server(crate::config::mcp_port_presync());
     }
@@ -200,6 +203,71 @@ fn game_state_snapshot(world: &mut World) -> serde_json::Value {
     }
 
     serde_json::Value::Object(out)
+}
+
+/// What launch configuration this client is running under — the `game/client_info` payload.
+/// An agent's first call on a fresh session: it changes which tools are meaningful
+/// (`game/screenshot` is unavailable under `--no-render`, world visuals never load there, the
+/// gamepad-default/data-first playbook rules differ per mode) and which port to find surfaces
+/// on under fleet testing.
+#[derive(Resource, Clone)]
+pub struct ClientInfo {
+    /// Headless agent host (the tool API's home surface).
+    pub mcp: bool,
+    /// Render plugins disabled: no wgpu/Vulkan, no GPU driver needed, screenshots unavailable,
+    /// world visuals never load.
+    pub no_render: bool,
+    /// The `CommonAssets` collection was never loaded — no fonts/sounds/skybox/icons; content
+    /// arrives only via `ClientWorldAsset`s loaded by path.
+    pub no_common_assets: bool,
+    /// Desktop-VR mode (mutually exclusive with the headless modes).
+    pub vr: bool,
+    /// The BRP surface's port (default 15702; `--brp-port` under fleet testing).
+    pub brp_port: u16,
+    /// The MCP surface's port (default 15710; `--mcp-port` under fleet testing).
+    pub mcp_port: u16,
+}
+
+fn client_info_resource() -> ClientInfo {
+    let no_render = crate::config::is_no_render_presync();
+    ClientInfo {
+        // Report the *effective* flags, including implications (main.rs composes the same way):
+        // `--no-render` implies `--mcp` and `--no-common-assets`.
+        mcp: crate::config::is_mcp_mode_presync() || no_render,
+        no_render,
+        no_common_assets: crate::config::is_no_common_assets_presync() || no_render,
+        vr: crate::config::is_vr_enabled_presync(),
+        brp_port: crate::config::brp_port_presync(),
+        mcp_port: crate::config::mcp_port_presync(),
+    }
+}
+
+/// `game/client_info` — reports this client's launch configuration (mode flags + surface
+/// ports). Call first on a fresh session: it tells you whether screenshots exist at all,
+/// whether world visuals load, and where the surfaces live.
+fn client_info_method(_params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
+    let Some(info) = world.get_resource::<ClientInfo>() else {
+        return Err(BrpError::internal("ClientInfo resource missing (was DevToolsPlugin built?)"));
+    };
+    Ok(json!({
+        "mcp": info.mcp,
+        "no_render": info.no_render,
+        "no_common_assets": info.no_common_assets,
+        "vr": info.vr,
+        "brp_port": info.brp_port,
+        "mcp_port": info.mcp_port,
+        "screenshots_available": !info.no_render,
+        "rendering": !info.no_render,
+        "target_size": world
+            .get_resource::<OffscreenRenderTarget>()
+            .and_then(|target| {
+                world
+                    .get_resource::<Assets<Image>>()
+                    .and_then(|images| images.get(&target.0))
+                    .map(|image| vec![image.size().x, image.size().y])
+            }),
+    })
+    .into())
 }
 
 /// Where captures land: `<workspace>/docs/playtests/dist/screenshots/<utc>-<label>.png` —
@@ -1774,6 +1842,16 @@ impl GameTools {
             "screenshot timed out (is the game rendering?)",
             None,
         ))
+    }
+
+    /// Reports this client's launch configuration: mode flags (`--mcp`, `--no-render`,
+    /// `--no-common-assets`, VR) and surface ports.
+    #[rmcp::tool(description = "Report this client's launch configuration: mcp / no_render / no_common_assets / vr flags, brp_port, mcp_port, whether screenshots are available, and the offscreen target size. Call this FIRST on any session — it tells you which tools are meaningful here (e.g. no_render clients have no screenshots and never load world visuals) and which port each surface is on in fleet testing.")]
+    async fn client_info(&self) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
+        let result = self.brp("game/client_info", json!({})).await?;
+        Ok(rmcp::model::CallToolResult::success(vec![rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&result).map_err(|err| rmcp::ErrorData::internal_error(format!("{err}"), None))?,
+        )]))
     }
 
     /// Dumps the UI tree: labeled rects + text for every visible UI node, in screenshot pixel

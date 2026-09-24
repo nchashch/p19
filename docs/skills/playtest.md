@@ -29,11 +29,37 @@ the wgpu/Vulkan instance) disabled, so it needs no GPU driver at all and runs
 at a fraction of the CPU (~0.7 core vs ~1.3 per client). UI layout, `game/ui`,
 hover/clicks, input mocking, and netcode are identical (`bevy_ui` 0.19's
 layout/picking is render-free logic; a shim feeds the one camera value UI reads
-back from the render side). `game/screenshot` returns a clean error; world
-visuals never load (implied `--no-common-assets`). Default choice for
-gameplay/UI/logic fleets on small boxes; use rendered mode when a check is
-inherently visual (§7). Rationale and implementation notes:
+back from the render side). Default choice for gameplay/UI/logic fleets on
+small boxes; use rendered mode when a check is inherently visual (§7).
+Rationale and implementation notes:
 [ADR 0012](../adr/0012-no-render-agent-client-mode.md).
+
+## 1a. Client configurations — call `game/client_info` first
+
+Every client reports its own launch configuration via
+`game/client_info` (mode flags + surface ports + `screenshots_available`).
+**Call it before anything else on a fresh session** — it tells you which tools
+are meaningful here, without trusting whatever launch line someone else used.
+
+| Configuration | Launch flags | Renders? | Screenshots? | World visuals? | Typical use |
+|---|---|---|---|---|---|
+| Headless agent host (default) | `--mcp` | yes, offscreen 1280×800 via lavapipe | ✓ (crop, unchanged-suppression) | ✓ load + replicate | Full playtesting, visual checks included |
+| **GPU-less agent host** | `--mcp --no-render` | **no** (no Vulkan needed at all) | ✗ clean error — use `game/ui` + `game/state` | ✗ never load (implies `--no-common-assets`) | Gameplay/UI/logic fleets on small boxes; ~0.7 core + ~0.3 GB vs ~1.3 cores + ~1.1 GB |
+| `--no-common-assets` | `--no-common-assets` (alone or implied) | yes | ✓ | none via manifest — content only via `ClientWorldAsset`s by path; fonts/sounds/icons fall back to embedded/`None` | Plaintext-asset-root playtesting (§10) |
+| Windowed dev client | none (dev build has `dev-tools`) | yes, real window | ✓ via `Screenshot::primary_window` | ✓ | Human-visible sessions; BRP still on :15702, but `game/mouse move_to`/clicks are `--mcp`-only |
+| Fleet member | `--mcp --brp-port N --mcp-port N` | per above flags | ✓ (isolated `screenshots/client-N/` dir) | per above flags | Many clients, one server (§9) |
+
+Particularities worth remembering:
+
+- `--no-render` implies `--mcp` + `--no-common-assets`; the reported flags in
+  `game/client_info` are the **effective** ones (implications included), so
+  trust them over the launch line.
+- Only `bevy_mod_outline`/`bevy_hanabi`/FPS-overlay plugins are skipped under
+  `--no-render` — selection visuals and particles don't exist there, which also
+  means "particle effect fired" / "outline appeared" cannot be tested in this
+  mode (use a rendered client).
+- Windowed clients keep the OS cursor; the agent-cursor crosshair is
+  headless-only.
 
 - Build first, and **verify the build actually succeeded**:
 
