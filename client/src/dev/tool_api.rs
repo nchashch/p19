@@ -63,6 +63,21 @@ use avian3d::prelude::LinearVelocity;
 use crate::controls::camera::OffscreenRenderTarget;
 use crate::gameplay::player_character::LocalPlayer;
 
+/// The offscreen target's center in screenshot pixel space — the pointer's parking position
+/// before anything has moved it. Derived from the actual target (Steam Deck 800p, so 640×400)
+/// rather than a baked constant, so the size and the fallback can't drift apart.
+fn offscreen_center(world: &World) -> Vec2 {
+    world
+        .get_resource::<OffscreenRenderTarget>()
+        .and_then(|target| {
+            world
+                .get_resource::<Assets<Image>>()
+                .and_then(|images| images.get(&target.0))
+                .map(|image| image.size().as_vec2() / 2.0)
+        })
+        .unwrap_or(Vec2::new(640.0, 400.0))
+}
+
 /// The MCP surface's TCP port. NOT 15703: that's `bevy_remote`'s **render-subapp BRP port**
 /// (`DEFAULT_RENDER_PORT`, active whenever `bevy_render` runs) — binding our MCP listener
 /// there made the render app's BRP bind fail and the main BRP pipeline hang in release builds.
@@ -529,6 +544,7 @@ fn spawn_agent_cursor_if_headless(
 /// whatever the scale.
 fn update_agent_cursor(
     offscreen: Option<Res<OffscreenRenderTarget>>,
+    images: Option<Res<Assets<Image>>>,
     ui_scale: Res<UiScale>,
     pointers: Query<(&bevy::picking::pointer::PointerId, &bevy::picking::pointer::PointerLocation)>,
     hover: Option<Res<bevy::picking::hover::HoverMap>>,
@@ -552,7 +568,14 @@ fn update_agent_cursor(
         .and_then(|(_, loc)| loc.location.as_ref())
         .map(|location| location.position)
         // Same fallback `current_pointer_location` uses: the offscreen target's center.
-        .unwrap_or(Vec2::new(640.0, 360.0));
+        .unwrap_or_else(|| {
+            offscreen
+                .as_ref()
+                .zip(images.as_ref())
+                .and_then(|(target, images)| images.get(&target.0))
+                .map(|image| image.size().as_vec2() / 2.0)
+                .unwrap_or(Vec2::new(640.0, 400.0))
+        });
 
     let inverse = computed
         .and_then(|node| (node.inverse_scale_factor > 0.0).then_some(node.inverse_scale_factor))
@@ -1144,8 +1167,8 @@ const AGENT_POINTER: bevy::picking::pointer::PointerId = bevy::picking::pointer:
 
 /// The pointer's current position, read back from its own `PointerLocation` component so a
 /// relative `"motion"` move (below) computes the right new absolute position — falls back to
-/// the offscreen target's center (640, 360 for the 1280×720 target) if nothing has moved it yet
-/// this session.
+/// the offscreen target's center (640, 400 for the 1280×800 Steam-Deck target) if nothing has
+/// moved it yet this session.
 fn current_pointer_location(
     world: &mut World,
     offscreen: &Handle<Image>,
@@ -1159,7 +1182,7 @@ fn current_pointer_location(
         .and_then(|(_, loc)| loc.location.clone())
         .unwrap_or(Location {
             target,
-            position: Vec2::new(640.0, 360.0),
+            position: offscreen_center(world),
         })
 }
 
@@ -1190,8 +1213,8 @@ fn current_pointer_location(
 ///   also moves the tracked cursor position by the same delta (for hover), mirroring how a
 ///   single physical mouse movement feeds both systems in reality regardless of which one a
 ///   given game state is actually listening to.
-/// - `{"input":"move_to","x":640,"y":360}` — sets the cursor to an *absolute* position in the
-///   same 1280×720 pixel space `game/screenshot` captures, for UI hover/click testing when you
+/// - `{"input":"move_to","x":640,"y":400}` — sets the cursor to an *absolute* position in the
+///   same 1280×800 pixel space `game/screenshot` captures, for UI hover/click testing when you
 ///   already know where something is from a screenshot. Doesn't touch
 ///   `AccumulatedMouseMotion` — this is a convenience teleport, not a simulated drag.
 /// - `{"input":"wheel","x":0,"y":1,"unit":"Line"}` — `unit` is `Line` (default) or `Pixel`,
@@ -1593,7 +1616,7 @@ pub struct MouseInputParams {
     pub button: Option<String>,
     /// `button`: `true` to press (default), `false` to release. Held until released.
     pub pressed: Option<bool>,
-    /// `motion`: relative X delta this call. `move_to`: absolute X in the 1280×720 screenshot
+    /// `motion`: relative X delta this call. `move_to`: absolute X in the 1280×800 screenshot
     /// pixel space. `wheel`: horizontal scroll amount.
     pub x: Option<f64>,
     /// `motion`: relative Y delta this call. `move_to`: absolute Y. `wheel`: vertical scroll
@@ -1836,7 +1859,7 @@ impl GameTools {
 
     /// Mocks real mouse button/motion/wheel state plus cursor position, driving both raw input
     /// resources and `bevy_picking`'s real event pipeline so UI clicks/hover work too.
-    #[rmcp::tool(description = "Mock real mouse input — buttons, motion, absolute cursor position, and wheel — through both the raw ButtonInput<MouseButton>/AccumulatedMouseMotion/AccumulatedMouseScroll resources bevy_enhanced_input reads AND bevy_picking's real PointerInput event pipeline, so this can click actual UI buttons (not just drive mouse-bound gameplay actions). `input`: `button` (`button`: Left|Right|Middle|Back|Forward, `pressed` true/default or false — held until released), `motion` (`dx`/`dy` relative delta, like a mouse-look turn), `move_to` (`x`/`y` absolute position in the 1280x720 screenshot pixel space — use this to click something you can see at a known pixel from a screenshot), `wheel` (`x`/`y` scroll amount, `unit`: Line|Pixel), `reset` (releases all buttons, zeros motion/scroll — does not recenter the cursor). To click a UI button: move_to its position, then button press, then button release.")]
+    #[rmcp::tool(description = "Mock real mouse input — buttons, motion, absolute cursor position, and wheel — through both the raw ButtonInput<MouseButton>/AccumulatedMouseMotion/AccumulatedMouseScroll resources bevy_enhanced_input reads AND bevy_picking's real PointerInput event pipeline, so this can click actual UI buttons (not just drive mouse-bound gameplay actions). `input`: `button` (`button`: Left|Right|Middle|Back|Forward, `pressed` true/default or false — held until released), `motion` (`dx`/`dy` relative delta, like a mouse-look turn), `move_to` (`x`/`y` absolute position in the 1280x800 screenshot pixel space — use this to click something you can see at a known pixel from a screenshot), `wheel` (`x`/`y` scroll amount, `unit`: Line|Pixel), `reset` (releases all buttons, zeros motion/scroll — does not recenter the cursor). To click a UI button: move_to its position, then button press, then button release.")]
     async fn mouse_input(
         &self,
         rmcp::handler::server::wrapper::Parameters(MouseInputParams { input, button, pressed, x, y, dx, dy, unit }):

@@ -65,7 +65,8 @@ pub fn player_camera(common_assets: &CommonAssets) -> impl Bundle {
 }
 
 /// The offscreen texture every camera renders to in `--mcp` (headless) mode — the rendered view
-/// the agent's `game/screenshot` tool reads. Created (1280×720) when the app starts in
+/// the agent's `game/screenshot` tool reads. Created (1280×800 — the Steam Deck's native 800p)
+/// when the app starts in
 /// headless mode; see the headless branch in `main.rs` and `retarget_cameras_to_offscreen`.
 #[derive(Resource, Clone)]
 pub struct OffscreenRenderTarget(pub Handle<Image>);

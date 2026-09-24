@@ -117,7 +117,10 @@ impl Plugin for Prototype19 {
             .add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(1.0 / 60.0)));
         let offscreen_target = {
             let mut images = app.world_mut().resource_mut::<Assets<Image>>();
-            OffscreenRenderTarget::new(1280, 720, &mut images)
+            // 1280×800 — the Steam Deck's native (800p) resolution, this project's primary
+            // target platform: agent captures see exactly what a Deck player would, including
+            // the 16:10 aspect ratio (menu layout / camera framing differ from 16:9).
+            OffscreenRenderTarget::new(1280, 800, &mut images)
         };
         app.insert_resource(offscreen_target)
             // A camera for UI that exists before any player/menu-background camera does —

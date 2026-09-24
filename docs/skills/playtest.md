@@ -5,6 +5,10 @@ playbook for launching the game headlessly, driving it through the QA tool API,
 observing state, capturing what you see, and avoiding every trap hit so far.
 Supplements (does not replace) `AGENTS.md` and `docs/adr/0009-agent-tool-api-via-brp.md`.
 
+**Default input method: gamepad** (§5) — you are emulating a Steam Deck player,
+the primary target platform. Use keyboard+mouse only when the task explicitly
+targets them.
+
 ## 1. The three processes
 
 | Process | Binary | Env | Ports |
@@ -138,6 +142,18 @@ Important state-machine facts:
 
 ## 5. Input injection semantics
 
+**Default to gamepad-style input unless the task is specifically about
+keyboard+mouse.** The Steam Deck is this project's primary/min-spec target, so
+a playtesting agent emulates a Deck player: drive UI with `game/gamepad`
+(DPad/stick navigation + South to confirm) and gameplay with `game/input` /
+`game/gamepad` — both ride the exact replicated-BEI path a real Deck controller
+drives. Gamepad actions are also the most agent-friendly: they're discrete,
+level-triggered presses (hold/release — no pixel coordinates, no analog
+calibration, no 100ms timing races like a mouse click's press/release pair).
+Reach for `game/mouse`/`game/keyboard` only when the task explicitly targets
+those devices (e.g. verifying a real mouse click on a button, or a keyboard
+binding) — §5b documents their extra gotchas.
+
 `game/input` mocks the server-spawned **replicated** BEI action entities
 (`Movement`/`Jump`/`RotateCamera`) with `ActionMock` — the exact pipeline a real
 gamepad drives, including prediction/reconciliation. All actions take `ticks`
@@ -263,7 +279,7 @@ duration-based — budget a release call, or use `{"reset":true}`.
 `game/mouse` is discriminated by `input`:
 
 ```sh
-# move the cursor to an absolute pixel position — the SAME 1280x720 space
+# move the cursor to an absolute pixel position — the SAME 1280x800 (Steam Deck 800p) space
 # game/screenshot captures, so you can click exactly what you see in a
 # screenshot. Read the target's rect off `game/ui` (its rects are in this exact
 # space) rather than estimating from pixels.
