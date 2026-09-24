@@ -9,6 +9,11 @@ Supplements (does not replace) `AGENTS.md` and `docs/adr/0009-agent-tool-api-via
 the primary target platform. Use keyboard+mouse only when the task explicitly
 targets them.
 
+**Default observation method: data, not pixels** (§7) — understand the world
+via `game/state`/`game/ui`/BRP queries; screenshot only when asked or when the
+thing under test is inherently visual. If the data surface is missing what you
+need, report the API gap rather than falling back to screenshots.
+
 ## 1. The three processes
 
 | Process | Binary | Env | Ports |
@@ -522,6 +527,23 @@ Retry once after ~2s before concluding anything.
 
 ## 7. Screenshots
 
+**Screenshots are a last resort, not your eyes.** Understand the world through
+the structured data surfaces first: `game/state`, `game/ui` (labeled rects +
+text for everything on screen), `game/levels`, and BRP's `world.query`/
+`world.get_components`. They are cheaper, exact, and stable in a way pixels
+never are (a vision model reading an 800p frame is the least reliable
+instrument in this toolbox). Take a screenshot **only** when:
+- the task explicitly asks for one, or
+- the thing under test is *inherently* visual — rendering, lighting, materials,
+  particles, camera framing, UI compositing/layout. (Even then, `game/ui` is
+  the right tool for UI *content*; pixels only answer "did it render right".)
+
+For gameplay, UI, and logic testing, plain MCP/BRP data should be sufficient —
+and if it isn't, **that's an API gap to report and fix** (a field missing from
+`game/state`, a query the dump doesn't expose), not a reason to fall back to
+reading pixels. File the gap in your playtest report (§10) instead of
+squelching it with screenshots.
+
 - `game/screenshot {"label":"ingame-cubes"}` →
   `docs/playtests/dist/screenshots/<millistamp>-ingame-cubes.png` (persistent, never
   consumed). Poll `game/screenshot/get` until `ready:true` (~1–3s), or just
@@ -632,6 +654,10 @@ for the house style).
 **The findings section isn't just confirmed bugs.** Record observations, suspicions,
 things that looked odd but weren't chased down, open questions, anything that would help
 a *future* session pick up the thread faster — not only what got definitively proven.
+**Tool-API gaps belong here too**: if `game/state`/`game/ui`/BRP didn't expose
+something you needed to understand the world and you were tempted to read it off a
+screenshot instead (§7), write down exactly what was missing — those gaps get fixed in
+`dev::tool_api`, and every one reported makes the data-first workflow (§7) cover more.
 Say what's uncertain as uncertain; don't inflate a hunch into a confirmed finding, but
 don't omit it either. Cross-reference earlier reports by number when a run confirms,
 contradicts, or narrows something an earlier one said (`playtest_0002` superseding
@@ -674,12 +700,12 @@ covers the whole run.
 2. Build both binaries; confirm zero errors.
 3. Start server (env + `sleep 4`), start client (env, `timeout 300+`, `sleep 8`),
    confirm `mcp tool server listening` in the log.
-4. Menu: screenshot + `game/state`.
-5. `connect` → poll Lobby → `game/levels` → screenshot.
-6. `select_level` (fresh server only) → `play` → poll for `position` →
-   screenshot.
-7. Drive with `game/input`; sample `game/state` after each action; take labeled
-   screenshots at each interesting state.
+4. Menu: `game/ui` + `game/state` (screenshot only if the task is visual — §7).
+5. `connect` → poll Lobby → `game/levels`.
+6. `select_level` (fresh server only) → `play` → poll for `position`.
+7. Drive with `game/input`/`game/gamepad`; sample `game/state` after each action.
+   Screenshots only on explicit request or for inherently visual checks (§7);
+   report any data-surface gap you hit (§10).
 8. Capture logs from both processes; teardown when done (or leave the pair for
    the user, saying which processes are yours).
 9. Write the playtest report (see §10 for the three-location layout); compile with `--root docs/playtests`; never inspect the PDF.
