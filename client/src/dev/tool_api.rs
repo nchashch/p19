@@ -37,6 +37,15 @@
 use std::path::PathBuf;
 
 use bevy::prelude::*;
+use bevy::camera::RenderTarget;
+use bevy::ecs::query::QueryState;
+use bevy::feathers::controls::FeathersButton;
+use bevy::picking::Pickable;
+use bevy::picking::hover::Hovered as PickHovered;
+use bevy::text::TextSpan;
+use bevy::ui::{ComputedUiTargetCamera, Pressed as UiPressed, UiGlobalTransform, UiStack};
+use bevy::ui_widgets::Button as UiWidgetsButton;
+use std::collections::HashSet;
 use bevy::remote::http::{RemoteHttpPlugin, DEFAULT_PORT as BRP_PORT};
 use bevy::remote::{BrpError, BrpResult, RemotePlugin};
 use bevy::render::view::screenshot::{save_to_disk, Screenshot, ScreenshotCaptured};
@@ -84,6 +93,7 @@ impl Plugin for DevToolsPlugin {
         let trigger_method = app.register_system(trigger_method);
         let levels_method = app.register_system(levels_method);
         let select_level_method = app.register_system(select_level_method);
+        let ui_method = app.register_system(ui_dump_method);
         let mut methods = app
             .world_mut()
             .resource_mut::<bevy::remote::RemoteMethods>();
@@ -97,6 +107,13 @@ impl Plugin for DevToolsPlugin {
         methods.insert("game/trigger", bevy::remote::RemoteMethodSystemId::Instant(trigger_method));
         methods.insert("game/levels", bevy::remote::RemoteMethodSystemId::Instant(levels_method));
         methods.insert("game/select_level", bevy::remote::RemoteMethodSystemId::Instant(select_level_method));
+        methods.insert("game/ui", bevy::remote::RemoteMethodSystemId::Instant(ui_method));
+
+        // The agent cursor overlay (headless-only; both systems no-op otherwise).
+        app.add_systems(
+            Update,
+            (spawn_agent_cursor_if_headless, update_agent_cursor),
+        );
 
         start_mcp_server();
     }
@@ -110,6 +127,17 @@ impl Plugin for DevToolsPlugin {
 /// the app's `GameState`, the local player's entity id, position, velocity, look yaw/pitch,
 /// grounded, HP, GCD and death timers. Params are ignored.
 fn game_state_method(_params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
+    Ok(game_state_snapshot(world).into())
+}
+
+/// The `game/state` payload as a plain JSON value. Shared by the `game/state` method and
+/// [`screenshot_get_method`], which fuses it into every capture response (and writes it to a
+/// `.json` sidecar next to the PNG) — a screenshot arrives with its ground-truth state
+/// attached, so the agent never has to OCR the HUD or correlate "which call came after which
+/// action". Snapshot is taken at *poll* time, i.e. a few hundred ms after the capture started;
+/// that is the state the agent wants anyway (the world as it is right after its action), and
+/// the capture→poll gap is bounded by the poll loop (~100ms granularity).
+fn game_state_snapshot(world: &mut World) -> serde_json::Value {
     let mut out = serde_json::Map::new();
     if let Some(state) = world.get_resource::<State<GameState>>() {
         out.insert("game_state".into(), json!(format!("{:?}", state.get())));
@@ -117,14 +145,14 @@ fn game_state_method(_params: In<Option<serde_json::Value>>, world: &mut World) 
 
     let Some(player) = world.get_resource::<LocalPlayer>().and_then(|lp| lp.0) else {
         out.insert("connected".into(), json!(false));
-        return Ok(serde_json::Value::Object(out).into());
+        return serde_json::Value::Object(out);
     };
     out.insert("connected".into(), json!(true));
     out.insert("player_entity".into(), json!(player));
 
     let Ok(player_entity) = world.get_entity(player) else {
         out.insert("player_despawned".into(), json!(true));
-        return Ok(serde_json::Value::Object(out).into());
+        return serde_json::Value::Object(out);
     };
 
     if let Some(transform) = player_entity.get::<Transform>() {
@@ -155,7 +183,7 @@ fn game_state_method(_params: In<Option<serde_json::Value>>, world: &mut World) 
         out.insert("dead".into(), json!(false));
     }
 
-    Ok(serde_json::Value::Object(out).into())
+    serde_json::Value::Object(out)
 }
 
 /// Where captures land: `<workspace>/docs/playtests/dist/screenshots/<utc>-<label>.png` —
@@ -247,9 +275,12 @@ fn screenshot_start_method(
 }
 
 /// `game/screenshot/get` — polls the newest capture: `{"ready": true, "png_base64": …, "path":
-/// …}` once a PNG is on disk, `{"ready": false}` while still rendering. The file is NOT
-/// consumed — captures persist in `docs/playtests/dist/screenshots/` for human review.
-fn screenshot_get_method(_params: In<Option<serde_json::Value>>, _world: &mut World) -> BrpResult {
+/// …, "state": …}` once a PNG is on disk, `{"ready": false}` while still rendering. The
+/// response embeds the [`game_state_snapshot`] ground truth, and the same snapshot is written
+/// once to a `.json` sidecar beside the PNG (`<capture>.json`) so the human-browsable record
+/// carries state too. The file is NOT consumed — captures persist in
+/// `docs/playtests/dist/screenshots/` for human review.
+fn screenshot_get_method(_params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
     let Some(path) = newest_screenshot() else {
         return Ok(json!({"ready": false}).into());
     };
@@ -257,13 +288,442 @@ fn screenshot_get_method(_params: In<Option<serde_json::Value>>, _world: &mut Wo
         Ok(bytes) => {
             use base64::Engine as _;
             let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
-            Ok(
-                json!({"ready": true, "png_base64": encoded, "path": path.display().to_string()})
-                    .into(),
-            )
+            let state = game_state_snapshot(world);
+            let sidecar = path.with_extension("json");
+            if !sidecar.exists() {
+                let record = json!({
+                    "screenshot": path.display().to_string(),
+                    "state": state,
+                });
+                if let Ok(text) = serde_json::to_string_pretty(&record) {
+                    let _ = std::fs::write(&sidecar, text);
+                }
+            }
+            Ok(json!({
+                "ready": true,
+                "png_base64": encoded,
+                "path": path.display().to_string(),
+                "state": state,
+            })
+            .into())
         }
         Err(_) => Ok(json!({"ready": false}).into()),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Agent vision aids — everything here exists so a vision model reads LESS
+// off the pixels: `game/ui` gives labeled rects + text instead of OCR, and
+// the agent cursor makes the mocked pointer's position/hover observable.
+// ---------------------------------------------------------------------------
+
+/// `game/ui` — an accessibility-tree-style dump of the current UI: every laid-out node in
+/// back-to-front render order with its rect **in screenshot pixel space** (the same space
+/// `game/mouse`'s `move_to`/clicks consume), plus per-node text (own `Text` + descendant
+/// `TextSpan`s), `Interaction` state, bevy_picking's real hovered-entity set, and the mocked
+/// pointer's position. Turns "find the button in the image and guess its pixel center" into
+/// "read the row, click its rect" — and doubles as ground truth for verifying text actually
+/// rendered (a screenshot shows tofu/blank for missing fonts; this shows the string either
+/// way, so disagreement between the two localizes the failure).
+///
+/// Node filtering: zero-size (`Display::None`/collapsed), invisible, and rotated nodes are
+/// skipped (rotated = the billboard quads in `npc_ui_quad.rs`, whose axis-aligned rect would
+/// be a lie). Text rows whose text is already included in a dumped interactive ancestor's
+/// subtree (a button's label) are folded into that ancestor and not emitted twice. The agent
+/// cursor's own overlay nodes are excluded. In headless mode only nodes targeting the
+/// offscreen capture are dumped; windowed (feature on, real window) dumps everything.
+fn ui_dump_method(_params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
+    Ok(ui_dump_snapshot(world).into())
+}
+
+/// The cursor overlay's root node — zero-size, absolutely positioned, follows the mocked
+/// pointer. Bars are its children. Excluded from [`ui_dump_snapshot`].
+#[derive(Component)]
+struct AgentCursorRoot;
+
+/// One crosshair arm of the [`AgentCursorRoot`] overlay.
+#[derive(Component)]
+struct AgentCursorBar;
+
+/// Red: idle. Yellow: the pointer is over something (bevy_picking's `HoverMap` non-empty).
+/// White: left button held.
+const CURSOR_IDLE: Color = Color::srgb(1.0, 0.25, 0.25);
+const CURSOR_HOVER: Color = Color::srgb(1.0, 0.85, 0.1);
+const CURSOR_PRESSED: Color = Color::srgb(1.0, 1.0, 1.0);
+/// Crosshair arm length / thickness, logical px (× the UI scale factor on screen).
+const CURSOR_ARM: f32 = 14.0;
+const CURSOR_THICK: f32 = 3.0;
+
+/// Lazily spawns the agent cursor overlay iff headless mode is active (an
+/// `OffscreenRenderTarget` exists — on a real desktop the OS cursor is already visible and an
+/// extra crosshair would be noise), and despawns it if the target goes away. Polling rather
+/// than an observer because the resource is inserted after plugin build (`main.rs`'s headless
+/// branch), matching the repo's replication-arrival precedent for "can appear at any time".
+fn spawn_agent_cursor_if_headless(
+    offscreen: Option<Res<OffscreenRenderTarget>>,
+    existing: Query<Entity, With<AgentCursorRoot>>,
+    mut commands: Commands,
+) {
+    if offscreen.is_some() {
+        if !existing.is_empty() {
+            return;
+        }
+        let bar = |width: f32, height: f32| {
+            (
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(-width / 2.0),
+                    top: Val::Px(-height / 2.0),
+                    width: Val::Px(width),
+                    height: Val::Px(height),
+                    ..default()
+                },
+                BackgroundColor(CURSOR_IDLE),
+                Outline {
+                    width: Val::Px(1.0),
+                    offset: Val::ZERO,
+                    color: Color::BLACK,
+                },
+                // The overlay must never be hit by bevy_picking — it would occlude the UI
+                // under the pointer and break exactly the hover/click state it exists to show.
+                Pickable::IGNORE,
+                AgentCursorBar,
+            )
+        };
+        commands
+            .spawn((
+                AgentCursorRoot,
+                GlobalZIndex(i32::MAX),
+                Pickable::IGNORE,
+                Node {
+                    position_type: PositionType::Absolute,
+                    // Offscreen until the first follow update knows the pointer position.
+                    left: Val::Px(-1000.0),
+                    top: Val::Px(-1000.0),
+                    width: Val::Px(0.0),
+                    height: Val::Px(0.0),
+                    ..default()
+                },
+            ))
+            .with_children(|parent| {
+                parent.spawn(bar(CURSOR_ARM, CURSOR_THICK));
+                parent.spawn(bar(CURSOR_THICK, CURSOR_ARM));
+            });
+    } else {
+        for entity in &existing {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+/// Repositions the cursor overlay onto the mocked pointer and recolors it by hover/press
+/// state. `PointerLocation.position` and `ComputedNode`'s rect math are both in physical
+/// render-target pixels, but `Val::Px` resolves through the layout scale factor (target scale
+/// × `UiScale`) — hence the round-trip through the node's own `inverse_scale_factor`, the
+/// same factor `ui_layout_system` derived, so the overlay lands exactly on the pointer
+/// whatever the scale.
+fn update_agent_cursor(
+    offscreen: Option<Res<OffscreenRenderTarget>>,
+    ui_scale: Res<UiScale>,
+    pointers: Query<(&bevy::picking::pointer::PointerId, &bevy::picking::pointer::PointerLocation)>,
+    hover: Option<Res<bevy::picking::hover::HoverMap>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    mut roots: Query<
+        (&mut Node, Option<&ComputedNode>),
+        (With<AgentCursorRoot>, Without<AgentCursorBar>),
+    >,
+    mut bars: Query<&mut BackgroundColor, With<AgentCursorBar>>,
+) {
+    if offscreen.is_none() {
+        return;
+    }
+    let Ok((mut root_node, computed)) = roots.single_mut() else {
+        return;
+    };
+
+    let physical = pointers
+        .iter()
+        .find(|(id, _)| **id == AGENT_POINTER)
+        .and_then(|(_, loc)| loc.location.as_ref())
+        .map(|location| location.position)
+        // Same fallback `current_pointer_location` uses: the offscreen target's center.
+        .unwrap_or(Vec2::new(640.0, 360.0));
+
+    let inverse = computed
+        .and_then(|node| (node.inverse_scale_factor > 0.0).then_some(node.inverse_scale_factor))
+        .unwrap_or_else(|| ui_scale.0.recip());
+    let logical = physical * inverse;
+    if root_node.left != Val::Px(logical.x) || root_node.top != Val::Px(logical.y) {
+        root_node.left = Val::Px(logical.x);
+        root_node.top = Val::Px(logical.y);
+    }
+
+    let hovered = hover
+        .as_deref()
+        .and_then(|map| map.0.get(&AGENT_POINTER))
+        .is_some_and(|hits| !hits.is_empty());
+    let color = if mouse.pressed(MouseButton::Left) {
+        CURSOR_PRESSED
+    } else if hovered {
+        CURSOR_HOVER
+    } else {
+        CURSOR_IDLE
+    };
+    for mut background in &mut bars {
+        if background.0 != color {
+            background.0 = color;
+        }
+    }
+}
+
+/// The [`ui_dump_method`] payload. See that function's doc comment for the semantics.
+fn ui_dump_snapshot(world: &mut World) -> serde_json::Value {
+    let offscreen = world
+        .get_resource::<OffscreenRenderTarget>()
+        .map(|target| target.0.clone());
+
+    // Headless: only nodes whose UI camera renders into the capture target. The vec is empty
+    // (== unfiltered) in windowed mode, where every camera's node is fair game.
+    let target_cameras: Vec<Entity> = match &offscreen {
+        Some(handle) => {
+            let mut cameras = world.query::<(Entity, &RenderTarget)>();
+            cameras
+                .iter(world)
+                .filter(|(_, target)| {
+                    target
+                        .as_image()
+                        .is_some_and(|image| image.id() == handle.id())
+                })
+                .map(|(entity, _)| entity)
+                .collect()
+        }
+        None => Vec::new(),
+    };
+
+    let target_size = offscreen.as_ref().and_then(|handle| {
+        world
+            .get_resource::<Assets<Image>>()
+            .and_then(|images| images.get(handle))
+            .map(|image| image.size())
+    });
+
+    let pointer = offscreen
+        .as_ref()
+        .map(|handle| current_pointer_location(world, handle));
+    let hovered_entities: Vec<Entity> = world
+        .get_resource::<bevy::picking::hover::HoverMap>()
+        .and_then(|map| map.0.get(&AGENT_POINTER))
+        .map(|hits| hits.keys().copied().collect())
+        .unwrap_or_default();
+
+    // UiStack order IS render order (back-to-front) — the dump inherits it, so the model can
+    // reason about occlusion ("a later row draws on top of an earlier one").
+    let stack = world.resource::<UiStack>().uinodes.clone();
+
+    let mut nodes = world.query_filtered::<(
+        &ComputedNode,
+        &UiGlobalTransform,
+        &ComputedUiTargetCamera,
+        Option<&InheritedVisibility>,
+        Has<UiWidgetsButton>,
+        Has<FeathersButton>,
+        Has<UiPressed>,
+        Option<&PickHovered>,
+    ), (
+        Without<AgentCursorRoot>,
+        Without<AgentCursorBar>,
+    )>();
+    let mut texts = world.query::<&Text>();
+    let mut spans = world.query::<&TextSpan>();
+    let mut children = world.query::<&Children>();
+    let mut parents = world.query::<&ChildOf>();
+
+    // First pass: raw rows in stack order. Interactive detection uses the widget markers this
+    // project's UI actually carries — `bevy_ui_widgets::Button`/`FeathersButton` (every menu,
+    // lobby, and selector button) — NOT bevy_ui's `Interaction`, which feathers buttons don't
+    // carry (confirmed via `world.list_components` on a live `FeathersButton`). The hand-rolled
+    // `widgets::button()` carries no marker at all (picking observers only) — those rows still
+    // appear with their labels, just without a clickable flag.
+    struct Row {
+        entity: Entity,
+        rect: [i32; 4],
+        clickable: bool,
+        interaction: Option<String>,
+        text: Option<String>,
+    }
+    let mut rows = Vec::new();
+    for &entity in &stack {
+        let Ok((node, transform, target, visibility, ui_button, feathers, pressed, hovered)) =
+            nodes.get(world, entity)
+        else {
+            continue;
+        };
+        let size = node.size();
+        if size == Vec2::ZERO {
+            continue;
+        }
+        if visibility.is_some_and(|visibility| !visibility.get()) {
+            continue;
+        }
+        if !target_cameras.is_empty()
+            && !target
+                .get()
+                .is_some_and(|camera| target_cameras.contains(&camera))
+        {
+            continue;
+        }
+        // An axis-aligned rect of a rotated node would be a lie; the only rotated UI in this
+        // project is the billboard NPC quads on their own texture cameras anyway.
+        let (_, angle, translation) = transform.to_scale_angle_translation();
+        if angle.abs() > 0.01 {
+            continue;
+        }
+        let clickable = ui_button || feathers;
+        let interaction = if pressed {
+            Some("Pressed".to_owned())
+        } else if hovered.is_some_and(|hovered| hovered.0) {
+            Some("Hovered".to_owned())
+        } else if clickable {
+            Some("Idle".to_owned())
+        } else {
+            None
+        };
+        // Clickable rows aggregate their subtree text (that's the button's label); plain
+        // containers show only their own text — otherwise the root panel row would repeat
+        // every label on screen.
+        let text = if clickable {
+            subtree_text(entity, &*world, &mut texts, &mut spans, &mut children)
+        } else {
+            direct_text(entity, &*world, &mut texts, &mut spans)
+        };
+        rows.push(Row {
+            entity,
+            rect: [
+                (translation.x - size.x / 2.0).round() as i32,
+                (translation.y - size.y / 2.0).round() as i32,
+                size.x.round() as i32,
+                size.y.round() as i32,
+            ],
+            clickable,
+            interaction,
+            text,
+        });
+    }
+
+    // Second pass: fold a non-clickable row away if it sits under a dumped clickable ancestor
+    // (the button-label case — its text is already in the button's row).
+    let clickable: HashSet<Entity> = rows
+        .iter()
+        .filter(|row| row.clickable)
+        .map(|row| row.entity)
+        .collect();
+    let mut covered_by_ancestor = |entity: Entity| -> bool {
+        let mut current = entity;
+        for _ in 0..16 {
+            let Ok(parent) = parents.get(world, current) else {
+                return false;
+            };
+            current = parent.0;
+            if clickable.contains(&current) {
+                return true;
+            }
+        }
+        false
+    };
+    rows.retain(|row| row.clickable || !covered_by_ancestor(row.entity));
+
+    let nodes_json: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|row| {
+            let mut entry = serde_json::Map::new();
+            entry.insert("entity".into(), json!(row.entity));
+            entry.insert("rect".into(), json!(row.rect));
+            if row.clickable {
+                entry.insert("clickable".into(), json!(true));
+            }
+            if let Some(text) = &row.text {
+                entry.insert("text".into(), json!(text));
+            }
+            if let Some(interaction) = &row.interaction {
+                entry.insert("interaction".into(), json!(interaction));
+            }
+            if hovered_entities.contains(&row.entity) {
+                entry.insert("pointer_hovered".into(), json!(true));
+            }
+            serde_json::Value::Object(entry)
+        })
+        .collect();
+
+    json!({
+        "note": "Nodes in back-to-front render order. rect = [x, y, w, h] in screenshot pixel space — the same coordinates game/mouse move_to consumes. `clickable: true` = a real button (safe to click). `text` is the node's own text (buttons: their whole label). `interaction`: Pressed | Hovered | Idle. `pointer_hovered`: the mocked pointer is over this node right now.",
+        "target_size": target_size.map(|size| json!([size.x, size.y])),
+        "pointer": pointer.map(|location| {
+            json!({
+                "x": location.position.x.round() as i32,
+                "y": location.position.y.round() as i32,
+            })
+        }),
+        "hovered_entities": hovered_entities,
+        "nodes": nodes_json,
+    })
+}
+
+/// The text carried by `entity`'s whole subtree: its own `Text` plus every descendant's
+/// `TextSpan`/`Text`, in child order, joined with spaces. `None` when the subtree carries no
+/// non-empty text.
+fn subtree_text(
+    entity: Entity,
+    world: &World,
+    texts: &mut QueryState<&Text>,
+    spans: &mut QueryState<&TextSpan>,
+    children: &mut QueryState<&Children>,
+) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    if let Ok(text) = texts.get(world, entity) {
+        let text = text.trim();
+        if !text.is_empty() {
+            parts.push(text.to_owned());
+        }
+    }
+    if let Ok(spans) = spans.get(world, entity) {
+        let text = spans.trim();
+        if !text.is_empty() {
+            parts.push(text.to_owned());
+        }
+    }
+    if let Ok(kids) = children.get(world, entity) {
+        for kid in kids.iter() {
+            if let Some(more) = subtree_text(kid, world, texts, spans, children) {
+                parts.push(more);
+            }
+        }
+    }
+    (!parts.is_empty()).then(|| parts.join(" "))
+}
+
+/// Only the text components on `entity` itself — no descent. Used for non-clickable rows so a
+/// container node doesn't repeat every descendant label (buttons aggregate via
+/// [`subtree_text`] instead).
+fn direct_text(
+    entity: Entity,
+    world: &World,
+    texts: &mut QueryState<&Text>,
+    spans: &mut QueryState<&TextSpan>,
+) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    if let Ok(text) = texts.get(world, entity) {
+        let text = text.trim();
+        if !text.is_empty() {
+            parts.push(text.to_owned());
+        }
+    }
+    if let Ok(span) = spans.get(world, entity) {
+        let text = span.trim();
+        if !text.is_empty() {
+            parts.push(text.to_owned());
+        }
+    }
+    (!parts.is_empty()).then(|| parts.join(" "))
 }
 
 /// `game/input` — inject player input for `ticks` fixed ticks (1–600) by mocking one of the
@@ -1100,7 +1560,7 @@ impl GameTools {
 
     /// Captures a screenshot of the game window (PNG) and returns it as image content. The
     /// capture is async (one render frame), so this polls `game/screenshot/get` briefly.
-    #[rmcp::tool(description = "Capture a screenshot of the game window. Returns the PNG as image content. Use this to SEE the game (the camera view IS the player's view).")]
+    #[rmcp::tool(description = "Capture a screenshot of the game window. Returns the PNG as image content PLUS the game's ground-truth state as JSON text (same payload as game_state), so you never need to read numbers off the HUD. The camera view IS the player's view; a visible crosshair marks your mocked mouse cursor (red = idle, yellow = hovering something, white = left button held). Pair with game/ui for clickable element coordinates.")]
     async fn screenshot(&self) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
         self.brp("game/screenshot", json!({})).await?;
         for _ in 0..40 {
@@ -1111,15 +1571,31 @@ impl GameTools {
                     .get("png_base64")
                     .and_then(serde_json::Value::as_str)
                     .ok_or_else(|| rmcp::ErrorData::internal_error("screenshot missing data", None))?;
-                return Ok(rmcp::model::CallToolResult::success(vec![
-                    rmcp::model::ContentBlock::image(png_base64.to_string(), "image/png"),
-                ]));
+                let state = result.get("state").cloned().unwrap_or(json!(null));
+                let path = result.get("path").and_then(serde_json::Value::as_str).unwrap_or("");
+                let mut blocks = vec![rmcp::model::ContentBlock::image(png_base64.to_string(), "image/png")];
+                blocks.push(rmcp::model::ContentBlock::text(serde_json::to_string_pretty(&json!({
+                    "path": path,
+                    "state": state,
+                })).map_err(|err| rmcp::ErrorData::internal_error(format!("{err}"), None))?));
+                return Ok(rmcp::model::CallToolResult::success(blocks));
             }
         }
         Err(rmcp::ErrorData::internal_error(
             "screenshot timed out (is the game rendering?)",
             None,
         ))
+    }
+
+    /// Dumps the UI tree: labeled rects + text for every visible UI node, in screenshot pixel
+    /// space, so clicks can target coordinates read off this dump instead of guessed from
+    /// pixels.
+    #[rmcp::tool(description = "Dump the UI tree as an accessibility-tree-style list: every visible UI node's rect [x,y,w,h] in the SAME screenshot pixel space game/mouse move_to consumes, its text (button labels), and interaction/hover state. Read THIS to find what to click and where, then use game/mouse move_to + button Left to click it. Much more reliable than estimating coordinates from the screenshot image. Also useful to verify text rendered (the dump shows the string regardless of font issues).")]
+    async fn ui_tree(&self) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
+        let result = self.brp("game/ui", json!({})).await?;
+        Ok(rmcp::model::CallToolResult::success(vec![rmcp::model::ContentBlock::text(
+            serde_json::to_string_pretty(&result).map_err(|err| rmcp::ErrorData::internal_error(format!("{err}"), None))?,
+        )]))
     }
 
     /// Injects player input for `ticks` fixed ticks (1 tick ≈ 16.7ms at 60Hz).

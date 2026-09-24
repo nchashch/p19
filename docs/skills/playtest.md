@@ -83,7 +83,8 @@ Custom `game/*` methods (see `client/src/dev/tool_api.rs`):
 | `game/select_level` | `{"asset_path":"levels/minimal.level.ron"}` | Sends `LoadLevelRequest` (the lobby level-picker's exact message) |
 | `game/input` | see §5 | Mocks a replicated BEI action entity for `ticks` fixed ticks |
 | `game/screenshot` | `{"label":"..."}` optional | Async capture; PNG written under `docs/playtests/dist/screenshots/` (persistent, raw staging — not curated) |
-| `game/screenshot/get` | — | `{"ready":true,"png_base64":...,"path":...}` for the newest capture; **does not consume it** |
+| `game/screenshot/get` | — | `{"ready":true,"png_base64":...,"path":...,"state":{...game/state...}}` for the newest capture; **does not consume it**. The `state` is the same payload as `game/state`, sampled at poll time, so every capture arrives with its ground truth attached — never OCR the HUD |
+| `game/ui` | — | Accessibility-tree-style UI dump: every visible UI node's `rect` `[x,y,w,h]` **in the same pixel space `game/mouse move_to` consumes**, its text (button labels), `interaction` (`Pressed`\|`Hovered`\|`None`), the hovered set, and the mocked pointer's position. Back-to-front render order. Read this to decide *what to click and where* instead of estimating from pixels |
 
 Bevy builtins are **`world.*`-named** in 0.19 (`world.query`, `world.get_components`,
 `world.list_resources`, `world.get_resources`, `world.list_components`,
@@ -264,7 +265,8 @@ duration-based — budget a release call, or use `{"reset":true}`.
 ```sh
 # move the cursor to an absolute pixel position — the SAME 1280x720 space
 # game/screenshot captures, so you can click exactly what you see in a
-# screenshot. Read the button's on-screen rect off a screenshot first.
+# screenshot. Read the target's rect off `game/ui` (its rects are in this exact
+# space) rather than estimating from pixels.
 {"input":"move_to","x":161,"y":327}
 
 # press then release Left — this is a REAL click: it updates both
