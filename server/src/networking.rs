@@ -119,12 +119,30 @@ fn load_level_request(
     mut commands: Commands,
     levels: Res<Assets<Level>>,
     in_game_root: Single<Entity, With<InGameRoot>>,
+    mut level_state: ResMut<LevelState>,
 ) -> Result {
     for (_entity, mut receiver) in receivers {
         for request in receiver.receive() {
             let asset_path = request.asset_path.clone();
+            // Reject a second `LoadLevelRequest` while one is already loading/loaded — without
+            // this, a double-fired UI button, a retried packet, or a client re-picking a level
+            // after reconnecting spawns a second `InGameRoot`/`WorldAssetRoot` into the same
+            // world on top of the first: duplicate colliders, duplicate `PlayerCharacterSpawner`s
+            // (confirmed live — 9 accumulated after 9 un-deduplicated requests in one session),
+            // and downstream chaos (`in_game_request`'s `player_spawner.single()` starts failing
+            // once >1 spawner exists, and overlapping duplicate geometry destabilizes the KCC).
+            // Switching to a genuinely different level isn't supported yet either way (the server
+            // never despawns a previous level's geometry on reload), so any request beyond the
+            // first is rejected regardless of id, matching `LevelState`'s own doc comment.
+            if *level_state != LevelState::Idle {
+                info!(
+                    "load level request for {asset_path} rejected: level already {level_state:?}"
+                );
+                continue;
+            }
             info!("load level request received for {asset_path}");
             commands.set_state(ServerState::Loading);
+            *level_state = LevelState::Loading(asset_path.clone());
             let Some(handle) = asset_server.get_handle::<Level>(&asset_path) else {
                 info!("level {asset_path} doesn't exit");
                 return Ok(());
@@ -156,12 +174,16 @@ fn load_level_request(
 fn on_level_ready(
     _ready: On<WorldInstanceReady>,
     server_state: Res<State<ServerState>>,
+    mut level_state: ResMut<LevelState>,
     mut commands: Commands,
 ) -> Result {
     if !matches!(server_state.get(), ServerState::Loading) {
         return Ok(());
     }
     info!("server is in game");
+    if let LevelState::Loading(path) = &*level_state {
+        *level_state = LevelState::LevelLoaded(path.clone());
+    }
     commands.set_state(ServerState::InGame);
     Ok(())
 }
@@ -220,6 +242,18 @@ fn start_endpoint(mut commands: Commands) {
             server::NetcodeServer::new(server::NetcodeConfig {
                 protocol_id: PROTOCOL_ID,
                 private_key: PRIVATE_KEY,
+                // The server binds `0.0.0.0` (see `LocalAddr` below), but a real client on the
+                // LAN connects to a concrete interface IP (e.g. `192.168.x.x:6000`, from its own
+                // `config.toml`'s `server_ip`) — its self-signed connect token embeds that
+                // concrete address, which never equals `0.0.0.0` and gets silently dropped by
+                // `NetcodeServer`'s default same-address check ("server ignored connection
+                // request. server address not in connect token whitelist" in the server log).
+                // Hardcoding that IP into `additional_expected_addresses` would just replace one
+                // fragile assumption with another (DHCP reassigns it, another client may connect
+                // over a different interface) — disabling the check entirely is the correct fix
+                // for this dev/LAN scaffold, matching the already-hardcoded zero
+                // `PROTOCOL_ID`/`PRIVATE_KEY` above.
+                server_addr_check: false,
                 ..default()
             }),
             LocalAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), PORT)),

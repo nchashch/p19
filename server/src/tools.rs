@@ -28,9 +28,10 @@ impl Plugin for ServerToolsPlugin {
         let brp_port = port_flag("--brp-port").unwrap_or(BRP_PORT_DEFAULT);
         let mcp_port = port_flag("--mcp-port").unwrap_or(MCP_PORT_DEFAULT);
 
-        // The server has no Skein-initiated RemotePlugin (Skein's `handle_brp` is off here, and
-        // warns about the missing `RemoteMethods` resource — this is the "user is responsible"
-        // case its warning describes), so the tool API is added unconditionally and the
+        // Skein's `SkeinPlugin` is explicitly given `handle_brp: false` in `main.rs` (it
+        // defaults to `cfg!(debug_assertions)`, which would otherwise double-add `RemotePlugin`
+        // here and panic — confirmed live) — this is the "user is responsible" case Skein's own
+        // warning describes, so the tool API adds `RemotePlugin` unconditionally here and the
         // custom methods attach via `RemoteMethods` right after.
         app.add_plugins((
             RemotePlugin::default(),

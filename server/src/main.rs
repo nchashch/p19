@@ -90,7 +90,16 @@ fn main() {
             (
                 bevy::gltf::GltfPlugin::default(),
                 bevy::world_serialization::WorldSerializationPlugin,
-                bevy_skein::SkeinPlugin::default(),
+                // `handle_brp: false`: `SkeinPlugin::default()`'s `handle_brp` is
+                // `cfg!(debug_assertions)` — true in debug builds — so left at its default it
+                // adds `RemotePlugin`/`RemoteHttpPlugin` itself, and `ServerToolsPlugin` below
+                // (which unconditionally adds both, always-on regardless of profile — see its
+                // own doc comment) then panics on the duplicate add. Same fix the client already
+                // applies to its own `SkeinPlugin` (`client/src/main.rs`), for the same reason.
+                bevy_skein::SkeinPlugin {
+                    handle_brp: false,
+                    ..default()
+                },
                 // Ahoy's KCC stack — the server-authoritative half of the M2 movement setup
                 // (the client registers the same group; both sides simulate the player over
                 // the same replicated-BEI input stream). Headless-safe: `InputPlugin` disables

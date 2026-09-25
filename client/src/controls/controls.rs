@@ -452,8 +452,17 @@ fn bind_replicated_ahoy_actions(
             ));
         } else if stick_look.contains(entity) {
             // Action-level modifiers (they hit all of this action's bindings — there's only
-            // one).
+            // one). `DeadZone` matches the shape/values already applied to the left stick
+            // (`Movement`, above) and `ui.rs`'s `UiNavigate` — without it, the right stick's
+            // resting-position noise/drift (real on Steam Deck's analog sticks) feeds
+            // continuous small nonzero values into `RotateCamera`, reading as the camera
+            // slowly rotating on its own even with no input.
             commands.entity(entity).insert((
+                DeadZone {
+                    kind: DeadZoneKind::Radial, // circular; correct for a stick
+                    lower_threshold: 0.15,      // below this magnitude → zero
+                    upper_threshold: 1.0,       // above this → clamped to 1, rescaled between
+                },
                 Scale::splat(GAMEPAD_LOOK_SPEED),
                 DeltaScale::AUTO,
                 Negate::y(), // invert vertical (pitch) axis for the stick — matches the legacy binding
