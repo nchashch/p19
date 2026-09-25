@@ -1,7 +1,9 @@
 use std::time::Duration;
 
 use avian3d::prelude::*;
+use bevy::app::ScheduleRunnerPlugin;
 use bevy::image::{CompressedImageFormatSupport, CompressedImageFormats};
+use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
 use bevy_asset_loader::prelude::*;
@@ -34,11 +36,41 @@ use tools::ServerToolsPlugin;
 fn main() {
     App::new()
         .add_plugins((
-            MinimalPlugins,
+            // `MinimalPlugins`' own `ScheduleRunnerPlugin` defaults to `RunMode::Loop { wait:
+            // None }` — an unthrottled busy loop, no sleep between `App::update()` calls ever.
+            // Confirmed live: an idle server with zero clients connected was burning ~200% CPU
+            // (measured via /proc/<pid>/stat across 3 separate 5s windows) — the main thread
+            // plus all 8 `Compute Task Pool` workers spinning continuously checking "is it tick
+            // time yet", nothing to do with replication/networking (a connected, actively-moving
+            // client added no measurable delta on top of that). `run_loop` caps `App::update()`
+            // to this interval, sleeping only the remainder after accounting for actual work
+            // time (`bevy_app::schedule_runner`'s own `wait - exe_time` calculation) — matching
+            // `server::ServerPlugins`' own `tick_duration` below, so this doesn't change
+            // simulation cadence, only how often the outer loop spins while there's nothing new
+            // to do.
+            MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
+                1.0 / 60.0,
+            ))),
             // `RepliconPlugins` needs `States`, and log output needs a subscriber — both are
             // included in `DefaultPlugins` (which the client uses) but not in `MinimalPlugins`.
             StatesPlugin,
-            bevy::log::LogPlugin::default(),
+            // `lightyear_debug_log_plugin()` (from `lightyear_tools`, re-exported via
+            // `lightyear::prelude` behind the `debug` feature): writes every
+            // `lightyear_debug::*` structured trace event (`server_input_message_recv` —
+            // the exact `BEIStateSequence` this server received per client per tick — plus
+            // timeline/sync/message/replication events) as JSONL to `$LIGHTYEAR_DEBUG_FILE`,
+            // and keeps them out of the normal human-readable log. No-ops (falls back to plain
+            // logging) if that env var isn't set. `LightyearDebugPlugin` itself (the
+            // metadata/schedule/role resource these trace events read from) is auto-added by
+            // lightyear's own `SharedPlugin` once the `debug` feature is on. The `filter`
+            // override is required, not cosmetic — these are `trace!`-level events, and Bevy's
+            // default `LogPlugin` level is `INFO`; without a more-specific `lightyear_debug=trace`
+            // directive they never reach any layer (including the JSONL one) at all, confirmed
+            // live (empty output file until this was added).
+            LogPlugin {
+                filter: format!("{},lightyear_debug=trace", bevy::log::DEFAULT_FILTER),
+                ..lightyear_debug_log_plugin()
+            },
             TransformPlugin,
             // `server` has no `assets/` directory of its own — level geometry (and eventually
             // anything else the server needs, e.g. collider-relevant data) lives in
