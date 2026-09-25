@@ -1,6 +1,8 @@
 use avian3d::prelude::{Collider, RigidBody};
 use bevy::prelude::*;
+use lightyear::core::tick::TickDuration;
 use lightyear::prelude::*;
+use crate::replay::{RecordedMessage, ReplayRecorder};
 use shared::{
     client_events::{AttackAttempt, KillAttempt},
     combat::{Dead, Gcd, HitPoints, ATTACK_RANGE, DAMAGE},
@@ -15,15 +17,23 @@ impl Plugin for ServerCombatPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (
-                kill_zero_hp,
-                despawn_dead,
-                tick_gcd,
-                tick_dead,
-                resolve_attack,
-                resolve_kill,
-            ),
+            (kill_zero_hp, despawn_dead, resolve_attack, resolve_kill),
         );
+        // `tick_gcd`/`tick_dead` used to tick by `Res<Time>::delta()` in this same `Update`
+        // tuple — real (virtual/wall-clock) elapsed time, subject to OS scheduling jitter, not
+        // the fixed simulation step. Two identical replay runs of the same recorded input log
+        // would see these timers cross their threshold on different ticks purely from real-time
+        // noise. Moved to `FixedUpdate` (runs exactly once per simulation tick, however many
+        // times that happens to be per real `App::update()` call — 0, 1, or more under
+        // real-time jitter/catch-up, unlike `Update` which always runs exactly once) and ticked
+        // by the fixed `TickDuration` instead, so both timers advance in lockstep with
+        // `lightyear`'s own tick counter (`LocalTimeline`, incremented once per `FixedUpdate`
+        // run) rather than with the real clock. `Update`'s combat-resolution systems above still
+        // read the fully-updated `Gcd`/`Dead` state correctly regardless: `FixedUpdate` runs
+        // before `Update` in Bevy's main schedule order, so any catch-up ticks for this frame
+        // have already applied by the time `resolve_attack`/`resolve_kill` check
+        // `gcd.0.is_finished()`.
+        app.add_systems(FixedUpdate, (tick_gcd, tick_dead));
     }
 }
 
@@ -68,16 +78,66 @@ fn despawn_dead(query: Query<(Entity, &Dead)>, mut commands: Commands) {
     }
 }
 
-fn tick_dead(time: Res<Time>, mut query: Query<&mut Dead>) {
+fn tick_dead(tick_duration: Res<TickDuration>, mut query: Query<&mut Dead>) {
     for mut dead in &mut query {
-        dead.0.tick(time.delta());
+        dead.0.tick(tick_duration.0);
     }
 }
 
-fn tick_gcd(time: Res<Time>, mut query: Query<&mut Gcd>) {
+fn tick_gcd(tick_duration: Res<TickDuration>, mut query: Query<&mut Gcd>) {
     for mut gcd in &mut query {
-        gcd.0.tick(time.delta());
+        gcd.0.tick(tick_duration.0);
     }
+}
+
+/// The per-message resolution logic, extracted out of [`resolve_kill`] so `server::replay`'s
+/// replay driver can call the exact same code path against a recorded [`KillAttempt`] instead
+/// of a live [`MessageReceiver`]-drained one.
+pub(crate) fn apply_kill(
+    killer: Entity,
+    attempt: &KillAttempt,
+    positions: &Query<&Transform>,
+    targets: &mut Query<&mut HitPoints>,
+    casters: &mut Query<&mut Gcd>,
+    sender: &mut ServerMultiMessageSender,
+    server: &Server,
+) -> Result {
+    let Ok(mut gcd) = casters.get_mut(killer) else {
+        // Continue here skips only the inner loop iteration, which is what we want.
+        //
+        // Since there could be a situation where there are two attack attempts coming from
+        // the same client -- one of them invalid and one valid.
+        return Ok(());
+    };
+    if !gcd.0.is_finished() {
+        return Ok(());
+    }
+    let Ok(killer_transform) = positions.get(killer) else {
+        return Ok(());
+    };
+    let Ok(target_transform) = positions.get(attempt.entity) else {
+        return Ok(());
+    };
+    let Ok(mut hit_points) = targets.get_mut(attempt.entity) else {
+        return Ok(());
+    };
+    if killer_transform
+        .translation
+        .distance(target_transform.translation)
+        <= ATTACK_RANGE
+    {
+        gcd.0.reset();
+        hit_points.hit_points = 0;
+        sender.send::<Kill, OrderedReliable>(
+            &Kill {
+                entity: attempt.entity,
+                killer,
+            },
+            server,
+            &NetworkTarget::All,
+        )?;
+    }
+    Ok(())
 }
 
 fn resolve_kill(
@@ -87,45 +147,78 @@ fn resolve_kill(
     mut casters: Query<&mut Gcd>,
     mut sender: ServerMultiMessageSender,
     server: Single<&Server>,
+    remote_ids: Query<&RemoteId>,
+    timeline: Res<LocalTimeline>,
+    mut recorder: Option<ResMut<ReplayRecorder>>,
 ) -> Result {
     for (killer, mut receiver) in receivers {
         for attempt in receiver.receive() {
-            let Ok(mut gcd) = casters.get_mut(killer) else {
-                // Continue here skips only the inner loop iteration, which is what we want.
-                //
-                // Since there could be a situation where there are two attack attempts coming from
-                // the same client -- one of them invalid and one valid.
-                continue;
-            };
-            if !gcd.0.is_finished() {
-                continue;
+            if let Some(recorder) = recorder.as_deref_mut() {
+                recorder.record_message(
+                    timeline.tick(),
+                    &remote_ids,
+                    killer,
+                    RecordedMessage::Kill(attempt.clone()),
+                );
             }
-            let Ok(killer_transform) = positions.get(killer) else {
-                continue;
-            };
-            let Ok(target_transform) = positions.get(attempt.entity) else {
-                continue;
-            };
-            let Ok(mut hit_points) = targets.get_mut(attempt.entity) else {
-                continue;
-            };
-            if killer_transform
-                .translation
-                .distance(target_transform.translation)
-                <= ATTACK_RANGE
-            {
-                gcd.0.reset();
-                hit_points.hit_points = 0;
-                sender.send::<Kill, OrderedReliable>(
-                    &Kill {
-                        entity: attempt.entity,
-                        killer,
-                    },
-                    &server,
-                    &NetworkTarget::All,
-                )?;
-            }
+            apply_kill(
+                killer,
+                &attempt,
+                &positions,
+                &mut targets,
+                &mut casters,
+                &mut sender,
+                &server,
+            )?;
         }
+    }
+    Ok(())
+}
+
+/// See [`apply_kill`]'s doc comment — same reasoning, for [`AttackAttempt`].
+pub(crate) fn apply_attack(
+    attacker: Entity,
+    attempt: &AttackAttempt,
+    positions: &Query<&Transform>,
+    targets: &mut Query<&mut HitPoints>,
+    casters: &mut Query<&mut Gcd>,
+    sender: &mut ServerMultiMessageSender,
+    server: &Server,
+) -> Result {
+    let Ok(mut gcd) = casters.get_mut(attacker) else {
+        // Continue here skips only the inner loop iteration, which is what we want.
+        //
+        // Since there could be a situation where there are two attack attempts coming from
+        // the same client -- one of them invalid and one valid.
+        return Ok(());
+    };
+    if !gcd.0.is_finished() {
+        return Ok(());
+    }
+    let Ok(attacker_transform) = positions.get(attacker) else {
+        return Ok(());
+    };
+    let Ok(target_transform) = positions.get(attempt.entity) else {
+        return Ok(());
+    };
+    let Ok(mut hit_points) = targets.get_mut(attempt.entity) else {
+        return Ok(());
+    };
+    if attacker_transform
+        .translation
+        .distance(target_transform.translation)
+        <= ATTACK_RANGE
+    {
+        gcd.0.reset();
+        hit_points.hit_points -= DAMAGE;
+        sender.send::<Attack, OrderedReliable>(
+            &Attack {
+                entity: attempt.entity,
+                attacker,
+            },
+            server,
+            &NetworkTarget::All,
+        )?;
     }
     Ok(())
 }
@@ -137,45 +230,31 @@ fn resolve_attack(
     mut casters: Query<&mut Gcd>,
     mut sender: ServerMultiMessageSender,
     server: Single<&Server>,
+    remote_ids: Query<&RemoteId>,
+    timeline: Res<LocalTimeline>,
+    mut recorder: Option<ResMut<ReplayRecorder>>,
 ) -> Result {
     for (attacker, mut receiver) in receivers {
         for attempt in receiver.receive() {
-            let Ok(mut gcd) = casters.get_mut(attacker) else {
-                // Continue here skips only the inner loop iteration, which is what we want.
-                //
-                // Since there could be a situation where there are two attack attempts coming from
-                // the same client -- one of them invalid and one valid.
-                continue;
-            };
-            if !gcd.0.is_finished() {
-                continue;
+            if let Some(recorder) = recorder.as_deref_mut() {
+                recorder.record_message(
+                    timeline.tick(),
+                    &remote_ids,
+                    attacker,
+                    RecordedMessage::Attack(attempt.clone()),
+                );
             }
-            let Ok(attacker_transform) = positions.get(attacker) else {
-                continue;
-            };
-            let Ok(target_transform) = positions.get(attempt.entity) else {
-                continue;
-            };
-            let Ok(mut hit_points) = targets.get_mut(attempt.entity) else {
-                continue;
-            };
-            if attacker_transform
-                .translation
-                .distance(target_transform.translation)
-                <= ATTACK_RANGE
-            {
-                gcd.0.reset();
-                hit_points.hit_points -= DAMAGE;
-                sender.send::<Attack, OrderedReliable>(
-                    &Attack {
-                        entity: attempt.entity,
-                        attacker,
-                    },
-                    &server,
-                    &NetworkTarget::All,
-                )?;
-            }
+            apply_attack(
+                attacker,
+                &attempt,
+                &positions,
+                &mut targets,
+                &mut casters,
+                &mut sender,
+                &server,
+            )?;
         }
     }
     Ok(())
 }
+

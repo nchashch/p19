@@ -22,6 +22,7 @@ mod input;
 mod level_state;
 mod lobby;
 mod networking;
+mod replay;
 mod rooms;
 mod spawn;
 mod tools;
@@ -32,11 +33,35 @@ use level_state::LevelStatePlugin;
 use lobby::LobbyPlugin;
 use rooms::GameRoomPlugin;
 use spawn::ServerSpawnPlugin;
+use replay::ReplayRecorderPlugin;
 use tools::ServerToolsPlugin;
 
 fn main() {
-    App::new()
-        .add_plugins((
+    // `--replay <path>`: re-derive a recorded session's exact simulation instead of serving real
+    // clients — see `replay::run_replay`'s own doc comment for the whole mechanism. Manual
+    // `std::env::args()` parsing, matching `tools.rs`'s `port_flag` convention rather than
+    // pulling in a CLI-parsing crate for one flag.
+    let mut args = std::env::args();
+    while let Some(arg) = args.next() {
+        if arg == "--replay" {
+            let path = args.next().expect("--replay requires a path argument");
+            replay::run_replay(std::path::Path::new(&path));
+            return;
+        }
+    }
+    build_app(networking::NetworkingPlugin).run();
+}
+
+/// Builds (but does not run) the full simulation `App` — every plugin both live serving
+/// (`main`, via [`networking::NetworkingPlugin`]) and deterministic replay (`replay::run_replay`,
+/// via `replay::ReplayPlaybackPlugin`) need identically. Generic over the one thing they don't
+/// share: how client intent gets into the world — a real UDP/netcode endpoint for live play, or
+/// a recorded-log-driven set of systems for replay. Everything else (physics, combat, spawning,
+/// level loading, room/lobby bookkeeping, the ahoy KCC stack) is identical between the two, which
+/// is the entire premise deterministic replay depends on.
+pub(crate) fn build_app<M>(networking_plugin: impl bevy::app::Plugins<M>) -> App {
+    let mut app = App::new();
+    app.add_plugins((
             // `MinimalPlugins`' own `ScheduleRunnerPlugin` defaults to `RunMode::Loop { wait:
             // None }` — an unthrottled busy loop, no sleep between `App::update()` calls ever.
             // Confirmed live: an idle server with zero clients connected was burning ~200% CPU
@@ -48,7 +73,9 @@ fn main() {
             // time (`bevy_app::schedule_runner`'s own `wait - exe_time` calculation) — matching
             // `server::ServerPlugins`' own `tick_duration` below, so this doesn't change
             // simulation cadence, only how often the outer loop spins while there's nothing new
-            // to do.
+            // to do. `replay::run_replay` overrides this with `TimeUpdateStrategy::FixedTimesteps`
+            // after construction — see its own doc comment for why a real-time-driven loop is
+            // unusable for replay regardless of this setting.
             //
             // `TaskPoolPlugin`'s own default `TaskPoolOptions` sizes every pool (IO,
             // async-compute, compute) off `available_parallelism()` — the *host's* total core
@@ -162,6 +189,9 @@ fn main() {
                 // BRP (localhost:15701, `--brp-port`) + MCP (15711, `--mcp-port`) debugging
                 // surface — authoritative server state for desync debugging; see `tools.rs`.
                 ServerToolsPlugin,
+                // Session recording for deterministic debug-replay — no-ops unless
+                // `SERVER_REPLAY_RECORD` is set; see `replay.rs`.
+                ReplayRecorderPlugin,
                 // Registers `MeshPrimitive`'s reflection (shared with `client` — see
                 // `shared::mesh_primitive`'s own doc comment) so this binary's `AppTypeRegistry`
                 // recognizes the type too, whether or not anything on this side ever reacts to
@@ -171,7 +201,7 @@ fn main() {
                 // depending on the same reflection pipeline.
                 SharedMeshPrimitivePlugin,
             ),
-            networking::NetworkingPlugin,
+            networking_plugin,
         ))
         .init_state::<ServerState>()
         .add_loading_state(
@@ -224,6 +254,6 @@ fn main() {
         .insert_resource(CompressedImageFormatSupport(CompressedImageFormats::BC))
         // Needed for Skein to reflect `ColliderConstructor` off level geometry onto entities —
         // mirrors the same registration in `client/src/main.rs`.
-        .register_type::<ColliderConstructor>()
-        .run();
+        .register_type::<ColliderConstructor>();
+    app
 }

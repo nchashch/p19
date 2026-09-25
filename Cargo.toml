@@ -39,7 +39,13 @@ bevy = { version = "0.19.0", default-features = true, features = [
 ] }
 avian3d = { version = "0.7.0", features = ["simd", "serialize"] }
 bevy_skein = "0.6.0"
-bevy_enhanced_input = "0.26.0"
+# `serialize` (added for the server-side replay recorder — `server::replay` — which needs to
+# round-trip `ActionValue` through JSON to log and later re-mock resolved Movement/Jump/
+# RotateCamera action state) requires `bevy/serialize`, already on for `client`'s workspace
+# `bevy` entry above; `server`'s own separate, smaller `bevy` feature list (its Cargo.toml can't
+# inherit this workspace entry's features — see that file's own comment) needs the same feature
+# added explicitly too.
+bevy_enhanced_input = { version = "0.26.0", features = ["serialize"] }
 bevy_asset_loader = { version = "0.27.0", features = [
 	"standard_dynamic_assets",
 ] }

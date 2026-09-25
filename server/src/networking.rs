@@ -18,6 +18,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use crate::level_state::LevelState;
 use crate::rooms::{GameRoom, LobbyRoom};
+use crate::replay::{RecordedMessage, ReplayRecorder};
 
 /// Netcode's shared secret + protocol tag, replacing the old self-signed QUIC cert — both sides
 /// must agree on the exact same bytes for a connect token to validate, so the client's own
@@ -67,18 +68,41 @@ fn owned_players(
 /// [`cleanup_disconnected_players`]: the message path is immediate for graceful leaves, the
 /// `Disconnected`-observer path catches every other kind of disconnect (netcode timeout,
 /// hard crash) once lightyear notices.
+///
+/// The actual work is [`apply_client_despawn`], extracted so `server::replay`'s replay driver
+/// can call the exact same code path against a recorded [`ClientDespawn`] instead of a live
+/// [`MessageReceiver`]-drained one.
+pub(crate) fn apply_client_despawn(
+    connection: Entity,
+    controlled: &Query<(Entity, &ControlledBy)>,
+    commands: &mut Commands,
+) {
+    let owned = owned_players(connection, *controlled);
+    info!("client `{connection}` despawn request: dropping {owned:?}");
+    for player in owned {
+        commands.entity(player).despawn();
+    }
+}
+
 fn client_despawn(
     receivers: Query<(Entity, &mut MessageReceiver<ClientDespawn>)>,
     controlled: Query<(Entity, &ControlledBy)>,
     mut commands: Commands,
+    remote_ids: Query<&RemoteId>,
+    timeline: Res<LocalTimeline>,
+    mut recorder: Option<ResMut<ReplayRecorder>>,
 ) {
     for (entity, mut receiver) in receivers {
         for _request in receiver.receive() {
-            let owned = owned_players(entity, controlled);
-            info!("client `{entity}` despawn request: dropping {owned:?}");
-            for player in owned {
-                commands.entity(player).despawn();
+            if let Some(recorder) = recorder.as_deref_mut() {
+                recorder.record_message(
+                    timeline.tick(),
+                    &remote_ids,
+                    entity,
+                    RecordedMessage::Despawn(ClientDespawn),
+                );
             }
+            apply_client_despawn(entity, &controlled, &mut commands);
         }
     }
 }
@@ -113,6 +137,60 @@ fn setup_client_replicate(entities: Query<Entity, With<ClientReplicate>>, mut co
 
 // TODO: Gate this on some form of authentication and authorization, so only game host can load
 // levels at will, or perhaps people the host has given the rights to change level.
+/// The per-message resolution logic, extracted out of [`load_level_request`] so
+/// `server::replay`'s replay driver can call the exact same code path against a recorded
+/// [`LoadLevelRequest`] instead of a live [`MessageReceiver`]-drained one.
+pub(crate) fn apply_load_level_request(
+    asset_path: bevy::asset::AssetPath<'static>,
+    asset_server: &AssetServer,
+    commands: &mut Commands,
+    levels: &Assets<Level>,
+    in_game_root: Entity,
+    level_state: &mut LevelState,
+) -> Result {
+    // Reject a second `LoadLevelRequest` while one is already loading/loaded — without
+    // this, a double-fired UI button, a retried packet, or a client re-picking a level
+    // after reconnecting spawns a second `InGameRoot`/`WorldAssetRoot` into the same
+    // world on top of the first: duplicate colliders, duplicate `PlayerCharacterSpawner`s
+    // (confirmed live — 9 accumulated after 9 un-deduplicated requests in one session),
+    // and downstream chaos (`in_game_request`'s `player_spawner.single()` starts failing
+    // once >1 spawner exists, and overlapping duplicate geometry destabilizes the KCC).
+    // Switching to a genuinely different level isn't supported yet either way (the server
+    // never despawns a previous level's geometry on reload), so any request beyond the
+    // first is rejected regardless of id, matching `LevelState`'s own doc comment.
+    if *level_state != LevelState::Idle {
+        info!("load level request for {asset_path} rejected: level already {level_state:?}");
+        return Ok(());
+    }
+    info!("load level request received for {asset_path}");
+    commands.set_state(ServerState::Loading);
+    *level_state = LevelState::Loading(asset_path.clone());
+    let Some(handle) = asset_server.get_handle::<Level>(&asset_path) else {
+        info!("level {asset_path} doesn't exit");
+        return Ok(());
+    };
+    let Some(level) = levels.get(&handle) else {
+        info!("failed to load metadata for level {asset_path}");
+        return Ok(());
+    };
+    dbg!(&level);
+    // TODO: Add a script or some other kind of step/stage to the assets pipeline that would
+    // strip .glb files of all meshes, textures, materials -- anything visual and not
+    // strictly necessary for server side logic -- for the .glb files in the server assets.
+    // This would make it cheaper to provision servers in terms of storage for large levels.
+    let model: Handle<WorldAsset> = asset_server
+        .load_builder()
+        .with_settings(|settings: &mut GltfLoaderSettings| {
+            settings.load_meshes = RenderAssetUsages::empty();
+            settings.load_materials = RenderAssetUsages::empty();
+        })
+        .load(GltfAssetLabel::Scene(0).from_asset(&level.model));
+    commands.entity(in_game_root).with_children(|parent| {
+        parent.spawn(WorldAssetRoot(model)).observe(on_level_ready);
+    });
+    Ok(())
+}
+
 fn load_level_request(
     receivers: Query<(Entity, &mut MessageReceiver<LoadLevelRequest>)>,
     asset_server: Res<AssetServer>,
@@ -120,52 +198,28 @@ fn load_level_request(
     levels: Res<Assets<Level>>,
     in_game_root: Single<Entity, With<InGameRoot>>,
     mut level_state: ResMut<LevelState>,
+    remote_ids: Query<&RemoteId>,
+    timeline: Res<LocalTimeline>,
+    mut recorder: Option<ResMut<ReplayRecorder>>,
 ) -> Result {
-    for (_entity, mut receiver) in receivers {
+    for (entity, mut receiver) in receivers {
         for request in receiver.receive() {
-            let asset_path = request.asset_path.clone();
-            // Reject a second `LoadLevelRequest` while one is already loading/loaded — without
-            // this, a double-fired UI button, a retried packet, or a client re-picking a level
-            // after reconnecting spawns a second `InGameRoot`/`WorldAssetRoot` into the same
-            // world on top of the first: duplicate colliders, duplicate `PlayerCharacterSpawner`s
-            // (confirmed live — 9 accumulated after 9 un-deduplicated requests in one session),
-            // and downstream chaos (`in_game_request`'s `player_spawner.single()` starts failing
-            // once >1 spawner exists, and overlapping duplicate geometry destabilizes the KCC).
-            // Switching to a genuinely different level isn't supported yet either way (the server
-            // never despawns a previous level's geometry on reload), so any request beyond the
-            // first is rejected regardless of id, matching `LevelState`'s own doc comment.
-            if *level_state != LevelState::Idle {
-                info!(
-                    "load level request for {asset_path} rejected: level already {level_state:?}"
+            if let Some(recorder) = recorder.as_deref_mut() {
+                recorder.record_message(
+                    timeline.tick(),
+                    &remote_ids,
+                    entity,
+                    RecordedMessage::LoadLevel(request.clone()),
                 );
-                continue;
             }
-            info!("load level request received for {asset_path}");
-            commands.set_state(ServerState::Loading);
-            *level_state = LevelState::Loading(asset_path.clone());
-            let Some(handle) = asset_server.get_handle::<Level>(&asset_path) else {
-                info!("level {asset_path} doesn't exit");
-                return Ok(());
-            };
-            let Some(level) = levels.get(&handle) else {
-                info!("failed to load metadata for level {asset_path}");
-                return Ok(());
-            };
-            dbg!(&level);
-            // TODO: Add a script or some other kind of step/stage to the assets pipeline that would
-            // strip .glb files of all meshes, textures, materials -- anything visual and not
-            // strictly necessary for server side logic -- for the .glb files in the server assets.
-            // This would make it cheaper to provision servers in terms of storage for large levels.
-            let model: Handle<WorldAsset> = asset_server
-                .load_builder()
-                .with_settings(|settings: &mut GltfLoaderSettings| {
-                    settings.load_meshes = RenderAssetUsages::empty();
-                    settings.load_materials = RenderAssetUsages::empty();
-                })
-                .load(GltfAssetLabel::Scene(0).from_asset(&level.model));
-            commands.entity(*in_game_root).with_children(|parent| {
-                parent.spawn(WorldAssetRoot(model)).observe(on_level_ready);
-            });
+            apply_load_level_request(
+                request.asset_path.clone(),
+                &asset_server,
+                &mut commands,
+                &levels,
+                *in_game_root,
+                &mut level_state,
+            )?;
         }
     }
     Ok(())
@@ -188,6 +242,46 @@ fn on_level_ready(
     Ok(())
 }
 
+/// The per-message resolution logic, extracted out of [`in_game_request`] so `server::replay`'s
+/// replay driver can call the exact same code path against a recorded [`InGameRequest`] instead
+/// of a live [`MessageReceiver`]-drained one.
+pub(crate) fn apply_in_game_request(
+    entity: Entity,
+    player_spawner: &Query<&Transform, With<PlayerCharacterSpawner>>,
+    in_game_root: Entity,
+    game_room: &GameRoom,
+    remote_ids: &Query<&RemoteId>,
+    commands: &mut Commands,
+) {
+    if let Ok(player_spawner_transform) = player_spawner.single() {
+        let name = "player name".to_string();
+        let at = player_spawner_transform.translation;
+        let room = game_room.0;
+        commands.entity(entity).insert(Rooms::single(room));
+        // The owning client predicts this entity (its local ahoy sim becomes the
+        // prediction, reconciled by lightyear's rollback); `PredictionTarget`
+        // materializes as `Predicted` on that client's received entity. Other
+        // clients currently just get the plain replicated entity (their Transform
+        // follows the replicated `Position` via lightyear_avian's sync).
+        let own_client = remote_ids
+            .get(entity)
+            .map(|remote| NetworkTarget::Single(remote.0))
+            .unwrap_or(NetworkTarget::None);
+        commands.spawn((
+            player(name, at),
+            Replicate::to_clients(NetworkTarget::All),
+            PredictionTarget::to_clients(own_client),
+            ControlledBy {
+                owner: entity,
+                lifetime: Lifetime::Persistent,
+            },
+            ClientInGame,
+            ChildOf(in_game_root),
+        ));
+        info!("player character spawned");
+    }
+}
+
 fn in_game_request(
     receivers: Query<(Entity, &mut MessageReceiver<InGameRequest>)>,
     player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
@@ -195,36 +289,27 @@ fn in_game_request(
     game_room: Res<GameRoom>,
     remote_ids: Query<&RemoteId>,
     mut commands: Commands,
+    timeline: Res<LocalTimeline>,
+    mut recorder: Option<ResMut<ReplayRecorder>>,
 ) {
     for (entity, mut receiver) in receivers {
         for _request in receiver.receive() {
-            if let Ok(player_spawner_transform) = player_spawner.single() {
-                let name = "player name".to_string();
-                let at = player_spawner_transform.translation;
-                let room = game_room.0;
-                commands.entity(entity).insert(Rooms::single(room));
-                // The owning client predicts this entity (its local ahoy sim becomes the
-                // prediction, reconciled by lightyear's rollback); `PredictionTarget`
-                // materializes as `Predicted` on that client's received entity. Other
-                // clients currently just get the plain replicated entity (their Transform
-                // follows the replicated `Position` via lightyear_avian's sync).
-                let own_client = remote_ids
-                    .get(entity)
-                    .map(|remote| NetworkTarget::Single(remote.0))
-                    .unwrap_or(NetworkTarget::None);
-                commands.spawn((
-                    player(name, at),
-                    Replicate::to_clients(NetworkTarget::All),
-                    PredictionTarget::to_clients(own_client),
-                    ControlledBy {
-                        owner: entity,
-                        lifetime: Lifetime::Persistent,
-                    },
-                    ClientInGame,
-                    ChildOf(*in_game_root),
-                ));
-                info!("player character spawned");
+            if let Some(recorder) = recorder.as_deref_mut() {
+                recorder.record_message(
+                    timeline.tick(),
+                    &remote_ids,
+                    entity,
+                    RecordedMessage::InGame(InGameRequest),
+                );
             }
+            apply_in_game_request(
+                entity,
+                &player_spawner,
+                *in_game_root,
+                &game_room,
+                &remote_ids,
+                &mut commands,
+            );
         }
     }
 }
