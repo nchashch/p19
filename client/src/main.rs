@@ -373,6 +373,14 @@ impl Plugin for Prototype19 {
         // 15703 — dev-only (the client is untrusted; a tool API in it is a cheat surface).
         app.add_plugins(dev::tool_api::DevToolsPlugin);
 
+        // Separate statement, not folded into the plugin tuple above — that tuple is already at
+        // Bevy's 15-element `Plugins` limit (see the `AhoyPlugins` comment nearby). Must run
+        // *after* `DefaultPlugins`/`AssetPlugin` (`TerminalPlugin::build()` needs `AssetServer`
+        // to already exist to register its own asset type/loader) — see `../bevy_tui_texture`'s
+        // vendored patch (workspace `Cargo.toml`'s `bevy_tui_texture` entry) for why that loader
+        // registration is disabled there rather than solved by reordering the other way.
+        app.add_plugins(ui::tui_panel::TuiPanelPlugin);
+
         app.insert_resource(UiTheme(create_dark_theme()))
             .insert_resource(UiScale(UI_SCALE))
             .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.15)))

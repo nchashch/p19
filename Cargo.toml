@@ -54,6 +54,22 @@ bevy_common_assets = { version = "0.17.0", default-features = false, features = 
 	"ron",
 ] }
 bevy_hanabi = "0.19.0"
+# Client-only: renders a ratatui terminal UI as a GPU texture on a Bevy UI node (main menu demo
+# panel — `client::ui::tui_panel`). Version pins matter here: the crate's own Cargo.toml requires
+# its `wgpu` dependency to exactly match whatever `wgpu` version this `bevy` release pins
+# internally (currently 29.0.3) — 0.3.x is the release line built against bevy 0.19/ratatui 0.30.
+#
+# Vendored (`../bevy_tui_texture`, checked out at the matching v0.3.5 tag), not the crates.io
+# release, for a local patch: upstream's `TerminalPlugin` unconditionally registers its own
+# `AssetLoader` for the `.ttf` extension, which — confirmed live, not theoretical — breaks
+# `bevy_asset_loader`'s dynamic-asset system (this project's own `CommonAssets` fonts) with a
+# `TypeId`-mismatch panic at startup, regardless of plugin registration order relative to
+# `DefaultPlugins`. See `bevy_tui_texture/src/bevy_plugin.rs`'s own `LOCAL PATCH` comment for the
+# fix (drops just the conflicting loader registration; `TuiFontSource::Ready`, what
+# `client::ui::tui_panel` actually uses, is unaffected).
+# bevy_tui_texture = "0.3.5"
+bevy_tui_texture = { path = "../bevy_tui_texture" }
+ratatui = "0.30.2"
 serde = { version = "1.0.228", features = ["derive"] }
 
 polyanya = { path = "../polyanya" }
