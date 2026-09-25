@@ -15,7 +15,6 @@ use bevy::{
 };
 use bevy_fluent::prelude::Localization;
 use fluent::FluentArgs;
-use shared::character_controller::Grounded;
 use shared::combat::{ATTACK_RANGE, DAMAGE, GCD_DURATION, Gcd, HitPoints};
 use shared::game_state::GameState;
 
@@ -482,7 +481,11 @@ fn update_data_frame(
     mut query: Query<&mut Text, With<DataFrame>>,
     hovered: Res<Hovered>,
     selected: Res<Selected>,
-    player: Query<(&HitPoints, &GlobalTransform, Has<Grounded>)>,
+    player: Query<(
+        &HitPoints,
+        &GlobalTransform,
+        &bevy_ahoy::CharacterControllerState,
+    )>,
     global_transforms: Query<&GlobalTransform>,
     hit_points: Query<&HitPoints>,
     name: Query<&Name>,
@@ -491,19 +494,16 @@ fn update_data_frame(
     let Some(local_player) = local_player.0 else {
         return;
     };
-    let Ok((player_hit_points, player_global_transform, is_grounded)) = player.get(local_player)
-    else {
+    let Ok((player_hit_points, player_global_transform, state)) = player.get(local_player) else {
         return;
     };
+    let is_grounded = state.grounded.is_some();
     // Localization loads asynchronously (see `localization.rs`) and isn't guaranteed ready by the
     // time this first runs — skip until it is rather than showing raw `.ftl` keys.
     let Some(localization) = localization else {
         return;
     };
 
-    // `Grounded` is added/removed every jump/landing, not just when `Hovered`/`Selected` change —
-    // without tracking it here too, the displayed status would only refresh coincidentally.
-    // `localization.is_changed()` covers the one frame it goes from not-ready to ready.
     let grounded_changed = *last_grounded != Some(is_grounded);
     if !hovered.is_changed()
         && !selected.is_changed()

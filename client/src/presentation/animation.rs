@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
 use std::time::Duration;
 
-use shared::character_controller::{Character, Grounded, Idle};
+use shared::character_controller::{Character, Idle};
 use shared::server_events::Attack;
 
 use crate::assets::collections::CommonAssets;
@@ -187,13 +187,19 @@ fn animation_finished(
 }
 
 fn locomotion(
-    characters: Query<(Entity, &LinearVelocity), With<Character>>,
-    grounded: Query<(), With<Grounded>>,
+    characters: Query<
+        (
+            Entity,
+            &LinearVelocity,
+            &bevy_ahoy::CharacterControllerState,
+        ),
+        With<Character>,
+    >,
     idle: Query<(), With<Idle>>,
     mut commands: Commands,
 ) {
-    for (entity, v) in characters {
-        let grounded = grounded.contains(entity);
+    for (entity, v, state) in characters {
+        let grounded = state.grounded.is_some();
         let idle = idle.contains(entity);
         let moving = v.xz().length() > 0.4;
         if idle {

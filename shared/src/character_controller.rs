@@ -35,36 +35,3 @@ pub enum GameLayer {
 #[derive(Component, Serialize, Deserialize, Default, Clone)]
 #[component(storage = "SparseSet")]
 pub struct Idle;
-
-/// A marker component indicating that an entity is on a surface that is considered ground.
-///
-/// Written by [`bridge_grounded`] from ahoy's own ground state on both binaries (the old
-/// controller used to compute this itself; the old `GroundDetection` config component is gone).
-/// Replicated (see `shared::replication::SharedReplicationPlugin`) — the client's local bridge
-/// keeps the *predicted* entity's animation reactions latency-free, and the server's keeps the
-/// replicated state authoritative.
-#[derive(Component, Serialize, Deserialize, Default, Clone)]
-#[component(storage = "SparseSet")]
-pub struct Grounded;
-
-/// Keeps `Grounded` in sync with ahoy's `CharacterControllerState::grounded` — the old
-/// controller wrote this itself before the ahoy migration; consumers (`presentation/animation.rs`'s
-/// grounded/idle transitions, `hud.rs`'s grounded indicator) still read it.
-///
-/// Cheap to run every frame: the `Changed` filter only matches when ahoy rewrote the state
-/// (every sim tick), and the contains-checks make the insert/remove a no-op when already
-/// correct.
-pub fn bridge_grounded(
-    mut commands: Commands,
-    kccs: Query<(Entity, &bevy_ahoy::CharacterControllerState), Changed<bevy_ahoy::CharacterControllerState>>,
-    grounded: Query<(), With<Grounded>>,
-) {
-    for (entity, state) in &kccs {
-        let is_grounded = state.grounded.is_some();
-        if is_grounded && !grounded.contains(entity) {
-            commands.entity(entity).insert(Grounded);
-        } else if !is_grounded && grounded.contains(entity) {
-            commands.entity(entity).remove::<Grounded>();
-        }
-    }
-}

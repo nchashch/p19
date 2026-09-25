@@ -8,18 +8,15 @@
 //! character's look.
 
 use bevy::prelude::*;
-use bevy_ahoy::input::RotateCamera;
 use bevy_ahoy::CharacterLook;
+use bevy_ahoy::input::RotateCamera;
 use lightyear_inputs_bei::prelude::Fire;
 
 pub struct ServerInputPlugin;
 
 impl Plugin for ServerInputPlugin {
     fn build(&self, app: &mut App) {
-        app.add_observer(accumulate_look)
-            // The authoritative `Grounded` writer: ahoy's ground state → the replicated marker
-            // (see `shared::character_controller::bridge_grounded`).
-            .add_systems(Update, shared::character_controller::bridge_grounded);
+        app.add_observer(accumulate_look);
     }
 }
 

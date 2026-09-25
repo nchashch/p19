@@ -6,8 +6,8 @@ use crate::{
     gameplay::combat::CombatPlugin,
 };
 use bevy::prelude::*;
-use bevy_ahoy::prelude::CharacterController as AhoyCharacterController;
 use bevy_ahoy::CharacterLook;
+use bevy_ahoy::prelude::CharacterController as AhoyCharacterController;
 use lightyear::prelude::Controlled;
 use shared::cube_spawner::CubeSpawner;
 use shared::game_state::GameState;
@@ -31,10 +31,6 @@ impl Plugin for PlayerCharacterPlugin {
                 decorate_other_players.run_if(not(resource_exists::<
                     crate::controls::camera::NoRenderMode,
                 >)),
-                // The local predicted entity's `Grounded`, kept in sync with ahoy's ground
-                // state so animation/HUD reactions stay latency-free (the replicated copy
-                // would lag by the round-trip).
-                shared::character_controller::bridge_grounded,
             ),
         );
     }

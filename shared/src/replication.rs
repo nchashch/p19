@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::assets::level::ClientWorldAsset;
-use crate::character_controller::{Character, Grounded, Idle};
+use crate::character_controller::{Character, Idle};
 use crate::client_events::{
     AttackAttempt, ClientDespawn, InGameRequest, KillAttempt, LoadLevelRequest, LobbyRequest,
     ObserveRequest, SpawnCubeRequest, SpawnNpcRequest,
@@ -45,9 +45,6 @@ impl Plugin for SharedReplicationPlugin {
         app.component::<Name>().replicate();
         app.component::<HitPoints>().replicate();
         app.component::<Gcd>().replicate();
-        // `Grounded` is written by `character_controller::bridge_grounded` (ahoy's ground
-        // state → the marker) on both binaries; the client's animation + HUD read it.
-        app.component::<Grounded>().replicate();
         app.component::<Collider>().replicate();
         // Required for ahoy's KCC to see replicated colliders client-side: ahoy's collision
         // query (`ColliderComponents`) requires `Position`/`Rotation`/`ColliderOf` on collider
