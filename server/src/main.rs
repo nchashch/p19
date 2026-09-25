@@ -1,7 +1,8 @@
 use std::time::Duration;
 
 use avian3d::prelude::*;
-use bevy::app::ScheduleRunnerPlugin;
+use bevy::app::{ScheduleRunnerPlugin, TaskPoolOptions, TaskPoolPlugin};
+use bevy::ecs::schedule::SingleThreadedExecutor;
 use bevy::image::{CompressedImageFormatSupport, CompressedImageFormats};
 use bevy::log::LogPlugin;
 use bevy::prelude::*;
@@ -48,9 +49,23 @@ fn main() {
             // `server::ServerPlugins`' own `tick_duration` below, so this doesn't change
             // simulation cadence, only how often the outer loop spins while there's nothing new
             // to do.
-            MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
-                1.0 / 60.0,
-            ))),
+            //
+            // `TaskPoolPlugin`'s own default `TaskPoolOptions` sizes every pool (IO,
+            // async-compute, compute) off `available_parallelism()` — the *host's* total core
+            // count, not a per-process budget. Fine for one server per machine, but this
+            // project's deployment goal is many small game sessions packed densely onto one
+            // VPS (one OS process per session) — left at the default, every instance sizes its
+            // pools off the same host-wide core count, oversubscribing threads long before CPU
+            // is actually the bottleneck (an idle session measured above is ~5% of *one* core).
+            // `TaskPoolOptions::with_num_threads(1)` pins every pool's total to one worker, so N
+            // instances cost roughly N threads, not N × host-cores.
+            MinimalPlugins
+                .set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
+                    1.0 / 60.0,
+                )))
+                .set(TaskPoolPlugin {
+                    task_pool_options: TaskPoolOptions::with_num_threads(1),
+                }),
             // `RepliconPlugins` needs `States`, and log output needs a subscriber — both are
             // included in `DefaultPlugins` (which the client uses) but not in `MinimalPlugins`.
             StatesPlugin,
@@ -164,6 +179,29 @@ fn main() {
                 .continue_to_state(ServerState::Lobby)
                 .load_collection::<LevelMetadataAssets>(),
         )
+        // Force every schedule that runs simulation-relevant systems onto Bevy's
+        // `SingleThreadedExecutor` instead of the default `MultiThreadedExecutor`. The default
+        // executor gives no execution-order guarantee for "ambiguous" system pairs (systems with
+        // overlapping data access and no explicit ordering between them) — that order can vary
+        // between runs given the identical tick count and inputs, which would silently break
+        // any future deterministic-replay effort. Strictly serial execution removes that class
+        // of nondeterminism outright, independent of the `TaskPoolOptions` change above (fewer
+        // task-pool threads mostly starves the default executor of anything to race against, but
+        // doesn't touch its code path). `avian3d` already does this for its own inner
+        // `SubstepSchedule` (confirmed in `dynamics/solver/schedule.rs` — not our code to fix);
+        // `Update` (this project's own gameplay systems — combat, spawning, networking) and
+        // `FixedPostUpdate`/`PhysicsSchedule` (the broad phase, narrow phase, and island
+        // management around that substep loop — `PhysicsPlugins::default()` runs `PhysicsSchedule`
+        // from `FixedPostUpdate`) don't get the same treatment by default, so they're set here.
+        .edit_schedule(Update, |schedule| {
+            schedule.set_executor(SingleThreadedExecutor::new());
+        })
+        .edit_schedule(FixedPostUpdate, |schedule| {
+            schedule.set_executor(SingleThreadedExecutor::new());
+        })
+        .edit_schedule(PhysicsSchedule, |schedule| {
+            schedule.set_executor(SingleThreadedExecutor::new());
+        })
         // avian3d's collider cache reads `AssetEvent<Mesh>` (for mesh-derived colliders) even
         // though the server never renders — normally registered by rendering plugins the headless
         // server doesn't have, so it needs registering directly instead. `Image` needs the same
