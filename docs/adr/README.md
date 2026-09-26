@@ -28,5 +28,6 @@ Each record uses the same shape: **Context** (the problem, forces, constraints),
 | [0010](./0010-device-level-input-mocking-for-agent-tool-api.md) | Device-level input mocking (gamepad, keyboard, mouse) for the agent tool API | Accepted |
 | [0011](./0011-agent-vision-and-fleet-improvements.md) | Vision and fleet improvements: data-first observation, UI-tree dumps, state-fused/cropped captures, per-client ports | Accepted |
 | [0012](./0012-no-render-agent-client-mode.md) | A `--no-render` agent-client mode: the headless host without wgpu/Vulkan | Accepted |
+| [0013](./0013-server-determinism-and-session-replay.md) | Server-side determinism hardening and session recording/replay for post-release debugging | Accepted |
 
 New records should be added to this index in the same PR/commit that adds the file.
