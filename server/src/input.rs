@@ -20,7 +20,14 @@ impl Plugin for ServerInputPlugin {
     }
 }
 
-fn accumulate_look(rotate: On<Fire<RotateCamera>>, mut looks: Query<&mut CharacterLook>) {
+fn accumulate_look(
+    rotate: On<Fire<RotateCamera>>,
+    // Corpses don't look: `kill_zero_hp` already stops a dead player's *movement* (RigidBody
+    // removal starves ahoy's KCC), and this gate closes the remaining "can still look around
+    // while dead" agency. Combat gating for dead *attackers* lands with the combat
+    // caster-resolution fix (`resolve_attack`/`resolve_kill` currently no-op for everyone).
+    mut looks: Query<&mut CharacterLook, Without<shared::combat::Dead>>,
+) {
     let Ok(mut look) = looks.get_mut(rotate.context) else {
         return;
     };

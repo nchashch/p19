@@ -3,6 +3,7 @@
 //! this module only reacts to the events that logic fires, it doesn't decide anything itself.
 
 use bevy::prelude::*;
+use bevy_ahoy::prelude::CharacterController as AhoyCharacterController;
 use bevy_hanabi::prelude::*;
 use bevy_seedling::prelude::*;
 use shared::{
@@ -75,6 +76,15 @@ fn on_entity_died(
 fn hide_dead(query: Query<Entity, With<Dead>>, mut commands: Commands) {
     for dead in query {
         commands.entity(dead).insert(Visibility::Hidden);
+        // Stop the owner's *local* prediction from moving their own corpse: the server
+        // already starves a dead player's KCC (`kill_zero_hp` removes `RigidBody`), but this
+        // client's ahoy KCC keeps running on the predicted entity, so held movement inputs
+        // would rubber-band the corpse against the frozen server position until despawn.
+        // Removing the controller stops the local simulation; `Dead` lasts ~1 s before
+        // `despawn_dead` removes the entity, and the `InputMarker` stream keeps flowing
+        // harmlessly (nothing consumes it — the server look accumulator gates on
+        // `Without<Dead>` too).
+        commands.entity(dead).remove::<AhoyCharacterController>();
     }
 }
 

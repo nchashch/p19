@@ -561,6 +561,7 @@ fn replay_spawn(
     mut casters: Query<&mut Gcd>,
     timeline: Res<LocalTimeline>,
     spatial_query: SpatialQuery,
+    game_room: Res<GameRoom>,
     mut commands: Commands,
 ) {
     for event in &current.0 {
@@ -579,6 +580,7 @@ fn replay_spawn(
                     &mut casters,
                     timeline.tick(),
                     &spatial_query,
+                    &game_room,
                     &mut commands,
                 );
             }
@@ -590,6 +592,7 @@ fn replay_spawn(
                     &mut casters,
                     timeline.tick(),
                     &spatial_query,
+                    &game_room,
                     &mut commands,
                 );
             }

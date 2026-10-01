@@ -1,5 +1,6 @@
 use crate::networking::owned_players;
 use crate::replay::{RecordedMessage, ReplayRecorder};
+use crate::rooms::GameRoom;
 use avian3d::{math::TAU, prelude::*};
 use bevy::prelude::*;
 use lightyear::prelude::*;
@@ -31,6 +32,7 @@ pub(crate) fn apply_spawn_npc(
     casters: &mut Query<&mut Gcd>,
     tick: Tick,
     spatial_query: &SpatialQuery,
+    game_room: &GameRoom,
     commands: &mut Commands,
 ) {
     // Caster resolution (post-M2): `caster` is the *connection* entity the `MessageReceiver`
@@ -86,6 +88,10 @@ pub(crate) fn apply_spawn_npc(
         .spawn((
             npc(shape, translation),
             Replicate::to_clients(NetworkTarget::All),
+            // Standalone entity (no `ChildOf` under `InGameRoot`), so without an explicit
+            // `Rooms` tag it would bypass room filtering entirely and replicate to every
+            // connected client — including clients still sitting in the lobby room.
+            Rooms::single(game_room.0),
             Selectable,
         ))
         .with_child((
@@ -109,6 +115,7 @@ fn spawn_npc(
     mut casters: Query<&mut Gcd>,
     timeline: Res<LocalTimeline>,
     spatial_query: SpatialQuery,
+    game_room: Res<GameRoom>,
     remote_ids: Query<&RemoteId>,
     mut recorder: Option<ResMut<ReplayRecorder>>,
 ) {
@@ -129,6 +136,7 @@ fn spawn_npc(
                 &mut casters,
                 timeline.tick(),
                 &spatial_query,
+                &game_room,
                 &mut commands,
             );
         }
@@ -143,6 +151,7 @@ pub(crate) fn apply_spawn_cube(
     casters: &mut Query<&mut Gcd>,
     tick: Tick,
     spatial_query: &SpatialQuery,
+    game_room: &GameRoom,
     commands: &mut Commands,
 ) {
     // Caster resolution — see the matching comment in [`apply_spawn_npc`].
@@ -190,6 +199,10 @@ pub(crate) fn apply_spawn_cube(
                 shape,
             ),
             Replicate::to_clients(NetworkTarget::All),
+            // Standalone entity (no `ChildOf` under `InGameRoot`), so without an explicit
+            // `Rooms` tag it would bypass room filtering entirely and replicate to every
+            // connected client — including clients still sitting in the lobby room.
+            Rooms::single(game_room.0),
             Selectable,
         ))
         .id();
@@ -203,6 +216,7 @@ fn spawn_cube(
     mut casters: Query<&mut Gcd>,
     timeline: Res<LocalTimeline>,
     spatial_query: SpatialQuery,
+    game_room: Res<GameRoom>,
     remote_ids: Query<&RemoteId>,
     mut recorder: Option<ResMut<ReplayRecorder>>,
 ) {
@@ -223,6 +237,7 @@ fn spawn_cube(
                 &mut casters,
                 timeline.tick(),
                 &spatial_query,
+                &game_room,
                 &mut commands,
             );
         }
