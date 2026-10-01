@@ -54,8 +54,6 @@ pub const NAME_NOUNS: &[&str] = &[
 /// `taken` (the caller passes every existing player's `Name`): `"Brisk Falcon"`, then
 /// `"Brisk Falcon #2"`, `"Brisk Falcon #3"`, …
 pub fn generate_player_name(seed: u32, taken: &std::collections::HashSet<String>) -> String {
-    use noiz::prelude::Noise;
-    use noiz::rng::AnyValueFromBits;
     let rng = noiz::rng::NoiseRng(seed);
     let adjectives = NAME_ADJECTIVES;
     let nouns = NAME_NOUNS;

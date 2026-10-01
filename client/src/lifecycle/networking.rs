@@ -2,10 +2,10 @@
 //! QUIC/`bevy_quinnet` endpoint) and drives the post-connect state transition.
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use bevy::prelude::*;
 use lightyear::prelude::*;
+use rustls::pki_types::CertificateDer;
 use shared::client_events::ClientDespawn;
 use shared::game_state::GameState;
 use shared::replication::ClientInGame;
@@ -15,18 +15,24 @@ use crate::events::{Connect, Disconnect};
 
 const SERVER_PORT: u16 = 6000;
 
-/// Must match the server's `PROTOCOL_ID`/`PRIVATE_KEY` (`server::networking`) exactly — both
-/// sides need to agree on these bytes for a connect token to validate. See that module's doc
-/// comment for why this is hardcoded rather than generated per-run.
-const PROTOCOL_ID: u64 = 0;
-const PRIVATE_KEY: [u8; 32] = [0; 32];
+/// Port of the server's token-issuing HTTP endpoint (`server::networking`'s
+/// `start_token_http_endpoint`). In production this becomes an HTTPS request to a real
+/// backend — or an asymmetric LAN key-exchange — so the token can't be stolen in flight on an
+/// unsecured LAN; the plain-HTTP request here is the explicitly-acknowledged dev/LAN posture.
+const TOKEN_HTTP_PORT: u16 = 6001;
+
+/// Shared state for the in-flight connect-token fetch (see [`poll_token_fetch`]).
+#[derive(Resource, Default, Clone)]
+struct TokenFetch(std::sync::Arc<std::sync::Mutex<Option<Result<Vec<u8>, String>>>>);
 
 pub struct NetworkingPlugin;
 
 impl Plugin for NetworkingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ServerAddress>();
+        app.init_resource::<TokenFetch>();
         app.add_systems(Startup, (load_client_config, spawn_client_link));
+        app.add_systems(Update, poll_token_fetch);
         app.add_observer(on_connected);
         app.add_observer(on_disconnected);
         app.add_observer(on_connect_request);
@@ -105,14 +111,14 @@ fn spawn_client_link(mut commands: Commands) {
     commands.insert_resource(ClientLink(entity));
 }
 
-/// Opens the connection to `ServerAddress`, unless one is already open or opening — safe to call
-/// every time `Play` is pressed, including a second press before the first connection attempt has
-/// resolved. Uses a dummy all-zero netcode key, same as the server's `PRIVATE_KEY` — fine for this
-/// dev/LAN scaffold, not for a real deployment (see `server::networking`'s doc comment).
+/// Kicks off the connect-token fetch (see [`poll_token_fetch`]) — the actual connection opens
+/// once the token arrives. Safe to call every time `Play` is pressed: an in-flight fetch or an
+/// already-open connection returns early.
 fn on_connect_request(
     _: On<Connect>,
     link: Res<ClientLink>,
     server_address: Res<ServerAddress>,
+    token_fetch: Res<TokenFetch>,
     status: Query<(
         Has<lightyear::prelude::Connected>,
         Has<lightyear::prelude::Connecting>,
@@ -125,34 +131,201 @@ fn on_connect_request(
     {
         return Ok(());
     }
+    if token_fetch.0.lock().expect("token fetch lock").is_some() {
+        info!("connect token fetch already in flight");
+        return Ok(());
+    }
+    let host = server_address.0.trim().to_string();
+    let host_for_task = host.clone();
+    let token_fetch = token_fetch.0.clone();
+    bevy::tasks::IoTaskPool::get()
+        .spawn(async move {
+            let result = fetch_connect_token(&host_for_task, TOKEN_HTTP_PORT);
+            *token_fetch.lock().expect("token fetch lock") = Some(result);
+        })
+        .detach();
+    info!("fetching connect token from {host}:{TOKEN_HTTP_PORT}…");
+    Ok(())
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+/// Trust-on-first-use fingerprint store for the token endpoint's self-signed TLS certificate
+/// (hex SHA-256 of the leaf DER). First successful connection records the fingerprint;
+/// later connections must match, or the fetch fails (MITM / cert-rotation alarm — delete the
+/// file to re-trust a legitimately rotated cert).
+fn tls_fingerprint_store_path() -> std::path::PathBuf {
+    std::path::Path::new(&std::env::var("BEVY_ASSET_ROOT").unwrap_or_else(|_| ".".into()))
+        .join("assets/token-tls-fingerprint.txt")
+}
+
+/// TLS config for the token fetch: self-signed server certs are accepted at the TLS layer and
+/// validated *after* the handshake by fingerprint (TOFU, [`tls_fingerprint_store_path`]) — the
+/// verifier deliberately accepts everything so the handshake completes and the presented
+/// certificate becomes available for the fingerprint check.
+fn token_tls_config() -> rustls::ClientConfig {
+    #[derive(Debug)]
+    struct AcceptAllServerCert;
+    impl rustls::client::danger::ServerCertVerifier for AcceptAllServerCert {
+        fn verify_server_cert(
+            &self,
+            _end_entity: &CertificateDer,
+            _intermediates: &[CertificateDer],
+            _server_name: &rustls::pki_types::ServerName,
+            _ocsp_response: &[u8],
+            _now: rustls::pki_types::UnixTime,
+        ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+            Ok(rustls::client::danger::ServerCertVerified::assertion())
+        }
+        fn verify_tls12_signature(
+            &self,
+            _message: &[u8],
+            _cert: &CertificateDer,
+            _dss: &rustls::DigitallySignedStruct,
+        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+            Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+        }
+        fn verify_tls13_signature(
+            &self,
+            _message: &[u8],
+            _cert: &CertificateDer,
+            _dss: &rustls::DigitallySignedStruct,
+        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+            Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+        }
+        fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+            rustls::crypto::ring::default_provider()
+                .signature_verification_algorithms
+                .supported_schemes()
+        }
+    }
+
+    rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .expect("tls protocol versions")
+    .dangerous()
+    .with_custom_certificate_verifier(std::sync::Arc::new(AcceptAllServerCert))
+    .with_no_client_auth()
+}
+
+/// Blocking fetch of a netcode connect token from the server's token HTTPS endpoint
+/// (`server::networking`'s `start_token_http_endpoint`): `GET /connect_token` over TLS with the
+/// server's self-signed certificate, body = the raw 2048-byte encrypted connect token. The
+/// certificate is fingerprint-pinned trust-on-first-use ([`tls_fingerprint_store_path`]) — this
+/// is what keeps the token un-stealable on the wire after the first connection. In production
+/// this is the request that becomes HTTPS to a real backend (proper CA + hostname validation).
+fn fetch_connect_token(host: &str, port: u16) -> Result<Vec<u8>, String> {
+    use std::io::{Read, Write};
+    use sha2::Digest;
+
+    let stored_fingerprint: Option<[u8; 32]> = std::fs::read_to_string(tls_fingerprint_store_path())
+        .ok()
+        .and_then(|text| {
+            let mut fingerprint = [0u8; 32];
+            for (index, byte) in fingerprint.iter_mut().enumerate() {
+                *byte = u8::from_str_radix(text.trim().get(index * 2..index * 2 + 2)?, 16).ok()?;
+            }
+            Some(fingerprint)
+        });
+
+    let stream = std::net::TcpStream::connect((host, port))
+        .map_err(|error| format!("tcp connect: {error}"))?;
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .map_err(|error| format!("read timeout: {error}"))?;
+    let server_name = rustls::pki_types::ServerName::try_from(host.to_string())
+        .map_err(|error| format!("server name: {error:?}"))?;
+    let mut connection = rustls::ClientConnection::new(
+        std::sync::Arc::new(token_tls_config()),
+        server_name,
+    )
+    .map_err(|error| format!("tls client: {error}"))?;
+    let mut tls = rustls::StreamOwned::new(connection, stream);
+
+    tls.write_all(
+        format!("GET /connect_token HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n")
+            .as_bytes(),
+    )
+    .map_err(|error| format!("http write: {error}"))?;
+    tls.flush().map_err(|error| format!("tls flush: {error}"))?;
+    let mut response = Vec::new();
+    tls.read_to_end(&mut response)
+        .map_err(|error| format!("http read: {error}"))?;
+
+    // Fingerprint enforcement happens after the handshake: the presented leaf certificate's
+    // SHA-256 must match the stored TOFU fingerprint (if one exists).
+    let presented: Option<[u8; 32]> = tls
+        .conn
+        .peer_certificates()
+        .and_then(|certs| certs.first())
+        .map(|certificate| sha2::Sha256::digest(certificate.as_ref()).into());
+    match (stored_fingerprint, presented) {
+        (Some(stored), Some(presented)) if stored != presented => {
+            return Err(format!(
+                "token endpoint TLS certificate fingerprint CHANGED since first use (stored {}, now {}) — refusing to send the token request; if the server legitimately rotated its cert, delete {} and retry",
+                hex_encode(&stored),
+                hex_encode(&presented),
+                tls_fingerprint_store_path().display(),
+            ));
+        }
+        (None, Some(presented)) => {
+            // First use: pin what we saw.
+            std::fs::write(tls_fingerprint_store_path(), hex_encode(&presented))
+                .map_err(|error| format!("writing tls fingerprint: {error}"))?;
+            info!(
+                "pinned token endpoint TLS fingerprint (first use): {}",
+                hex_encode(&presented)
+            );
+        }
+        _ => {}
+    }
+
+    let header_end = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .ok_or_else(|| "malformed https response (no header terminator)".to_string())?;
+    let body = &response[header_end + 4..];
+    if !response.starts_with(b"HTTP/1.1 200 OK") && !response.starts_with(b"HTTP/1.0 200 OK") {
+        return Err(format!(
+            "token endpoint returned an error: {}",
+            String::from_utf8_lossy(&response[..header_end])
+        ));
+    }
+    Ok(body.to_vec())
+}
+
+/// Applies a fetched connect token: this is where the connection actually opens. The client
+/// holds only the encrypted token — the netcode private key never leaves the server, closing
+/// the old `Authentication::Manual` hole (the client used to hold the shared key).
+fn apply_connect_token(
+    token_bytes: &[u8],
+    link: Entity,
+    server_address: &ServerAddress,
+    mut commands: Commands,
+) -> Result {
+    let token = lightyear::netcode::ConnectToken::try_from_bytes(token_bytes)
+        .map_err(|error| format!("invalid connect token: {error:?}"))?;
     let Ok(addr) = server_address.0.trim().parse::<IpAddr>() else {
         warn!(
-            "on_connect_request: {:?} is not a valid IP address",
+            "server address {:?} is not a valid IP address",
             server_address.0
         );
         return Ok(());
     };
     let server_addr = SocketAddr::new(addr, SERVER_PORT);
-    // Only needs to be unique per running client instance, not cryptographically random — this is
-    // a dev/LAN scaffold (see `PROTOCOL_ID`/`PRIVATE_KEY` above), not a real deployment.
-    let client_id = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos() as u64)
-        .unwrap_or_default();
     let netcode_client = client::NetcodeClient::new(
-        Authentication::Manual {
-            server_addr,
-            client_id,
-            private_key: PRIVATE_KEY,
-            protocol_id: PROTOCOL_ID,
-        },
+        Authentication::Token(token),
         client::NetcodeConfig {
             client_timeout_secs: -1,
             token_expire_secs: -1,
             ..default()
         },
     )?;
-    commands.entity(link.0).insert((
+    commands.entity(link).insert((
         lightyear::prelude::Client,
         ReplicationReceiver,
         LocalAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)),
@@ -160,8 +333,37 @@ fn on_connect_request(
         netcode_client,
         UdpIo::default(),
     ));
-    commands.trigger(lightyear::prelude::Connect { entity: link.0 });
+    commands.trigger(lightyear::prelude::Connect { entity: link });
     Ok(())
+}
+
+/// Drains the in-flight token fetch each frame; on success opens the connection
+/// ([`apply_connect_token`]), on failure logs and clears the slot so `Connect` can be
+/// re-pressed.
+fn poll_token_fetch(
+    token_fetch: Res<TokenFetch>,
+    link: Res<ClientLink>,
+    server_address: Res<ServerAddress>,
+    mut commands: Commands,
+) {
+    let result = token_fetch
+        .0
+        .lock()
+        .expect("token fetch lock")
+        .take();
+    let Some(result) = result else {
+        return;
+    };
+    match result {
+        Ok(bytes) => {
+            if let Err(error) = apply_connect_token(&bytes, link.0, &server_address, commands) {
+                error!("failed to open connection with fetched token: {error:?}");
+            }
+        }
+        Err(error) => {
+            error!("connect token fetch failed: {error} (press connect to retry)");
+        }
+    }
 }
 
 /// Triggers **both** `Disconnect` (the connection/netcode layer — sends a disconnect packet so

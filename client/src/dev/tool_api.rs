@@ -181,6 +181,9 @@ fn game_state_snapshot(world: &mut World) -> serde_json::Value {
         return serde_json::Value::Object(out);
     };
 
+    if let Some(name) = player_entity.get::<Name>() {
+        out.insert("name".into(), json!(name.to_string()));
+    }
     if let Some(transform) = player_entity.get::<Transform>() {
         out.insert("position".into(), json!(transform.translation));
     }

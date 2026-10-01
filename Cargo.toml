@@ -77,6 +77,14 @@ bevy_tui_texture = { git = "https://github.com/nchashch/bevy_tui_texture", branc
 ratatui = "0.30.2"
 serde = { version = "1.0.228", features = ["derive"] }
 
+# Token-endpoint TLS (`server::networking`'s HTTPS connect-token issuer + the client's
+# fingerprint-pinned fetch). Already in the graph via rmcp; promoted to direct deps so the
+# server can serve the endpoint over self-signed TLS and the client can pin its fingerprint.
+rustls = "0.23"
+rustls-pemfile = "2"
+rcgen = "0.13"
+sha2 = "0.10"
+
 vleue_navigator = "0.16"
 bevy_mod_outline = { git = "https://github.com/nchashch/bevy_mod_outline", branch = "fix/skinned-motion-outline" }
 bevy_vello = "0.14"

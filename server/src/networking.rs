@@ -16,19 +16,214 @@ use shared::{
     player::{PlayerCharacterSpawner, player},
 };
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::sync::Arc;
+use rustls::pki_types::CertificateDer;
+use sha2::Digest;
 
 use crate::level_state::LevelState;
 use crate::rooms::{GameRoom, LobbyRoom};
 use crate::replay::{RecordedMessage, ReplayRecorder};
 
-/// Netcode's shared secret + protocol tag, replacing the old self-signed QUIC cert — both sides
-/// must agree on the exact same bytes for a connect token to validate, so the client's own
-/// connect code (once rewritten) needs to use these same two values. Hardcoded here rather than
-/// generated per-run (`lightyear_netcode::generate_key()`): a fresh random key every server start
-/// would mean tokens issued before a restart never validate — the same "fine for a dev/LAN
-/// scaffold, not for real deployment" caveat the old self-signed cert already carried.
-const PROTOCOL_ID: u64 = 0;
-const PRIVATE_KEY: [u8; 32] = [0; 32];
+/// Netcode protocol version tag (ASCII `"proto19"`) — part of the netcode standard's
+/// anti-downgrade/replay mix, not a secret. Must only match the *token issuer's* value, which
+/// is this same server (the client never needs it: it receives pre-encrypted connect tokens).
+const PROTOCOL_ID: u64 = 0x7072_6F74_6F31_39;
+
+/// Port of the token-issuing HTTP endpoint (`GET /connect_token`). Kept separate from the game
+/// port on purpose — in production this is the path that becomes an HTTPS request to a real
+/// backend; see [`start_token_http_endpoint`].
+const TOKEN_HTTP_PORT: u16 = 6001;
+
+/// Where the netcode private key persists, relative to the asset root (`server/assets/`).
+/// Plain-text hex — dev/LAN posture per the user's direction; not world-readable permissions
+/// or secret management. Created with a fresh random key on first run.
+const PRIVATE_KEY_FILE: &str = "assets/netcode.key";
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn hex_decode_32(text: &str) -> Option<[u8; 32]> {
+    let mut key = [0u8; 32];
+    for (index, byte) in key.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(text.get(index * 2..index * 2 + 2)?, 16).ok()?;
+    }
+    Some(key)
+}
+
+/// Reads the netcode private key from [`PRIVATE_KEY_FILE`] (hex text), creating it with a fresh
+/// random key (`lightyear::netcode::generate_key()`) on first run. The file is the only place
+/// the key lives server-side; clients never see it — they receive pre-encrypted connect tokens
+/// over the token HTTP endpoint.
+fn load_or_create_private_key() -> Result<lightyear::netcode::Key, String> {
+    let path = std::path::Path::new(&std::env::var("BEVY_ASSET_ROOT").unwrap_or_else(|_| ".".into()))
+        .join(PRIVATE_KEY_FILE);
+    if let Ok(text) = std::fs::read_to_string(&path) {
+        let key = hex_decode_32(text.trim())
+            .ok_or_else(|| format!("{} is not 32 bytes of hex", path.display()))?;
+        return Ok(key);
+    }
+    let key = lightyear::netcode::generate_key();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("creating {}: {e}", path.display()))?;
+    }
+    std::fs::write(&path, hex_encode(&key))
+        .map_err(|e| format!("writing {}: {e}", path.display()))?;
+    info!("generated new netcode private key at {}", path.display());
+    Ok(key)
+}
+
+/// TLS identity (self-signed) for the token HTTPS endpoint: cert + key persist under
+/// `server/assets/` (`token-tls.crt`/`token-tls.key` — PEM, generated on first run via
+/// `rcgen`). SANs cover `localhost`/`127.0.0.1` plus the default-route local IP; clients don't
+/// verify the hostname anyway — they pin the certificate's SHA-256 fingerprint (TOFU, see the
+/// client's `fetch_connect_token`) — but complete SANs keep standard tooling (`curl -k`)
+/// warnings meaningful. Returns the server TLS config plus the leaf fingerprint (hex, logged
+/// at startup so an operator can pre-pin clients).
+fn load_or_create_tls_identity()
+-> Result<(std::sync::Arc<rustls::ServerConfig>, String), String> {
+    let root = std::env::var("BEVY_ASSET_ROOT").unwrap_or_else(|_| ".".into());
+    let cert_path = std::path::Path::new(&root).join("assets/token-tls.crt");
+    let key_path = std::path::Path::new(&root).join("assets/token-tls.key");
+    let (cert_pem, key_pem) =
+        if let (Ok(cert), Ok(key)) = (std::fs::read_to_string(&cert_path), std::fs::read_to_string(&key_path)) {
+            (cert, key)
+        } else {
+            let mut subject_alt_names = vec!["localhost".to_string(), "127.0.0.1".to_string()];
+            if let Some(local_ip) = default_local_ip() {
+                subject_alt_names.push(local_ip.to_string());
+            }
+            let certified_key = rcgen::generate_simple_self_signed(subject_alt_names)
+                .map_err(|error| format!("generating self-signed token cert: {error:?}"))?;
+            let cert_pem = certified_key.cert.pem();
+            let key_pem = certified_key.key_pair.serialize_pem();
+            std::fs::write(&cert_path, &cert_pem)
+                .map_err(|error| format!("writing {}: {error}", cert_path.display()))?;
+            std::fs::write(&key_path, &key_pem)
+                .map_err(|error| format!("writing {}: {error}", key_path.display()))?;
+            info!("generated new self-signed token TLS identity (cert fingerprint below)");
+            (cert_pem, key_pem)
+        };
+
+    let certs: Vec<CertificateDer> = rustls_pemfile::certs(&mut cert_pem.as_bytes())
+        .collect::<Result<_, _>>()
+        .map_err(|error| format!("parsing {certificate}: {error}", certificate = cert_path.display()))?;
+    let key = rustls_pemfile::private_key(&mut key_pem.as_bytes())
+        .map_err(|error| format!("parsing {}: {error}", key_path.display()))?
+        .ok_or_else(|| format!("{} contains no private key", key_path.display()))?;
+    let fingerprint = hex_encode(&sha2::Sha256::digest(certs[0].as_ref()));
+    let config = rustls::ServerConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .map_err(|error| format!("tls protocol versions: {error}"))?
+    .with_no_client_auth()
+    .with_single_cert(certs, key)
+    .map_err(|error| format!("tls identity: {error}"))?;
+    Ok((std::sync::Arc::new(config), fingerprint))
+}
+
+/// Best-effort default-route local IP (UDP `connect` doesn't send packets — it just picks the
+/// interface the route table would use), for the token cert's SANs.
+fn default_local_ip() -> Option<std::net::IpAddr> {
+    let socket = std::net::UdpSocket::bind(std::net::SocketAddr::from(([0, 0, 0, 0], 0))).ok()?;
+    socket
+        .connect(std::net::SocketAddr::from(([8, 8, 8, 8], 80)))
+        .ok()?;
+    socket.local_addr().ok().map(|address| address.ip())
+}
+
+/// Minimal HTTPS token issuer (`GET /connect_token` on [`TOKEN_HTTP_PORT`], TLS via the
+/// self-signed identity from [`load_or_create_tls_identity`]) so headless clients can fetch a
+/// fresh connect token without holding the private key — the "basic flow"; in production this
+/// endpoint is what an HTTPS request to a real backend (or an asymmetric LAN key-exchange)
+/// replaces. Per request it mints a fresh netcode connect token whose *public server address*
+/// is the HTTP requester's own IP + the game port, so the token's server-address whitelist
+/// matches exactly the address the client will play on. A monotonic counter provides the
+/// per-client netcode `client_id`.
+fn start_token_http_endpoint(
+    identity: std::sync::Arc<rustls::ServerConfig>,
+    private_key: lightyear::netcode::Key,
+) {
+    const CONNECT_TOKEN_BYTES: usize = 2048;
+    static NEXT_CLIENT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, TOKEN_HTTP_PORT))
+        .expect("token HTTPS endpoint should bind");
+    info!("token https endpoint listening on 0.0.0.0:{TOKEN_HTTP_PORT}");
+    std::thread::Builder::new()
+        .name("netcode-token-https".into())
+        .spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(tcp) = stream else { continue };
+                let Ok(peer) = tcp.peer_addr() else { continue };
+                // Blocking TLS over the raw TCP stream (no async runtime — the endpoint is a
+                // plain accept thread; `StreamOwned` gives Read/Write directly).
+                let Ok(server_connection) = rustls::ServerConnection::new(identity.clone()) else {
+                    continue;
+                };
+                let mut stream = rustls::StreamOwned::new(server_connection, tcp);
+                let mut request = [0u8; 1024];
+                // Best-effort read; a single segment always contains the request line.
+                let _ = std::io::Read::read(&mut stream, &mut request);
+                let request = String::from_utf8_lossy(&request);
+                // Build the whole HTTP response first, then write it once and send TLS
+                // `close_notify` before dropping the stream — rustls clients error with
+                // `UnexpectedEof` on read-to-end if the connection just closes.
+                let response = if !request.starts_with("GET /connect_token") {
+                    b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_vec()
+                } else {
+                    // The token's public server address = the HTTPS peer's IP + the game
+                    // port: the client reached us over that IP, so it can reach the game on
+                    // it too. (The port differs; only the IP is carried over.)
+                    let server_addr = std::net::SocketAddr::new(peer.ip(), PORT);
+                    let client_id =
+                        NEXT_CLIENT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    match lightyear::netcode::ConnectToken::build(
+                        server_addr,
+                        PROTOCOL_ID,
+                        client_id,
+                        private_key,
+                    )
+                    .expire_seconds(30)
+                    .generate()
+                    {
+                        Ok(token) => match token.try_into_bytes() {
+                            Ok(bytes) => {
+                                let mut response = format!(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                                    bytes.len()
+                                )
+                                .into_bytes();
+                                response.extend_from_slice(&bytes);
+                                info!("issued connect token #{client_id} to {peer}");
+                                response
+                            }
+                            Err(error) => {
+                                warn!("connect token serialization failed: {error:?}");
+                                b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n"
+                                    .to_vec()
+                            }
+                        },
+                        Err(error) => {
+                            warn!("connect token generation failed: {error:?}");
+                            b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n"
+                                .to_vec()
+                        }
+                    }
+                };
+                let ok = response.starts_with(b"HTTP/1.1 200");
+                let _ = std::io::Write::write_all(&mut stream, &response);
+                let _ = std::io::Write::flush(&mut stream);
+                if ok {
+                    // Signals a clean end-of-stream so the client's read_to_end succeeds.
+                    stream.conn.send_close_notify();
+                    let _ = std::io::Write::flush(&mut stream);
+                }
+            }
+        })
+        .expect("token HTTPS thread should spawn");
+}
 
 pub const PORT: u16 = 6000;
 
@@ -338,23 +533,32 @@ fn in_game_request(
 /// bind")`, a bind failure (e.g. the port already in use) is not currently surfaced as a panic
 /// here; `on_server_started` below only fires once binding actually succeeds.
 fn start_endpoint(mut commands: Commands) {
+    let private_key = match load_or_create_private_key() {
+        Ok(key) => key,
+        Err(error) => {
+            panic!("netcode private key unavailable: {error}");
+        }
+    };
+    let (tls_identity, tls_fingerprint) = match load_or_create_tls_identity() {
+        Ok(identity) => identity,
+        Err(error) => {
+            panic!("token TLS identity unavailable: {error}");
+        }
+    };
+    info!("token TLS cert fingerprint (sha256): {tls_fingerprint}");
+    start_token_http_endpoint(tls_identity, private_key);
     let server_entity = commands
         .spawn((
             server::NetcodeServer::new(server::NetcodeConfig {
                 protocol_id: PROTOCOL_ID,
-                private_key: PRIVATE_KEY,
-                // The server binds `0.0.0.0` (see `LocalAddr` below), but a real client on the
-                // LAN connects to a concrete interface IP (e.g. `192.168.x.x:6000`, from its own
-                // `config.toml`'s `server_ip`) — its self-signed connect token embeds that
-                // concrete address, which never equals `0.0.0.0` and gets silently dropped by
-                // `NetcodeServer`'s default same-address check ("server ignored connection
-                // request. server address not in connect token whitelist" in the server log).
-                // Hardcoding that IP into `additional_expected_addresses` would just replace one
-                // fragile assumption with another (DHCP reassigns it, another client may connect
-                // over a different interface) — disabling the check entirely is the correct fix
-                // for this dev/LAN scaffold, matching the already-hardcoded zero
-                // `PROTOCOL_ID`/`PRIVATE_KEY` above.
-                server_addr_check: false,
+                private_key,
+                // The token-issuing endpoint (see `start_token_http_endpoint`) embeds the HTTP
+                // requester's own IP + the game port in every connect token, so the netcode
+                // server-address whitelist matches exactly the address the client will play
+                // from — the check can stay ON (the standard, secure posture). This is why the
+                // check used to be disabled: the old flow had every client mint its own token
+                // with `0.0.0.0`, which never matched a real interface address.
+                server_addr_check: true,
                 ..default()
             }),
             LocalAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), PORT)),
