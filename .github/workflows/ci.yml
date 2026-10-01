@@ -15,12 +15,8 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.crate }}
+    name: Build server
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        crate: [client, server]
     steps:
       # ubuntu-latest ships ~25 GB of preinstalled SDKs (Android, .NET, GHC, docker images)
       # we don't use; reclaiming them leaves ~25+ GB free for target/.
@@ -41,21 +37,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libasound2-dev libudev-dev libfontconfig-dev libclang-dev
-          # libclang-dev pulls libclang-common-0-dev (Clang's builtin headers, e.g.
-          # stddef.h) — required client-side: audionimbus-sys' build script runs bindgen
-          # over Steam Audio's phonon.h and fails with "'stddef.h' file not found"
-          # when only the libclang shared library is present.
+            libasound2-dev libudev-dev
 
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build -p ${{ matrix.crate }}
+        run: cargo build -p server
 
       - name: Upload server binary
-        if: matrix.crate == 'server'
         uses: actions/upload-artifact@v4
         with:
           name: server-linux-debug
