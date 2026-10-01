@@ -73,20 +73,15 @@ bevy_hanabi = "0.19.0"
 # `DefaultPlugins`. See `bevy_tui_texture/src/bevy_plugin.rs`'s own `LOCAL PATCH` comment for the
 # fix (drops just the conflicting loader registration; `TuiFontSource::Ready`, what
 # `client::ui::tui_panel` actually uses, is unaffected).
-# bevy_tui_texture = "0.3.5"
-bevy_tui_texture = { path = "../bevy_tui_texture" }
+bevy_tui_texture = { git = "https://github.com/nchashch/bevy_tui_texture", branch = "fix/fonts" }
 ratatui = "0.30.2"
 serde = { version = "1.0.228", features = ["derive"] }
 
-polyanya = { path = "../polyanya" }
-rerecast = { path = "../rerecast/crates/rerecast" }
-bevy_mod_outline = { path = "../bevy_mod_outline" }
-bevy_vello = { path = "../bevy_vello" }
-bevy_seedling = { path = "../bevy_seedling", features = ["mp3"] }
-audionimbus = { path = "../audionimbus/audionimbus", features = [
-	"bevy",
-	"auto-install",
-] }
+vleue_navigator = "0.16"
+bevy_mod_outline = "0.13"
+bevy_vello = "0.14"
+bevy_seedling = "0.8"
+audionimbus = { version = "0.16", features = ["bevy", "auto-install"] }
 chill_bevy_console = "0.3.1"
 quick-xml = "0.42.0"
 # Kinematic character controller (Bevy + Avian + BEI). Wired into `client` ahead of the
@@ -114,7 +109,13 @@ ron = "0.12.1"
 # initialized (client panics at connect). Our direct `lightyear_inputs_bei` dep below only
 # provides the import path + per-binary `client`/`server` features; it does NOT feed the
 # meta-crate's `?` passthroughs.
-lightyear = { version = "0.30.0", features = ["avian3d", "udp", "netcode", "input_bei", "debug"] }
+lightyear = { version = "0.30.0", features = [
+	"avian3d",
+	"udp",
+	"netcode",
+	"input_bei",
+	"debug",
+] }
 lightyear_avian3d = "0.30.0"
 # BEI-action input replication — the missing piece that un-blocks lightyear's `PredictionPlugin`
 # (which hard-depends on one of the `lightyear_inputs_*` plugins having initialized
@@ -129,4 +130,4 @@ lightyear_inputs_bei = "0.30.0"
 # `gltf-json`/`gltf-derive` don't need their own patch entries: `../gltf`'s own Cargo.toml
 # references them as workspace-local path dependencies, not crates.io ones.
 [patch.crates-io]
-gltf = { path = "../gltf" }
+gltf = { git = "https://github.com/nchashch/gltf", branch = "feat/khr_texture_basisu" }

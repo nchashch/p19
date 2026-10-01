@@ -46,8 +46,6 @@ bevy_common_assets.workspace = true
 bevy_hanabi.workspace = true
 bevy_tui_texture.workspace = true
 ratatui.workspace = true
-polyanya.workspace = true
-rerecast.workspace = true
 bevy_mod_outline.workspace = true
 bevy_vello.workspace = true
 bevy_seedling.workspace = true
@@ -67,11 +65,12 @@ toml = "0.9"
 # need it.
 bevy-steamworks = "0.17.0"
 
-bevy_mod_openxr = { path = "../../bevy_oxr/crates/bevy_openxr" }
-bevy_xr_utils = { path = "../../bevy_oxr/crates/bevy_xr_utils" }
+bevy_mod_openxr = "0.6"
+bevy_xr_utils = "0.6"
+bevy_mod_xr = "0.6"
+
 bevy_vrm1 = "0.9.2"
 openxr = "0.21.1"
-bevy_mod_xr = { path = "../../bevy_oxr/crates/bevy_xr" }
 bevy_fluent.workspace = true
 fluent_content.workspace = true
 unic-langid.workspace = true
@@ -88,7 +87,11 @@ rmcp = { version = "3.4", features = [
     "transport-streamable-http-server",
 ], optional = true }
 axum = { version = "0.8", optional = true }
-tokio = { version = "1", features = ["rt-multi-thread", "net", "time"], optional = true }
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "net",
+    "time",
+], optional = true }
 reqwest = { version = "0.12", default-features = false, features = [
     "json",
     "rustls-tls",
@@ -96,6 +99,8 @@ reqwest = { version = "0.12", default-features = false, features = [
 base64 = { version = "0.22", optional = true }
 # Same 0.25 line bevy_render pulls transitively for screenshot encoding — declared so
 # `dev::tool_api` can crop captures (`imageops::crop_imm`) and PNG-encode them itself.
-image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
+image = { version = "0.25", optional = true, default-features = false, features = [
+    "png",
+] }
 serde_json = { version = "1", optional = true }
 schemars = { version = "1.0", optional = true }

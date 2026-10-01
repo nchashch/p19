@@ -62,16 +62,16 @@ bevy_common_assets.workspace = true
 # server's own BRP over loopback — the same shape as the client's `dev::tool_api`, minus
 # everything client-specific (input mocking, screenshots, UI dumps).
 rmcp = { version = "3.4", features = [
-    "server",
-    "macros",
-    "schemars",
-    "transport-streamable-http-server",
+	"server",
+	"macros",
+	"schemars",
+	"transport-streamable-http-server",
 ] }
 axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "net", "time"] }
 reqwest = { version = "0.12", default-features = false, features = [
-    "json",
-    "rustls-tls",
+	"json",
+	"rustls-tls",
 ] }
 serde_json = "1"
 serde.workspace = true
