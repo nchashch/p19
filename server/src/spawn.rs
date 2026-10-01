@@ -37,15 +37,17 @@ pub(crate) fn apply_spawn_npc(
     // lives on, but `Gcd` lives on that connection's separately-spawned player character
     // (`ControlledBy { owner: <connection> }`) — looking it up on the connection itself
     // silently dropped every spawn request (pre-M2 the connection entity *was* the player).
-    let mut caster_gcd: Option<Mut<Gcd>> = None;
-    for player in owned_players(caster, *controlled) {
-        if let Ok(gcd) = casters.get_mut(player) {
-            caster_gcd = Some(gcd);
-            break;
-        }
-    }
-    let Some(mut gcd) = caster_gcd else {
+    // Select the entity with the immutable `contains` first and borrow once after the loop:
+    // keeping a `Mut<Gcd>` from a loop iteration alive across later `get_mut` calls is an
+    // E0499 under stable rustc (local nightlies' borrow-checker improvements accept it).
+    let player = owned_players(caster, *controlled)
+        .into_iter()
+        .find(|player| casters.contains(*player));
+    let Some(player) = player else {
         debug!("spawn_npc from `{caster}` dropped: no player character carrying `Gcd`");
+        return;
+    };
+    let Ok(mut gcd) = casters.get_mut(player) else {
         return;
     };
     if !gcd.0.is_finished() {
@@ -144,15 +146,14 @@ pub(crate) fn apply_spawn_cube(
     commands: &mut Commands,
 ) {
     // Caster resolution — see the matching comment in [`apply_spawn_npc`].
-    let mut caster_gcd: Option<Mut<Gcd>> = None;
-    for player in owned_players(caster, *controlled) {
-        if let Ok(gcd) = casters.get_mut(player) {
-            caster_gcd = Some(gcd);
-            break;
-        }
-    }
-    let Some(mut gcd) = caster_gcd else {
+    let player = owned_players(caster, *controlled)
+        .into_iter()
+        .find(|player| casters.contains(*player));
+    let Some(player) = player else {
         debug!("spawn_cube from `{caster}` dropped: no player character carrying `Gcd`");
+        return;
+    };
+    let Ok(mut gcd) = casters.get_mut(player) else {
         return;
     };
     if !gcd.0.is_finished() {
