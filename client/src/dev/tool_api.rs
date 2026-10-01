@@ -59,6 +59,7 @@ use shared::client_events::{InGameRequest, ObserveRequest};
 use shared::combat::{Dead, Gcd, HitPoints};
 use shared::game_state::GameState;
 use shared::inputs::PlayerInputContext;
+use shared::player::{PlayerCharacter, Selectable};
 
 use avian3d::prelude::LinearVelocity;
 
@@ -1668,32 +1669,104 @@ fn mouse_button_to_pointer_button(
     }
 }
 
-/// `game/select` — injects crosshair targeting headlessly: sets the `Selected` resource to the
-/// given entity (the u64 id a `world.query` on the *same client* reports). The attack/kill
-/// hotkey send path (`game/trigger attack|kill`) consumes exactly this, so combat QA works
-/// without a window (`raycast_from_center` needs one). Validates that the entity exists and is
-/// `Selectable` — the same gate the real raycast applies.
+/// `game/select` — injects crosshair targeting headlessly: sets the `Selected` resource.
+/// Three mutually exclusive ways to name the target (exactly one params key):
+/// - `{"entity": <u64>}` — the raw entity id *this client* reports (`world.query`/`game/state`).
+/// - `{"nearest": true}` — the nearest *other* player character (excludes this client's own).
+/// - `{"name": "<string>"}` — exact `Name` match among players; ambiguous matches are rejected
+///   with a count (note: player names are hardcoded to `"player name"` today, so this is only
+///   useful once names are actually unique).
+/// All paths validate the target is `Selectable` — the same gate the real raycast applies.
+/// The attack/kill hotkey send path (`game/trigger attack|kill`) consumes exactly this, so
+/// combat QA works without a window (`raycast_from_center` needs one).
 fn select_method(params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
+    use crate::controls::targeting::Selected;
+
     let Some(params) = params.0 else {
         return Err(BrpError::internal("missing params"));
     };
-    let bits = params
-        .get("entity")
+    let by_entity = params.get("entity");
+    let nearest = params.get("nearest").and_then(serde_json::Value::as_bool);
+    let by_name = params.get("name").and_then(serde_json::Value::as_str);
+    let provided = [by_entity.is_some(), nearest.unwrap_or(false), by_name.is_some()]
+        .into_iter()
+        .filter(|provided| *provided)
+        .count();
+    if provided != 1 {
+        return Err(BrpError::internal(
+            "provide exactly one of: entity (u64 id) | nearest (true) | name (string)",
+        ));
+    }
+
+    if let Some(name) = by_name {
+        let mut candidates: Vec<Entity> = Vec::new();
+        for (entity, name_component, _) in world
+            .query_filtered::<(Entity, &Name, Has<Selectable>), With<PlayerCharacter>>()
+            .iter(world)
+        {
+            if name_component.as_str() == name {
+                candidates.push(entity);
+            }
+        }
+        return if candidates.len() == 1 {
+            let entity = candidates[0];
+            world.resource_mut::<Selected>().0 = Some(entity);
+            Ok(json!({"selected": entity, "name": name}).into())
+        } else {
+            Err(BrpError::internal(&format!(
+                "name {name:?} matched {} players (names must be unique to select by name)",
+                candidates.len()
+            )))
+        };
+    }
+
+    let entity = if let Some(bits) = by_entity
         .and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())))
-        .ok_or_else(|| {
-            BrpError::internal("missing params.entity (the u64 entity id this client reports)")
-        })?;
-    let entity = bevy::ecs::entity::Entity::from_bits(bits);
+    {
+        bevy::ecs::entity::Entity::from_bits(bits)
+    } else if nearest == Some(true) {
+        let Some(local_player) = world
+            .get_resource::<crate::gameplay::player_character::LocalPlayer>()
+            .and_then(|lp| lp.0)
+        else {
+            return Err(BrpError::internal("no local player (not in game?)"));
+        };
+        let Some(my_position) = world.get::<Transform>(local_player).map(|t| t.translation)
+        else {
+            return Err(BrpError::internal("local player has no Transform"));
+        };
+        let (mut best, mut best_distance) = (None, f32::MAX);
+        // Exclude by entity value, not a query filter: `LocalPlayer` is a Resource (Bevy 0.19
+        // accepts resources in query filters, where `Without<LocalPlayer>` excludes nothing —
+        // verified live: without this check `nearest` selected the attacker's own player at
+        // distance 0).
+        for (entity, transform, _) in world
+            .query_filtered::<(Entity, &Transform, Has<Selectable>), With<PlayerCharacter>>()
+            .iter(world)
+        {
+            if entity == local_player {
+                continue;
+            }
+            let distance = my_position.distance(transform.translation);
+            if distance < best_distance {
+                (best, best_distance) = (Some(entity), distance);
+            }
+        }
+        best.ok_or_else(|| BrpError::internal("no other player character to select"))?
+    } else {
+        return Err(BrpError::internal("missing params.target"));
+    };
+
     let selectable = world
         .query_filtered::<(), bevy::ecs::query::With<shared::player::Selectable>>()
         .get(world, entity)
         .is_ok();
     if !selectable {
         return Err(BrpError::internal(&format!(
-            "entity {bits} is not a targetable `Selectable` on this client (query it first: {bits} must be this client's local id)"
+            "entity {entity:?} is not a targetable `Selectable` on this client (ids are client-local; query this same client)"
         )));
     }
-    world.resource_mut::<crate::controls::targeting::Selected>().0 = Some(entity);
+    world.resource_mut::<Selected>().0 = Some(entity);
     Ok(json!({"selected": entity}).into())
 }
 
