@@ -8,6 +8,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  # Debuginfo is the bulk of a Bevy debug build's target/ size (the client's exceeds the
+  # ~14 GB free on ubuntu-latest); CI only compile-checks, so skip it. Also keeps the
+  # target/ cache under rust-cache's 10 GB cap.
+  CARGO_PROFILE_DEV_DEBUG: 0
 
 jobs:
   build:
@@ -18,6 +22,19 @@ jobs:
       matrix:
         crate: [client, server]
     steps:
+      # ubuntu-latest ships ~25 GB of preinstalled SDKs (Android, .NET, GHC, docker images)
+      # we don't use; reclaiming them leaves ~25+ GB free for target/.
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
+
       - uses: actions/checkout@v4
 
       - name: Install system dependencies (bevy/linux linking)
