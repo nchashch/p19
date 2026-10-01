@@ -51,7 +51,9 @@ impl Plugin for NetworkingPlugin {
 /// The player(s) belonging to a connection, for cleanup: everything the server spawned for
 /// that client's `player()` bundle is `ControlledBy { owner: <connection> }` — including the
 /// `Lifetime::Persistent` player that would otherwise linger after the client leaves.
-fn owned_players(
+/// Also the caster-resolution path for `server::spawn` (the connection has no `Gcd` — the
+/// player character it owns does).
+pub(crate) fn owned_players(
     connection: Entity,
     controlled: Query<(Entity, &ControlledBy)>,
 ) -> Vec<Entity> {

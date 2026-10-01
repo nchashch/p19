@@ -1,6 +1,7 @@
 use avian3d::{math::TAU, prelude::*};
 use bevy::prelude::*;
 use lightyear::prelude::*;
+use crate::networking::owned_players;
 use crate::replay::{RecordedMessage, ReplayRecorder};
 use noiz::{
     prelude::*,
@@ -25,12 +26,25 @@ impl Plugin for ServerSpawnPlugin {
 pub(crate) fn apply_spawn_npc(
     caster: Entity,
     request: &SpawnNpcRequest,
+    controlled: &Query<(Entity, &ControlledBy)>,
     casters: &mut Query<&mut Gcd>,
     tick: Tick,
     spatial_query: &SpatialQuery,
     commands: &mut Commands,
 ) {
-    let Ok(mut gcd) = casters.get_mut(caster) else {
+    // Caster resolution (post-M2): `caster` is the *connection* entity the `MessageReceiver`
+    // lives on, but `Gcd` lives on that connection's separately-spawned player character
+    // (`ControlledBy { owner: <connection> }`) — looking it up on the connection itself
+    // silently dropped every spawn request (pre-M2 the connection entity *was* the player).
+    let mut caster_gcd: Option<Mut<Gcd>> = None;
+    for player in owned_players(caster, *controlled) {
+        if let Ok(gcd) = casters.get_mut(player) {
+            caster_gcd = Some(gcd);
+            break;
+        }
+    }
+    let Some(mut gcd) = caster_gcd else {
+        debug!("spawn_npc from `{caster}` dropped: no player character carrying `Gcd`");
         return;
     };
     if !gcd.0.is_finished() {
@@ -76,6 +90,7 @@ pub(crate) fn apply_spawn_npc(
 fn spawn_npc(
     receivers: Query<(Entity, &mut MessageReceiver<SpawnNpcRequest>)>,
     mut commands: Commands,
+    controlled: Query<(Entity, &ControlledBy)>,
     mut casters: Query<&mut Gcd>,
     timeline: Res<LocalTimeline>,
     spatial_query: SpatialQuery,
@@ -95,6 +110,7 @@ fn spawn_npc(
             apply_spawn_npc(
                 caster,
                 &request,
+                &controlled,
                 &mut casters,
                 timeline.tick(),
                 &spatial_query,
@@ -108,12 +124,22 @@ fn spawn_npc(
 pub(crate) fn apply_spawn_cube(
     caster: Entity,
     request: &SpawnCubeRequest,
+    controlled: &Query<(Entity, &ControlledBy)>,
     casters: &mut Query<&mut Gcd>,
     tick: Tick,
     spatial_query: &SpatialQuery,
     commands: &mut Commands,
 ) {
-    let Ok(mut gcd) = casters.get_mut(caster) else {
+    // Caster resolution — see the matching comment in [`apply_spawn_npc`].
+    let mut caster_gcd: Option<Mut<Gcd>> = None;
+    for player in owned_players(caster, *controlled) {
+        if let Ok(gcd) = casters.get_mut(player) {
+            caster_gcd = Some(gcd);
+            break;
+        }
+    }
+    let Some(mut gcd) = caster_gcd else {
+        debug!("spawn_cube from `{caster}` dropped: no player character carrying `Gcd`");
         return;
     };
     if !gcd.0.is_finished() {
@@ -159,6 +185,7 @@ pub(crate) fn apply_spawn_cube(
 fn spawn_cube(
     receivers: Query<(Entity, &mut MessageReceiver<SpawnCubeRequest>)>,
     mut commands: Commands,
+    controlled: Query<(Entity, &ControlledBy)>,
     mut casters: Query<&mut Gcd>,
     timeline: Res<LocalTimeline>,
     spatial_query: SpatialQuery,
@@ -178,6 +205,7 @@ fn spawn_cube(
             apply_spawn_cube(
                 caster,
                 &request,
+                &controlled,
                 &mut casters,
                 timeline.tick(),
                 &spatial_query,

@@ -557,6 +557,7 @@ fn replay_combat(
 fn replay_spawn(
     current: Res<CurrentTickEvents>,
     connections: Res<ReplayConnections>,
+    controlled: Query<(Entity, &ControlledBy)>,
     mut casters: Query<&mut Gcd>,
     timeline: Res<LocalTimeline>,
     spatial_query: SpatialQuery,
@@ -574,6 +575,7 @@ fn replay_spawn(
                 crate::spawn::apply_spawn_cube(
                     connection,
                     request,
+                    &controlled,
                     &mut casters,
                     timeline.tick(),
                     &spatial_query,
@@ -584,6 +586,7 @@ fn replay_spawn(
                 crate::spawn::apply_spawn_npc(
                     connection,
                     request,
+                    &controlled,
                     &mut casters,
                     timeline.tick(),
                     &spatial_query,
