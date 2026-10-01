@@ -41,10 +41,8 @@ impl Plugin for ServerCombatPlugin {
 // removal below starves ahoy's KCC) or look around (`server::input::accumulate_look` gates on
 // `Without<Dead>`) while dead, but dead *attackers* still need gating in
 // `apply_attack`/`apply_kill` — unreachable until the caster-resolution fix below lands, since
-// combat currently no-ops for everyone. Also: killing a player currently panics the victim's
-// client (lightyear `sync_last_confirmed_checkpoint` needs `Res<ServerMutateTicks>`, which
-// doesn't exist client-side — see the AGENTS.md dead-player gap entry; ablation-confirmed
-// pre-existing, exposed by this death path becoming exercisable).
+// combat currently no-ops for everyone. (The death-path client panic found in playtest 0015 is
+// fixed: `--no-render` now adds `SyncWorldPlugin` — see the AGENTS.md dead-player gap entry.)
 fn kill_zero_hp(
     query: Query<(Entity, &HitPoints, &Transform), Without<Dead>>,
     mut commands: Commands,

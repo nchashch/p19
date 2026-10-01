@@ -166,7 +166,21 @@ impl Plugin for Prototype19 {
                 .init_asset::<bevy::pbr::StandardMaterial>()
                 .init_asset::<bevy::mesh::Mesh>()
                 .insert_resource(NoRenderMode)
-                .add_systems(Update, shim_camera_computed);
+                .add_systems(Update, shim_camera_computed)
+                // Normally added by `ExtractPlugin` (inside the disabled `RenderPlugin`):
+                // inserts `PendingSyncEntity` + the add/remove observers for
+                // `SyncToRenderWorld`. Without it, the FIRST despawn of any entity whose
+                // components registered a render-sync hook (`SyncComponentPlugin`'s
+                // on-remove handler does `resource_mut::<PendingSyncEntity>()`) panicked
+                // the whole app — hit live when a replicated player's corpse despawned
+                // (playtest 0015's death-path panic; `sync_last_confirmed_checkpoint`'s
+                // `ServerMutateTicks` failure right after was collateral: that resource is
+                // removed-then-reinserted inside `receive_replication`, and the hook panic
+                // unwound past the reinsert). `SyncWorldPlugin::build` is main-world-only
+                // (resource + observers); with no render app nothing drains the pending
+                // queue, but it grows only per despawned sync-entity — bounded by session
+                // activity on a headless agent host.
+                .add_plugins(bevy::render::sync_world::SyncWorldPlugin);
             } else {
                 app.add_plugins(plugin_group);
             }
