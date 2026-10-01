@@ -8,6 +8,7 @@ use bevy::world_serialization::WorldInstanceReady;
 use lightyear::prelude::*;
 use shared::assets::level::{ClientReplicate, Level};
 use shared::client_events::{ClientDespawn, InGameRequest, LoadLevelRequest, ObserveRequest};
+use shared::player::PlayerCharacter;
 use shared::replication::ClientInGame;
 use shared::{
     game_state::ServerState,
@@ -249,6 +250,8 @@ fn on_level_ready(
 /// of a live [`MessageReceiver`]-drained one.
 pub(crate) fn apply_in_game_request(
     entity: Entity,
+    name_seed: u32,
+    names: &Query<&Name, With<PlayerCharacter>>,
     player_spawner: &Query<&Transform, With<PlayerCharacterSpawner>>,
     in_game_root: Entity,
     game_room: &GameRoom,
@@ -256,7 +259,13 @@ pub(crate) fn apply_in_game_request(
     commands: &mut Commands,
 ) {
     if let Ok(player_spawner_transform) = player_spawner.single() {
-        let name = "player name".to_string();
+        // Unique random two-word name (e.g. "Brisk Falcon", "Brisk Falcon #2" on collision) —
+        // every joiner used to be hardcoded to `"player name"`, which broke name-based
+        // targeting (`game/select {name}` answered "ambiguous") and nameplate/kill-feed
+        // semantics. `taken` is every existing player's `Name`.
+        let taken: std::collections::HashSet<String> =
+            names.iter().map(Name::to_string).collect();
+        let name = shared::player::generate_player_name(name_seed, &taken);
         let at = player_spawner_transform.translation;
         let room = game_room.0;
         commands.entity(entity).insert(Rooms::single(room));
@@ -286,6 +295,7 @@ pub(crate) fn apply_in_game_request(
 
 fn in_game_request(
     receivers: Query<(Entity, &mut MessageReceiver<InGameRequest>)>,
+    names: Query<&Name, With<PlayerCharacter>>,
     player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
     in_game_root: Single<Entity, With<InGameRoot>>,
     game_room: Res<GameRoom>,
@@ -306,6 +316,10 @@ fn in_game_request(
             }
             apply_in_game_request(
                 entity,
+                // Same replay-determinism seeding convention as `spawn.rs`'s RNG: tick XOR
+                // connection-entity bits.
+                timeline.tick().0 ^ entity.to_bits() as u32,
+                &names,
                 &player_spawner,
                 *in_game_root,
                 &game_room,

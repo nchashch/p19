@@ -300,7 +300,7 @@ use bevy::time::TimeUpdateStrategy;
 use avian3d::prelude::SpatialQuery;
 use shared::combat::{Gcd, HitPoints};
 use shared::level::InGameRoot;
-use shared::player::PlayerCharacterSpawner;
+use shared::player::{PlayerCharacter, PlayerCharacterSpawner};
 use crate::level_state::LevelState;
 use crate::rooms::GameRoom;
 use shared::assets::level::Level;
@@ -611,6 +611,8 @@ fn replay_networking(
     levels: Res<Assets<Level>>,
     in_game_root: Single<Entity, With<InGameRoot>>,
     mut level_state: ResMut<LevelState>,
+    names: Query<&Name, With<PlayerCharacter>>,
+    timeline: Res<LocalTimeline>,
     player_spawner: Query<&Transform, With<PlayerCharacterSpawner>>,
     game_room: Res<GameRoom>,
     remote_ids: Query<&RemoteId>,
@@ -638,6 +640,8 @@ fn replay_networking(
             RecordedMessage::InGame(_) => {
                 apply_in_game_request(
                     connection,
+                    timeline.tick().0 ^ connection.to_bits() as u32,
+                    &names,
                     &player_spawner,
                     *in_game_root,
                     &game_room,

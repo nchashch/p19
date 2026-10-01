@@ -32,6 +32,96 @@ pub struct PlayerCharacter;
 #[reflect(Component)]
 pub struct Selectable;
 
+/// Adjective vocabulary for [`generate_player_name`]'s first word.
+pub const NAME_ADJECTIVES: &[&str] = &[
+    "Amber", "Bold", "Brisk", "Calm", "Clever", "Crimson", "Daring", "Eager", "Fierce",
+    "Gentle", "Gilded", "Grim", "Humble", "Ivory", "Jolly", "Keen", "Lucky", "Mellow",
+    "Nimble", "Noble", "Onyx", "Pale", "Quiet", "Rapid", "Rusty", "Sable", "Shrewd",
+    "Silent", "Swift", "Tender", "Tidy", "Umber", "Valiant", "Vast", "Wary", "Wild",
+];
+
+/// Noun vocabulary for [`generate_player_name`]'s second word.
+pub const NAME_NOUNS: &[&str] = &[
+    "Ash", "Badger", "Birch", "Blade", "Bloom", "Boar", "Bramble", "Brook", "Comet",
+    "Crag", "Crow", "Dart", "Ember", "Falcon", "Fjord", "Flint", "Frost", "Gale",
+    "Heron", "Hollow", "Kite", "Lantern", "Maple", "Marrow", "Moss", "Otter", "Pine",
+    "Raven", "Reed", "Shale", "Sparrow", "Stone", "Thistle", "Thorn", "Viper", "Willow",
+];
+
+/// Generates a unique, human-readable player name: two vocabulary words (seeded from
+/// [`NoiseRng`] — tick-XOR-connection-bits at the call site, the same replay-determinism
+/// convention as `spawn.rs`'s RNG), with a `#N` suffix appended on collision with any name in
+/// `taken` (the caller passes every existing player's `Name`): `"Brisk Falcon"`, then
+/// `"Brisk Falcon #2"`, `"Brisk Falcon #3"`, …
+pub fn generate_player_name(seed: u32, taken: &std::collections::HashSet<String>) -> String {
+    use noiz::prelude::Noise;
+    use noiz::rng::AnyValueFromBits;
+    let rng = noiz::rng::NoiseRng(seed);
+    let adjectives = NAME_ADJECTIVES;
+    let nouns = NAME_NOUNS;
+    let base = format!(
+        "{} {}",
+        adjectives[rng.rand_u32(0) as usize % adjectives.len()],
+        nouns[rng.rand_u32(1) as usize % nouns.len()],
+    );
+    if !taken.contains(&base) {
+        return base;
+    }
+    let mut suffix = 2;
+    loop {
+        let candidate = format!("{base} #{suffix}");
+        if !taken.contains(&candidate) {
+            return candidate;
+        }
+        suffix += 1;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn names(base: &str, count: u32) -> std::collections::HashSet<String> {
+        (0..count)
+            .map(|i| {
+                if i == 0 {
+                    base.to_string()
+                } else {
+                    format!("{base} #{}", i + 1)
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn generated_name_has_two_words() {
+        let name = generate_player_name(7, &Default::default());
+        assert_eq!(name.split_whitespace().count(), 2);
+    }
+
+    #[test]
+    fn colliding_base_gets_suffix_two() {
+        let taken = names(&generate_player_name(7, &Default::default()), 1);
+        let name = generate_player_name(7, &taken);
+        assert!(name.ends_with(" #2"));
+    }
+
+    #[test]
+    fn suffix_increments_past_existing_suffixes() {
+        let base = generate_player_name(7, &Default::default());
+        let taken = names(&base, 3); // base, #2, #3 all taken
+        let name = generate_player_name(7, &taken);
+        assert_eq!(name, format!("{base} #4"));
+    }
+
+    #[test]
+    fn different_seeds_tend_to_differ() {
+        let a = generate_player_name(1, &Default::default());
+        let b = generate_player_name(2, &Default::default());
+        assert_ne!(a, b);
+    }
+}
+
 pub fn player(player_name: String, position: Vec3) -> impl Bundle {
     (
         (
