@@ -53,3 +53,57 @@ jobs:
 
       - name: Build
         run: cargo build -p ${{ matrix.crate }}
+
+      - name: Upload server binary
+        if: matrix.crate == 'server'
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-linux-debug
+          path: target/debug/server
+
+  # Shippable Steam client: built inside the official steamrt4 SDK container so the binary
+  # links the Steam Runtime's own (older) glibc and libraries — the container equivalent of
+  # the local `steam_deck_toolbox.sh cargo build -p client --release` workflow (see
+  # AGENTS.md's GLIBC-taint gotcha: a host-built binary fails on the Deck with
+  # `GLIBC_2.4x not found`). The repo never reaches this job's linker from the host, so
+  # this job does not need the host free-disk/apt steps.
+  client-steamrt4:
+    name: Build client (steamrt4, shippable)
+    runs-on: ubuntu-latest
+    container:
+      image: registry.gitlab.steamos.cloud/steamrt/steamrt4/sdk:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The SDK container runs as root; without this, every git command in later steps
+      # (and rust-cache's repo hashing) fails on git's dubious-ownership check.
+      - name: Trust checkout workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # Same native deps as the host check job; the steamrt4 SDK is Debian-based, so the
+      # same package names apply. libclang-dev again for audionimbus-sys' bindgen step.
+      - name: Install system dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            libasound2-dev libudev-dev libfontconfig-dev libclang-dev pkg-config curl
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build client (release)
+        run: cargo build -p client --release
+
+      - name: Verify GLIBC baseline
+        run: |
+          objdump -T target/release/client | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -5
+
+      - name: Upload client binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-linux-steamrt4
+          path: target/release/client
