@@ -57,6 +57,8 @@ impl Plugin for SharedReplicationPlugin {
         // `RigidBody::Dynamic`, matching client main.rs's "full Avian simulation runs
         // client-side" intent.
         app.component::<RigidBody>().replicate();
+        app.component::<LockedAxes>().replicate();
+        app.component::<Transform>().replicate();
         app.component::<CollisionLayers>().replicate();
         app.component::<Selectable>().replicate();
         app.component::<Npc>().replicate();

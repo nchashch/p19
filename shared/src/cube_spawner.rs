@@ -3,6 +3,7 @@
 //! what velocity" is made once. Presentation (the renderable model, `Selectable`,
 //! despawn-on-menu) stays in `client`, reacting to `CubeSpawned`.
 
+use crate::assets::level::ClientWorldAsset;
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -25,6 +26,9 @@ pub fn cube(
 ) -> impl Bundle {
     (
         Cube,
+        ClientWorldAsset {
+            asset_path: "rigs/prop/cube.glb".to_string(),
+        },
         Name::new("Cube"),
         HitPoints {
             hit_points: 200,

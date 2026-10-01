@@ -1834,8 +1834,7 @@ dependencies = [
 [[package]]
 name = "bevy_mod_outline"
 version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97f2e45781f64d23a3fecfd86d13efbb5256832b8091fe3b48cecd5875c538b9"
+source = "git+https://github.com/nchashch/bevy_mod_outline?branch=fix%2Fskinned-motion-outline#4fe41b0491cff6e02f169d3c8eb840fc6b0cbe40"
 dependencies = [
  "bevy",
  "bitfield",

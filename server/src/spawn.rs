@@ -1,12 +1,13 @@
+use crate::networking::owned_players;
+use crate::replay::{RecordedMessage, ReplayRecorder};
 use avian3d::{math::TAU, prelude::*};
 use bevy::prelude::*;
 use lightyear::prelude::*;
-use crate::networking::owned_players;
-use crate::replay::{RecordedMessage, ReplayRecorder};
 use noiz::{
     prelude::*,
     rng::{AnyValueFromBits, NoiseRng},
 };
+use shared::assets::level::ClientWorldAsset;
 use shared::{
     client_events::SpawnCubeRequest, cube_spawner::cube, npc_spawner::npc, player::Selectable,
 };
@@ -53,7 +54,9 @@ pub(crate) fn apply_spawn_npc(
     gcd.0.reset();
 
     let translation = request.transform.translation;
-    let shape = Collider::capsule(0.4, 1.0);
+    const CAPSULE_RADIUS: f32 = 0.4;
+    const CAPSULE_LENGTH: f32 = 1.0;
+    let shape = Collider::capsule(CAPSULE_RADIUS, CAPSULE_LENGTH);
     if !spatial_query
         .shape_intersections(
             &shape,
@@ -82,6 +85,16 @@ pub(crate) fn apply_spawn_npc(
             npc(shape, translation),
             Replicate::to_clients(NetworkTarget::All),
             Selectable,
+        ))
+        .with_child((
+            ClientWorldAsset {
+                asset_path: "rigs/armature/npc.glb".to_string(),
+            },
+            Transform::from_translation(Vec3::new(
+                0.0,
+                -(CAPSULE_LENGTH / 2.0 + CAPSULE_RADIUS),
+                0.0,
+            )),
         ))
         .id();
     let _ = npc_entity;

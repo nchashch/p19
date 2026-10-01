@@ -78,7 +78,7 @@ ratatui = "0.30.2"
 serde = { version = "1.0.228", features = ["derive"] }
 
 vleue_navigator = "0.16"
-bevy_mod_outline = "0.13"
+bevy_mod_outline = { git = "https://github.com/nchashch/bevy_mod_outline", branch = "fix/skinned-motion-outline" }
 bevy_vello = "0.14"
 bevy_seedling = "0.8"
 audionimbus = { version = "0.16", features = ["bevy", "auto-install"] }
