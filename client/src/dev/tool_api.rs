@@ -107,6 +107,7 @@ impl Plugin for DevToolsPlugin {
         let keyboard_method_id = app.register_system(keyboard_method);
         let mouse_method_id = app.register_system(mouse_method);
         let trigger_method = app.register_system(trigger_method);
+        let select_method = app.register_system(select_method);
         let levels_method = app.register_system(levels_method);
         let select_level_method = app.register_system(select_level_method);
         let ui_method = app.register_system(ui_dump_method);
@@ -123,6 +124,7 @@ impl Plugin for DevToolsPlugin {
         methods.insert("game/keyboard", bevy::remote::RemoteMethodSystemId::Instant(keyboard_method_id));
         methods.insert("game/mouse", bevy::remote::RemoteMethodSystemId::Instant(mouse_method_id));
         methods.insert("game/trigger", bevy::remote::RemoteMethodSystemId::Instant(trigger_method));
+        methods.insert("game/select", bevy::remote::RemoteMethodSystemId::Instant(select_method));
         methods.insert("game/levels", bevy::remote::RemoteMethodSystemId::Instant(levels_method));
         methods.insert("game/select_level", bevy::remote::RemoteMethodSystemId::Instant(select_level_method));
         methods.insert("game/ui", bevy::remote::RemoteMethodSystemId::Instant(ui_method));
@@ -204,6 +206,13 @@ fn game_state_snapshot(world: &mut World) -> serde_json::Value {
         out.insert("dead_remaining_secs".into(), json!(dead.0.remaining_secs()));
     } else {
         out.insert("dead".into(), json!(false));
+    }
+    // Current crosshair target (or `game/select` injection) — what `game/trigger attack|kill`
+    // would hit right now. Absent when nothing is selected.
+    if let Some(selected) = world.get_resource::<crate::controls::targeting::Selected>() {
+        if let Some(entity) = selected.0 {
+            out.insert("selected".into(), json!(entity));
+        }
     }
 
     // Binding introspection (playtest 0012's F7): whether `bind_replicated_ahoy_actions`
@@ -1659,6 +1668,35 @@ fn mouse_button_to_pointer_button(
     }
 }
 
+/// `game/select` — injects crosshair targeting headlessly: sets the `Selected` resource to the
+/// given entity (the u64 id a `world.query` on the *same client* reports). The attack/kill
+/// hotkey send path (`game/trigger attack|kill`) consumes exactly this, so combat QA works
+/// without a window (`raycast_from_center` needs one). Validates that the entity exists and is
+/// `Selectable` — the same gate the real raycast applies.
+fn select_method(params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
+    let Some(params) = params.0 else {
+        return Err(BrpError::internal("missing params"));
+    };
+    let bits = params
+        .get("entity")
+        .and_then(|v| v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())))
+        .ok_or_else(|| {
+            BrpError::internal("missing params.entity (the u64 entity id this client reports)")
+        })?;
+    let entity = bevy::ecs::entity::Entity::from_bits(bits);
+    let selectable = world
+        .query_filtered::<(), bevy::ecs::query::With<shared::player::Selectable>>()
+        .get(world, entity)
+        .is_ok();
+    if !selectable {
+        return Err(BrpError::internal(&format!(
+            "entity {bits} is not a targetable `Selectable` on this client (query it first: {bits} must be this client's local id)"
+        )));
+    }
+    world.resource_mut::<crate::controls::targeting::Selected>().0 = Some(entity);
+    Ok(json!({"selected": entity}).into())
+}
+
 /// `game/trigger` — triggers the app's own client-local events, the same ones the menu buttons
 /// fire. `connect` → the main menu's Connect (opens the lightyear connection); `play` → the
 /// lobby's Play (sends `InGameRequest` via the client's own `MessageSender`); `disconnect` →
@@ -1717,8 +1755,19 @@ fn trigger_method(params: In<Option<serde_json::Value>>, mut world: &mut World) 
             world.commands().trigger(crate::events::SpawnNpc);
             Ok(json!({"triggered": "spawn_npc"}).into())
         }
+        // The attack/kill hotkeys' send path, headlessly: no window means no crosshair
+        // targeting, so `game/select` injects `Selected` directly and these trigger the same
+        // send observers the hotkeys do (see `controls.rs`'s `send_attack`/`send_kill`).
+        "attack" => {
+            world.commands().trigger(crate::events::AttackSelected);
+            Ok(json!({"triggered": "attack"}).into())
+        }
+        "kill" => {
+            world.commands().trigger(crate::events::KillSelected);
+            Ok(json!({"triggered": "kill"}).into())
+        }
         other => Err(BrpError::internal(&format!(
-            "unknown event {other:?} (expected connect|play|observe|disconnect)"
+            "unknown event {other:?} (expected connect|play|observe|disconnect|spawn_cube|spawn_npc|attack|kill)"
         ))),
     }
 }

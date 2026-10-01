@@ -35,5 +35,17 @@ pub struct SpawnCube;
 #[derive(Event)]
 pub struct SpawnNpc;
 
+/// Client-local trigger — attacks whatever crosshair targeting (or, headlessly,
+/// `game/select`) has put in [`crate::controls::targeting::Selected`], translating into an
+/// `AttackAttempt`. Split from the `AttackAction` hotkey observer so `game/trigger attack`
+/// can drive the exact same send path without a window (crosshair targeting needs one).
+#[derive(Event)]
+pub struct AttackSelected;
+
+/// Client-local trigger — the [`KillSelected`] counterpart to [`AttackSelected`]: instant-kill
+/// variant (`KillAttempt`), same `Selected`-driven send path.
+#[derive(Event)]
+pub struct KillSelected;
+
 #[derive(Event)]
 pub struct RespawnPlayer;

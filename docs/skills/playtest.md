@@ -140,8 +140,9 @@ Custom `game/*` methods (see `client/src/dev/tool_api.rs`):
 
 | Method | Params | Effect |
 |---|---|---|
-| `game/state` | — | Structured dump: `connected`, `game_state`, `position`, `velocity`, `look_yaw`, `look_pitch`, `grounded`, `crouching`, `dead`, `hit_points`, `max_hit_points`, `gcd_remaining_secs`, `player_entity` |
-| `game/trigger` | `{"event":"connect"\|"play"\|"disconnect"\|"spawn_cube"\|"spawn_npc"}` | Fires the app's own client-local events — the same ones the menu buttons / hotkeys fire. `connect` opens the netcode connection, `play` sends `InGameRequest`, the spawns go through the client observers into server requests |
+| `game/state` | — | Structured dump: `connected`, `game_state`, `position`, `velocity`, `look_yaw`, `look_pitch`, `grounded`, `crouching`, `dead`, `hit_points`, `max_hit_points`, `gcd_remaining_secs`, `player_entity`, `selected` (current attack target, when set) |
+| `game/trigger` | `{"event":"connect"\|"play"\|"observe"\|"disconnect"\|"spawn_cube"\|"spawn_npc"\|"attack"\|"kill"}` | Fires the app's own client-local events — the same ones the menu buttons / hotkeys fire. `connect` opens the netcode connection, `play` sends `InGameRequest`, `attack`/`kill` send `AttackAttempt`/`KillAttempt` for whatever `game/select` targeted |
+| `game/select` | `{"entity": <u64 id this client reports>}` | Injects crosshair targeting headlessly (`Selected` = that entity, validated `Selectable`). Pair with `game/trigger attack\|kill` for combat QA — the crosshair raycast itself needs a real window |
 | `game/levels` | — | Lists the server-replicated `Levels` singleton (`asset_path` + `name`). Lobby only |
 | `game/select_level` | `{"asset_path":"levels/minimal.level.ron"}` | Sends `LoadLevelRequest` (the lobby level-picker's exact message) |
 | `game/input` | see §5 | Mocks a replicated BEI action entity for `ticks` fixed ticks |

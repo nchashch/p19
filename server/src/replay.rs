@@ -75,6 +75,7 @@ use shared::client_events::{
     AttackAttempt, ClientDespawn, InGameRequest, KillAttempt, LoadLevelRequest, SpawnCubeRequest,
     SpawnNpcRequest,
 };
+use shared::combat::Dead;
 use shared::inputs::{MouseLook, PlayerInputContext, StickLook};
 use shared::game_state::ServerState;
 use std::time::Duration;
@@ -522,6 +523,8 @@ fn replay_inject_actions(
 fn replay_combat(
     current: Res<CurrentTickEvents>,
     connections: Res<ReplayConnections>,
+    controlled: Query<(Entity, &ControlledBy)>,
+    dead: Query<(), With<Dead>>,
     positions: Query<&Transform>,
     mut targets: Query<&mut HitPoints>,
     mut casters: Query<&mut Gcd>,
@@ -538,14 +541,14 @@ fn replay_combat(
         match message {
             RecordedMessage::Attack(attempt) => {
                 crate::combat::apply_attack(
-                    connection, attempt, &positions, &mut targets, &mut casters, &mut sender,
-                    &server,
+                    connection, attempt, &controlled, &dead, &positions, &mut targets,
+                    &mut casters, &mut sender, &server,
                 )?;
             }
             RecordedMessage::Kill(attempt) => {
                 crate::combat::apply_kill(
-                    connection, attempt, &positions, &mut targets, &mut casters, &mut sender,
-                    &server,
+                    connection, attempt, &controlled, &dead, &positions, &mut targets,
+                    &mut casters, &mut sender, &server,
                 )?;
             }
             _ => {}

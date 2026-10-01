@@ -73,18 +73,25 @@ fn on_entity_died(
     }
 }
 
-fn hide_dead(query: Query<Entity, With<Dead>>, mut commands: Commands) {
-    for dead in query {
-        commands.entity(dead).insert(Visibility::Hidden);
+/// Hides dead entities and stops their owner-side local simulation. Idempotent by the
+/// `Visibility != Hidden` guard, not a spam-every-frame re-queue: these entities despawn ~1 s
+/// later server-side, and a queued command racing the replicated despawn panics on apply
+/// ("Entity despawned" — hit live when a *remote* player's corpse despawned on this client).
+/// Once hidden, nothing is queued again for the corpse's remaining life.
+fn hide_dead(dead: Query<(Entity, &Visibility), With<Dead>>, mut commands: Commands) {
+    for (entity, visibility) in &dead {
+        if *visibility == Visibility::Hidden {
+            continue;
+        }
+        commands.entity(entity).insert(Visibility::Hidden);
         // Stop the owner's *local* prediction from moving their own corpse: the server
         // already starves a dead player's KCC (`kill_zero_hp` removes `RigidBody`), but this
         // client's ahoy KCC keeps running on the predicted entity, so held movement inputs
         // would rubber-band the corpse against the frozen server position until despawn.
-        // Removing the controller stops the local simulation; `Dead` lasts ~1 s before
-        // `despawn_dead` removes the entity, and the `InputMarker` stream keeps flowing
-        // harmlessly (nothing consumes it — the server look accumulator gates on
+        // Removing the controller stops the local simulation; the `InputMarker` stream keeps
+        // flowing harmlessly (nothing consumes it — the server look accumulator gates on
         // `Without<Dead>` too).
-        commands.entity(dead).remove::<AhoyCharacterController>();
+        commands.entity(entity).remove::<AhoyCharacterController>();
     }
 }
 

@@ -2,6 +2,7 @@ use avian3d::prelude::{Collider, RigidBody};
 use bevy::prelude::*;
 use lightyear::core::tick::TickDuration;
 use lightyear::prelude::*;
+use crate::networking::owned_players;
 use crate::replay::{RecordedMessage, ReplayRecorder};
 use shared::{
     client_events::{AttackAttempt, KillAttempt},
@@ -100,23 +101,29 @@ fn tick_gcd(tick_duration: Res<TickDuration>, mut query: Query<&mut Gcd>) {
 pub(crate) fn apply_kill(
     killer: Entity,
     attempt: &KillAttempt,
+    controlled: &Query<(Entity, &ControlledBy)>,
+    dead: &Query<(), With<Dead>>,
     positions: &Query<&Transform>,
     targets: &mut Query<&mut HitPoints>,
     casters: &mut Query<&mut Gcd>,
     sender: &mut ServerMultiMessageSender,
     server: &Server,
 ) -> Result {
-    let Ok(mut gcd) = casters.get_mut(killer) else {
-        // Continue here skips only the inner loop iteration, which is what we want.
-        //
-        // Since there could be a situation where there are two attack attempts coming from
-        // the same client -- one of them invalid and one valid.
+    // Caster resolution + dead-attacker gate — see the matching comment in [`apply_attack`].
+    let player = owned_players(killer, *controlled)
+        .into_iter()
+        .find(|player| casters.contains(*player) && !dead.contains(*player));
+    let Some(player) = player else {
+        debug!("kill from `{killer}` dropped: no living player character");
+        return Ok(());
+    };
+    let Ok(mut gcd) = casters.get_mut(player) else {
         return Ok(());
     };
     if !gcd.0.is_finished() {
         return Ok(());
     }
-    let Ok(killer_transform) = positions.get(killer) else {
+    let Ok(killer_transform) = positions.get(player) else {
         return Ok(());
     };
     let Ok(target_transform) = positions.get(attempt.entity) else {
@@ -135,7 +142,7 @@ pub(crate) fn apply_kill(
         sender.send::<Kill, OrderedReliable>(
             &Kill {
                 entity: attempt.entity,
-                killer,
+                killer: player,
             },
             server,
             &NetworkTarget::All,
@@ -146,6 +153,8 @@ pub(crate) fn apply_kill(
 
 fn resolve_kill(
     receivers: Query<(Entity, &mut MessageReceiver<KillAttempt>)>,
+    controlled: Query<(Entity, &ControlledBy)>,
+    dead: Query<(), With<Dead>>,
     positions: Query<&Transform>,
     mut targets: Query<&mut HitPoints>,
     mut casters: Query<&mut Gcd>,
@@ -168,6 +177,8 @@ fn resolve_kill(
             apply_kill(
                 killer,
                 &attempt,
+                &controlled,
+                &dead,
                 &positions,
                 &mut targets,
                 &mut casters,
@@ -183,23 +194,34 @@ fn resolve_kill(
 pub(crate) fn apply_attack(
     attacker: Entity,
     attempt: &AttackAttempt,
+    controlled: &Query<(Entity, &ControlledBy)>,
+    dead: &Query<(), With<Dead>>,
     positions: &Query<&Transform>,
     targets: &mut Query<&mut HitPoints>,
     casters: &mut Query<&mut Gcd>,
     sender: &mut ServerMultiMessageSender,
     server: &Server,
 ) -> Result {
-    let Ok(mut gcd) = casters.get_mut(attacker) else {
-        // Continue here skips only the inner loop iteration, which is what we want.
-        //
-        // Since there could be a situation where there are two attack attempts coming from
-        // the same client -- one of them invalid and one valid.
+    // Caster resolution (post-M2): `attacker` is the *connection* entity the `MessageReceiver`
+    // lives on, but its `Gcd` and `Transform` live on the separately-spawned player character
+    // (`ControlledBy { owner: <connection> }`) — looking them up on the connection itself
+    // silently dropped every attack request (see the matching comment in `spawn.rs`).
+    // Excluding dead players here *is* the dead-attacker gate: a corpse keeps its `Gcd`, so
+    // without this check a dead player could keep attacking.
+    let player = owned_players(attacker, *controlled)
+        .into_iter()
+        .find(|player| casters.contains(*player) && !dead.contains(*player));
+    let Some(player) = player else {
+        debug!("attack from `{attacker}` dropped: no living player character");
+        return Ok(());
+    };
+    let Ok(mut gcd) = casters.get_mut(player) else {
         return Ok(());
     };
     if !gcd.0.is_finished() {
         return Ok(());
     }
-    let Ok(attacker_transform) = positions.get(attacker) else {
+    let Ok(attacker_transform) = positions.get(player) else {
         return Ok(());
     };
     let Ok(target_transform) = positions.get(attempt.entity) else {
@@ -218,7 +240,7 @@ pub(crate) fn apply_attack(
         sender.send::<Attack, OrderedReliable>(
             &Attack {
                 entity: attempt.entity,
-                attacker,
+                attacker: player,
             },
             server,
             &NetworkTarget::All,
@@ -229,6 +251,8 @@ pub(crate) fn apply_attack(
 
 fn resolve_attack(
     receivers: Query<(Entity, &mut MessageReceiver<AttackAttempt>)>,
+    controlled: Query<(Entity, &ControlledBy)>,
+    dead: Query<(), With<Dead>>,
     positions: Query<&Transform>,
     mut targets: Query<&mut HitPoints>,
     mut casters: Query<&mut Gcd>,
@@ -251,6 +275,8 @@ fn resolve_attack(
             apply_attack(
                 attacker,
                 &attempt,
+                &controlled,
+                &dead,
                 &positions,
                 &mut targets,
                 &mut casters,

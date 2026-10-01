@@ -60,6 +60,8 @@ impl Plugin for PlayerControlsPlugin {
             console_closed.and_then(in_state(ModalMenuState::Closed)),
             attack,
             kill,
+            send_attack,
+            send_kill,
             rotate_camera,
             select,
             deselect,
@@ -286,8 +288,19 @@ fn deselect(_event: On<Fire<Deselect>>, mut selected: ResMut<Selected>) {
     selected.0 = None;
 }
 
-fn attack(
-    _: On<Start<AttackAction>>,
+fn attack(_: On<Start<AttackAction>>, mut commands: Commands) {
+    commands.trigger(crate::events::AttackSelected);
+}
+
+fn kill(_: On<Start<KillAction>>, mut commands: Commands) {
+    commands.trigger(crate::events::KillSelected);
+}
+
+/// The single `AttackAttempt` send path, shared by the `AttackAction` hotkey and
+/// `game/trigger attack`. Split from the hotkey observer so headless QA can attack without a
+/// window (crosshair targeting needs one — `game/select` injects `Selected` directly instead).
+fn send_attack(
+    _: On<crate::events::AttackSelected>,
     selected: Res<Selected>,
     mut sender: Single<&mut MessageSender<AttackAttempt>>,
 ) {
@@ -297,8 +310,9 @@ fn attack(
     sender.send::<OrderedReliable>(AttackAttempt { entity });
 }
 
-fn kill(
-    _: On<Start<KillAction>>,
+/// The single `KillAttempt` send path — see [`send_attack`].
+fn send_kill(
+    _: On<crate::events::KillSelected>,
     selected: Res<Selected>,
     mut sender: Single<&mut MessageSender<KillAttempt>>,
 ) {
