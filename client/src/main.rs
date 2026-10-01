@@ -323,11 +323,16 @@ impl Plugin for Prototype19 {
                 SharedMeshPrimitivePlugin,
             ),
             (
-                CubeSpawnerPlugin,
-                NpcSpawnerPlugin,
-                NpcUiQuadPlugin,
-                PlayerCharacterPlugin,
-                ClientMeshPrimitivePlugin,
+                // Nested tuple-of-tuples: the outer tuple is at Bevy's 15-element `Plugins`
+                // limit, and the gameplay/misc groups below total 16 plugins across the two
+                // of them — a 2-element tuple of tuples counts as one outer element.
+                (
+                    CubeSpawnerPlugin,
+                    NpcSpawnerPlugin,
+                    NpcUiQuadPlugin,
+                    PlayerCharacterPlugin,
+                    gameplay::interpolated_remotes::InterpolatedRemotesPlugin,
+                    ClientMeshPrimitivePlugin,
                 // `bevy_ahoy` (Bevy + Avian + BEI kinematic character controller) — wired in
                 // ahead of the actual controller migration, deliberately inert for now: no
                 // entity carries ahoy's `CharacterController` and none of its own input actions
@@ -338,16 +343,19 @@ impl Plugin for Prototype19 {
                 // (added by `PlayerControlsPlugin`, via `PlayerCharacterPlugin` directly above).
                 // Sits in this inner tuple only because the outer one is already at Bevy's
                 // 15-element `Plugins` tuple-impl limit. Default schedule: `FixedPostUpdate`.
-                AhoyPlugins::default(),
-                FpsControllerPlugin,
-                GameStatePlugin { vr_enabled },
-                InputDevicePlugin,
-                NameplatePlugin,
-                ui::ui::PrototypeUiPlugin,
-                lifecycle::networking::NetworkingPlugin,
-                ModalMenuPlugin,
-                QuadPanelPlugin,
-                InputIconsPlugin,
+                    AhoyPlugins::default(),
+                    FpsControllerPlugin,
+                ),
+                (
+                    GameStatePlugin { vr_enabled },
+                    InputDevicePlugin,
+                    NameplatePlugin,
+                    ui::ui::PrototypeUiPlugin,
+                    lifecycle::networking::NetworkingPlugin,
+                    ModalMenuPlugin,
+                    QuadPanelPlugin,
+                    InputIconsPlugin,
+                ),
             ),
         ));
 
