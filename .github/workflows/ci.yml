@@ -41,7 +41,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libasound2-dev libudev-dev libfontconfig-dev
+            libasound2-dev libudev-dev libfontconfig-dev libclang-dev
+          # libclang-dev pulls libclang-common-0-dev (Clang's builtin headers, e.g.
+          # stddef.h) — required client-side: audionimbus-sys' build script runs bindgen
+          # over Steam Audio's phonon.h and fails with "'stddef.h' file not found"
+          # when only the libclang shared library is present.
 
       - uses: dtolnay/rust-toolchain@stable
 
