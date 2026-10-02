@@ -55,4 +55,5 @@ written, so older reports still describe the layout they were filed under:
 
 So a report that mentions `report.typ`, compiling a PDF, or a path like `bug_0004.typ` is
 describing the project at the time it was written; it is not a broken link to fix. The bug
-reports in [`../bug_reports/`](../bug_reports/) are still typst for now.
+reports in [`../bug_reports/`](../bug_reports/) went through the same conversion right after
+(see that directory's README).

@@ -1,7 +1,7 @@
 # Skill: Filing bug reports (`docs/agents/bug_reports/`)
 
 Read this before filing a bug report. Bug reports are the project's permanent defect ledger:
-every reproducible flaw, regression, misbehavior, or design-level hazard gets one `.typ` file,
+every reproducible flaw, regression, misbehavior, or design-level hazard gets one Markdown file,
 numbered, dated, pinned to the exact code state it was found in — and **retained forever, even
 after the bug is fixed** (fixed reports are marked `Fixed` in place, never deleted). Fixed
 reports are regression armor: they encode the repro, the root cause, and the fix so the same
@@ -21,24 +21,20 @@ and `docs/agents/skills/playtest.md` (whose harness drives the reproductions).
 
 ## 2. Layout and numbering
 
-- One file per bug: `docs/agents/bug_reports/bug_XXXX.typ` (`bug_0001`, `bug_0002`, …).
+- One file per bug: `docs/agents/bug_reports/bug_XXXX.md` (`bug_0001`, `bug_0002`, …),
+  GitHub-flavored Markdown, tracked in git. GitHub renders it directly; there is no build step
+  and no typst.
 - **Find the next free number; never reuse or renumber.** Numbers are permanent identities —
   reports are retained forever, fixed or not, so other documents can cite `bug_0007` stably.
-- The `.typ` source is the record of truth and is **tracked in git**. Compile it in place for
-  review:
-  ```sh
-  typst compile --root docs docs/agents/bug_reports/bug_XXXX.typ
-  ```
-  The produced `bug_XXXX.pdf` is gitignored (`/docs/agents/bug_reports/*.pdf`) — regenerable, never
-  committed. (Do not put PDFs in `dist/`; there is no per-bug dist — the source is the
-  artifact.)
+- `docs/agents/bug_reports/README.md` explains the directory and its history (reports were
+  typst until 2026-10-02); don't edit it per bug.
 
 ## 3. Metadata table (top of every report)
 
-Follow the playtest-report house style: `#set document(title: "Bug 0007 — <one-line summary>", …)`,
-numbered headings, a metadata `#table`, a `<findings>` label on the findings block, and
-single-star Typst strong (`*bold*` — `**` is Markdown and silently renders unbolded; this bit
-three playtest reports before being caught).
+Follow the playtest-report house style (`docs/agents/skills/playtest.md` §10): one H1
+`# Bug 0007 — <one-line summary>`, then a two-column `| Field | Value |` table, `##` section
+headings in the §4 order, fenced code blocks for commands and logs. Escape a literal `|` in a
+table cell as `\|` and a literal `<word>` outside code as `\<word>`.
 
 Required fields:
 
