@@ -29,5 +29,8 @@ Each record uses the same shape: **Context** (the problem, forces, constraints),
 | [0011](./0011-agent-vision-and-fleet-improvements.md) | Vision and fleet improvements: data-first observation, UI-tree dumps, state-fused/cropped captures, per-client ports | Accepted |
 | [0012](./0012-no-render-agent-client-mode.md) | A `--no-render` agent-client mode: the headless host without wgpu/Vulkan | Accepted |
 | [0013](./0013-server-determinism-and-session-replay.md) | Server-side determinism hardening and session recording/replay for post-release debugging | Accepted |
+| [0014](./0014-multiplayer-hardening-netcode-tokens-and-portable-builds.md) | Multiplayer hardening, per-client netcode tokens over TLS, and portable CI builds | Accepted |
 
-New records should be added to this index in the same PR/commit that adds the file.
+New records should be added to this index in the same PR/commit that adds the file. From 0014
+onward, records follow [`docs/agents/skills/adr.md`](../skills/adr.md) (header table, author
+model, commit, evidence rules); 0001–0013 predate it and are intentionally left as written.
