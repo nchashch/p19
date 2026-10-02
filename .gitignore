@@ -1,6 +1,5 @@
 /target
-/client/assets
-/server/assets
-/assets_src
-/profiling
+/assets/client
+/assets/server
+/assets/src
 /scripts/__pycache__

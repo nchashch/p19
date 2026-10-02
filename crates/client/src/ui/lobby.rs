@@ -107,7 +107,7 @@ fn lobby_main_menu_button(_: On<Activate>, mut commands: Commands) {
 
 /// Tags the wrapper around `[toggle button, selector popup]` for the level picker, so
 /// `sync_level_options` can find *this* selector specifically to (re)seed it — see
-/// `client/src/ui/selector.rs`'s own doc comment for the worked example this mirrors.
+/// `crates/client/src/ui/selector.rs`'s own doc comment for the worked example this mirrors.
 #[derive(Component, Clone, Default)]
 pub(crate) struct LevelPicker;
 

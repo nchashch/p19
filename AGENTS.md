@@ -28,13 +28,13 @@ A Bevy 0.19 (Rust, edition 2024) 3D multiplayer game prototype, built "always mu
 singleplayer runs a local client and server. **`p19`** (from the working title "prototype 19") is
 the internal codename only; product branding is deliberately undecided — don't introduce a public
 name. Cargo workspace with three members — package names are `p19-*` (Rust crate paths `p19_*`,
-binary names `p19-client`/`p19-server`), while the directories keep the short names:
+binary names `p19-client`/`p19-server`), living in `crates/<short name>/`:
 
-- **`p19-client`** (`client/`) — rendering, UI, input, camera, presentation. Sends intent as
+- **`p19-client`** (`crates/client/`) — rendering, UI, input, camera, presentation. Sends intent as
   network messages and renders what the server replicates; never decides outcomes.
-- **`p19-server`** (`server/`) — headless authoritative simulation: level loading (real `.glb` +
+- **`p19-server`** (`crates/server/`) — headless authoritative simulation: level loading (real `.glb` +
   Avian colliders, no GPU), player spawning, movement, combat, spawning cubes/NPCs.
-- **`p19-shared`** (`shared/`) — what both sides must agree on: replication registration, message
+- **`p19-shared`** (`crates/shared/`) — what both sides must agree on: replication registration, message
   types, the player bundle, spawn bundles, shared data components, game states.
 
 Reflected type paths (Skein extras in `.glb`/`.gltf`, BRP queries) therefore start with
@@ -81,7 +81,7 @@ Current, confirmed gaps. Don't assume these work.
 - **Replay movement rate mismatch**: `server --replay` reproduces sessions deterministically but
   replayed movement covers far less distance than live (~1 vs ~12.7 units over 60 ticks). Leading
   suspect: the injected `Fire<A>` events' `fired_secs`/`elapsed_secs` are hardcoded to `0.0`. See
-  `server/src/replay.rs`'s module doc.
+  `crates/server/src/replay.rs`'s module doc.
 - **KCC has no ground friction**: with zero wish velocity, ahoy's `ground_accelerate` leaves
   velocity untouched, so a character coasts indefinitely once input stops.
 - **Join-burst input corrections**: when a second client joins, the replication burst can push the
@@ -98,15 +98,14 @@ Current, confirmed gaps. Don't assume these work.
 - **Netcode posture is dev-grade**: TOFU-pinned self-signed TLS for the token endpoint; production
   needs a CA-signed certificate on a real backend.
 - **Dead or unused code**: `GameState::Loading`/`Paused` (never entered), `lifecycle/loading.rs`'s
-  `clear_effects` (never called), `client/src/assets/level.rs` and `shared/src/server_state.rs`
-  (empty; the latter isn't even declared), `PreloadCollection` (never loaded), `client/src/ui/framework.rs`
+  `clear_effects` (never called), `crates/client/src/assets/level.rs` and `crates/shared/src/server_state.rs`
+  (empty; the latter isn't even declared), `PreloadCollection` (never loaded), `crates/client/src/ui/framework.rs`
   (unwired 9-slice button demo), `Character` registered for replication twice, the
   `vleue_navigator` workspace dependency (no member uses it). The main menu's Options rows and
   Credits button are stubs that log "not implemented yet".
 - **Doc/code mismatches to distrust**: `p19_shared::assets::level::Level`'s doc comment claims
   `model`/`skybox` are dependency-tracked handles — the loader just converts them to plain
-  `AssetPath`s. A doc comment in `server/src/main.rs` claims the server has no `assets/` of its own
-  (it does: `server/assets/`). `shared/src/server_events.rs` uses stale replicon terminology.
+  `AssetPath`s. `crates/shared/src/server_events.rs` uses stale replicon terminology.
 - **Tests**: only a handful of unit tests (`p19_server::networking` token-address fallback,
   `p19_shared::player` name generation). CI builds but runs no gameplay tests.
 
@@ -158,11 +157,18 @@ cargo run -p p19-server --release     # listens on UDP 0.0.0.0:6000 (+ HTTPS tok
 cargo run -p p19-client --release     # connects when the main menu's Connect button is pressed
 ```
 
-- **Assets**: `client/assets/` and `server/assets/` are separate asset roots (Bevy resolves assets
-  relative to each crate's `CARGO_MANIFEST_DIR`, so `client/assets/` must stay inside `client/`).
-  `assets_src/` holds raw `.blend` files and source packs; nothing loads from it. Assets are not
-  tracked in git.
-- **Client config**: `client/assets/config.toml` (`server_ip`, default `127.0.0.1`; `vr`, default
+- **Layout**: crates in `crates/{client,server,shared}/`; assets outside them in
+  `assets/client/` and `assets/server/` (the two asset roots) and `assets/src/` (raw `.blend` files
+  and source packs; nothing loads from it). Assets are not tracked in git.
+- **Asset root resolution** (`p19_shared::paths::asset_dir`, used for `AssetPlugin::file_path` and
+  for every plain-`std::fs` read of asset-root files — config, network identity, TLS pin):
+  1. `BEVY_ASSET_ROOT` set → `$BEVY_ASSET_ROOT/assets` (isolated playtest asset sets, overrides);
+  2. `<workspace>/assets/<client|server>` if it exists (development checkout; no env vars needed,
+     any working directory);
+  3. `assets/` beside the executable (deployed builds, e.g. the Steam Deck staging dir).
+  Don't rely on Bevy's default `CARGO_MANIFEST_DIR`-relative `assets/`: it would point inside
+  `crates/*`. Dev-only locations (agent screenshot staging) use `p19_shared::paths::workspace_root`.
+- **Client config**: `assets/client/config.toml` (`server_ip`, default `127.0.0.1`; `vr`, default
   `false`). Missing fields fall back to defaults. There is no in-game UI for these.
 - **Steam Deck builds**: always build inside the `steamrt4` toolbox with
   `scripts/steam_deck_toolbox.sh cargo build -p <p19-client|p19-server> --release`. A host build links the
@@ -172,7 +178,7 @@ cargo run -p p19-client --release     # connects when the main menu's Connect bu
   `objdump -T target/release/<bin> | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -5` (should top
   out around `GLIBC_2.39`).
 - `scripts/build_steam_deck.sh` cleans, builds the client in the toolbox, and stages it with a
-  copy of `client/assets/` in **`target/steamdeck/release/`** (wiped and recreated each run; a
+  copy of `assets/client/` in **`target/steamdeck/release/`** (wiped and recreated each run; a
   full `cargo clean` deletes it too — never keep hand-placed files there), then checks the GLIBC
   baseline. Ready for SteamOS Devkit Client's Title Upload: `Local Folder` =
   `<repo>/target/steamdeck/release/`, `Start Command` = `./p19-client`.
@@ -182,7 +188,9 @@ cargo run -p p19-client --release     # connects when the main menu's Connect bu
   with a GLIBC check). Both free runner disk space first.
 - **Tracy** is opt-in: `cargo run -p p19-client --release --features tracy`. Only use it with a Tracy
   GUI attached — without one, `tracy-client` buffers every span in memory (RSS grows ~150 MB/s).
-  `[profile.release] debug = true` exists for Tracy symbol names.
+  `[profile.release] debug = true` exists for Tracy symbol names. Save captures under
+  `target/profiling/` (e.g. `target/profiling/tracy_profile.tracy`) — gitignored via `/target`,
+  removed by `cargo clean`, so copy anything worth keeping elsewhere first.
 
 ## Dependency layout
 
@@ -218,7 +226,7 @@ cargo run -p p19-client --release     # connects when the main menu's Connect bu
 - **Reflected `TypePath`s include the crate/module path.** Renaming a crate or moving a module
   that holds Skein-authored types breaks previously exported `.glb`s until they're re-exported.
 
-## Architecture: client (`client/src/`)
+## Architecture: client (`crates/client/src/`)
 
 `main.rs` is pure composition (the `Prototype19` plugin) plus the `add_observers_run_if!` macro.
 Modules are grouped into `controls/`, `dev/`, `gameplay/`, `lifecycle/`, `presentation/`, `ui/`,
@@ -253,7 +261,7 @@ overlaying `InGame`), `ServerState` (server-only). `InputDeviceState`
 3. Connect button → `events::Connect` → `on_connect_request` fetches a netcode connect token over
    HTTPS (`GET https://<server_ip>:6001/connect_token`), then `poll_token_fetch` connects with
    `Authentication::Token`. The client pins the token endpoint's self-signed certificate
-   fingerprint on first use (`client/assets/network/token-tls-fingerprint.txt`; delete to re-trust).
+   fingerprint on first use (`assets/client/network/token-tls-fingerprint.txt`; delete to re-trust).
    The netcode private key never reaches the client.
 4. `On<Add, Connected>` (`on_connected`) → `Lobby`.
 5. Lobby: the level picker sends `LoadLevelRequest`; Play sends `InGameRequest`.
@@ -320,7 +328,7 @@ systems.
 - **`ui/hud.rs`** — data frame, hotbar, crosshair, control tips; reads ahoy's
   `CharacterControllerState::grounded`.
 - **`ui/tui_panel.rs`** — ratatui panel on the main menu; skipped unless the font exists at build
-  time (`client/build.rs` emits the `has_tui_font` cfg).
+  time (`crates/client/build.rs` emits the `has_tui_font` cfg).
 - **`ui/` others** — `input_icons.rs` (Kenney/Steam Deck glyphs), `widgets.rs` (hand-rolled
   button/panel used by HUD and pause modal), `modal_menu.rs`, `nameplate.rs`, `npc_ui_quad.rs`,
   `quad_panel.rs`, `localization.rs` (Fluent), `framework.rs` (unused demo).
@@ -349,7 +357,7 @@ systems.
   the headless bootstrap UI camera (`HeadlessUiCameraBootstrap`) and the player camera, and
   `keep_ui_camera_drawn_last` keeps the holder drawn last.
 
-## Architecture: shared (`shared/src/`)
+## Architecture: shared (`crates/shared/src/`)
 
 - **`replication.rs`** — `SharedReplicationPlugin` and the `OrderedReliable` channel.
   - Replicated components: `ClientWorldAsset`, `InGameRoot`, `Levels`, `ClientInGame`,
@@ -392,10 +400,10 @@ systems.
   and `ClientReplicate` (defined, not wired up).
 - **`game_state.rs`** — the shared state enums.
 
-## Architecture: server (`server/src/`)
+## Architecture: server (`crates/server/src/`)
 
 Headless (`MinimalPlugins`): `StatesPlugin`, `LogPlugin`, `.init_asset::<Mesh/Image>()` are added
-explicitly, and `server/Cargo.toml` enables `bevy/reflect_auto_register` (world-asset spawning
+explicitly, and `crates/server/Cargo.toml` enables `bevy/reflect_auto_register` (world-asset spawning
 reflects every component). The GLTF/Skein/world-serialization pipeline needs no GPU.
 
 - **`main.rs`** — `build_app(networking_plugin)` shared by the live server and `--replay`.
@@ -405,9 +413,8 @@ reflects every component). The GLTF/Skein/world-serialization pipeline needs no 
   `Startup → Lobby` once `LevelMetadataAssets` loads.
 - **`networking.rs`**
   - `start_endpoint`: binds UDP `0.0.0.0:6000`; loads or creates the netcode key at
-    `<asset root>/assets/network/netcode.key` (root = `BEVY_ASSET_ROOT`, else runtime
-    `CARGO_MANIFEST_DIR`, else the executable's directory) and the self-signed TLS identity
-    (`token-tls.crt`/`.key`) beside it.
+    `<server asset root>/network/netcode.key` (`assets/server/network/` in a dev checkout; see
+    "Asset root resolution") and the self-signed TLS identity (`token-tls.crt`/`.key`) beside it.
   - HTTPS token endpoint on :6001 (`GET /connect_token`): fresh token per request, 30 s expiry; its
     server address is the address the client used to reach the endpoint (`Host` header, falling
     back to the default-route IP, then the peer IP).

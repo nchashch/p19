@@ -13,6 +13,7 @@ pub mod inputs;
 pub mod level;
 pub mod mesh_primitive;
 pub mod npc_spawner;
+pub mod paths;
 pub mod player;
 pub mod replication;
 pub mod server_events;

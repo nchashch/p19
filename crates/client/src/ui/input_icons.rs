@@ -4,10 +4,10 @@
 //! than one `ImageNode`/draw call per separate PNG — see `InputIconAtlases` below.
 //!
 //! This used to build its own atlas at runtime (via `bevy_image::TextureAtlasBuilder`, packing the
-//! pack's ~85 individual per-icon PNGs) because a first pass over `assets_src/input_prompts/`
+//! pack's ~85 individual per-icon PNGs) because a first pass over `assets/src/input_prompts/`
 //! checked only for a `Spritesheet`-*named subdirectory* and found none. That check was wrong: the
 //! pre-built sheet + XML manifest sit as loose files at the top level of each pack folder instead
-//! (`assets_src/input_prompts/{Keyboard & Mouse,Steam Deck}/keyboard-&-mouse_sheet_default.{png,
+//! (`assets/src/input_prompts/{Keyboard & Mouse,Steam Deck}/keyboard-&-mouse_sheet_default.{png,
 //! xml}` / `steam-deck_sheet_default.{png,xml}`), copied into `assets/textures/input_prompts/` as
 //! `{keyboard_mouse,steam_deck}_sheet.{png,xml}`. Using Kenney's own sheet means no runtime
 //! packing pass and no risk of drifting from the pack's authored/tested layout.

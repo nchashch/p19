@@ -372,9 +372,8 @@ fn cameras_method(_params: In<Option<serde_json::Value>>, world: &mut World) -> 
 /// curated, Git LFS-tracked subset an agent copies in when actually filing a playtest report
 /// (see `docs/agents/skills/playtest.md` §10) — this function has no notion of "which playtest number"
 /// a capture belongs to, since that's only decided after the fact, when a report gets written.
-/// Anchored on `CARGO_MANIFEST_DIR` (set under `cargo run`/`cargo build`, and by the QA harness
-/// that launches the client) falling back to the CWD, matching how bevy itself resolves asset
-/// roots.
+/// Anchored on the workspace root this binary was built from
+/// ([`p19_shared::paths::workspace_root`]) — dev-tools only, so a compile-time path is fine.
 ///
 /// **Fleet isolation**: a client launched with a non-default `--brp-port` (multi-client
 /// testing, several clients on one machine against one server) captures into a per-client
@@ -382,9 +381,7 @@ fn cameras_method(_params: In<Option<serde_json::Value>>, world: &mut World) -> 
 /// `game/screenshot/get`'s "newest PNG in dir" answer derive from this directory, so a shared
 /// dir would cross-contaminate clients — client A's poll would return client B's capture.
 fn screenshots_dir() -> PathBuf {
-    let base = std::env::var_os("CARGO_MANIFEST_DIR")
-        .map(|manifest| PathBuf::from(manifest).join("../docs/agents/playtests/dist/screenshots"))
-        .unwrap_or_else(|| PathBuf::from("docs/agents/playtests/dist/screenshots"));
+    let base = p19_shared::paths::workspace_root().join("docs/agents/playtests/dist/screenshots");
     let port = crate::config::brp_port_presync();
     if port == bevy::remote::http::DEFAULT_PORT {
         base

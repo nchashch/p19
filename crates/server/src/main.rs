@@ -114,12 +114,13 @@ pub(crate) fn build_app<M>(networking_plugin: impl bevy::app::Plugins<M>) -> App
                 ..lightyear_debug_log_plugin()
             },
             TransformPlugin,
-            // `server` has no `assets/` directory of its own — level geometry (and eventually
-            // anything else the server needs, e.g. collider-relevant data) lives in
-            // `client/assets/` (see AGENTS.md's note on why assets live inside `client/`), so
-            // point the default filesystem asset source there instead of duplicating it.
+            // Assets live outside the crate (`<workspace>/assets/server/`); the shared resolver
+            // also honors `BEVY_ASSET_ROOT` and an `assets/` directory beside a deployed binary.
+            // Absolute path, so it overrides Bevy's own base-path join. See `p19_shared::paths`.
             AssetPlugin {
-                // file_path: "../client/assets".to_string(),
+                file_path: p19_shared::paths::asset_dir(p19_shared::paths::AssetSide::Server)
+                    .to_string_lossy()
+                    .into_owned(),
                 ..default()
             },
             PhysicsPlugins::default()
@@ -132,7 +133,7 @@ pub(crate) fn build_app<M>(networking_plugin: impl bevy::app::Plugins<M>) -> App
             LightyearAvianPlugin {
                 replication_mode: AvianReplicationMode::Position {
                     // NOT the default — see the matching comment above `PhysicsPlugins` in
-                    // `client/src/main.rs`: ahoy's KCC authors `Transform` during fixed ticks,
+                    // `crates/client/src/main.rs`: ahoy's KCC authors `Transform` during fixed ticks,
                     // which only reaches `Position` (and thus replication) when the
                     // Transform→Position import is enabled.
                     sync_to_transform: true,
@@ -142,7 +143,7 @@ pub(crate) fn build_app<M>(networking_plugin: impl bevy::app::Plugins<M>) -> App
             SharedReplicationPlugin,
             SharedAssetsPlugin,
             // Registers the `lightyear_inputs_bei` input protocol (the replicated-BEI input
-            // flow — see `shared/src/inputs.rs`). The server half of `InputPlugin` is
+            // flow — see `crates/shared/src/inputs.rs`). The server half of `InputPlugin` is
             // headless-safe: it registers `ServerInputPlugin<BEIStateSequence<C>>` and
             // disables BEI's own update systems on headless binaries, so it needs no
             // rendering and no real input devices. Note this outer tuple is now at Bevy's
@@ -169,7 +170,7 @@ pub(crate) fn build_app<M>(networking_plugin: impl bevy::app::Plugins<M>) -> App
                 // adds `RemotePlugin`/`RemoteHttpPlugin` itself, and `ServerToolsPlugin` below
                 // (which unconditionally adds both, always-on regardless of profile — see its
                 // own doc comment) then panics on the duplicate add. Same fix the client already
-                // applies to its own `SkeinPlugin` (`client/src/main.rs`), for the same reason.
+                // applies to its own `SkeinPlugin` (`crates/client/src/main.rs`), for the same reason.
                 bevy_skein::SkeinPlugin {
                     handle_brp: false,
                     ..default()
@@ -253,7 +254,7 @@ pub(crate) fn build_app<M>(networking_plugin: impl bevy::app::Plugins<M>) -> App
         // to match UASTC's own, unlike `Rgba8Unorm`'s).
         .insert_resource(CompressedImageFormatSupport(CompressedImageFormats::BC))
         // Needed for Skein to reflect `ColliderConstructor` off level geometry onto entities —
-        // mirrors the same registration in `client/src/main.rs`.
+        // mirrors the same registration in `crates/client/src/main.rs`.
         .register_type::<ColliderConstructor>();
     app
 }

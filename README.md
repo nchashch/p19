@@ -44,7 +44,7 @@ HTTP — build with `--features dev-tools` and run with `--mcp`; see
 tool API surface, known gotchas) and [`docs/agents/adr/0009`](./docs/agents/adr/0009-agent-tool-api-via-brp.md)
 for the design behind it.
 
-**Assets are not tracked in git** (`client/assets/`, `server/assets/`, and `assets_src/` are
+**Assets are not tracked in git** (`assets/client/`, `assets/server/`, and `assets/src/` are
 all gitignored) — there is currently no automated, documented process to provision them from
 a fresh clone. If you're picking this up on a new machine, you'll need to copy those
 directories over from an existing checkout by hand; there's no `cargo run` that "just works"
@@ -61,15 +61,17 @@ either.
 
 ## Project layout
 
-- **`client/`** (package `p19-client`) — the playable game: rendering, UI, input, camera,
-  presentation. Sends intent as network messages; never decides outcomes itself.
-- **`server/`** (package `p19-server`) — the headless authoritative simulation: physics, level
-  loading, player spawning, movement/combat resolution.
-- **`shared/`** (package `p19-shared`) — simulation logic and network-message types both sides
-  need to agree on (character controller, combat, player bundle, spawners, replication
-  registration).
-- **`assets_src/`** — raw source assets (`.blend` files, downloaded packs) processed into
-  `client/assets/`/`server/assets/` for actual runtime use. Nothing loads from it directly.
+- **`crates/client/`** (package `p19-client`) — the playable game: rendering, UI, input,
+  camera, presentation. Sends intent as network messages; never decides outcomes itself.
+- **`crates/server/`** (package `p19-server`) — the headless authoritative simulation:
+  physics, level loading, player spawning, movement/combat resolution.
+- **`crates/shared/`** (package `p19-shared`) — simulation logic and network-message types
+  both sides need to agree on (character controller, combat, player bundle, spawners,
+  replication registration).
+- **`assets/client/`, `assets/server/`** — each binary's runtime asset root (found
+  automatically from a development checkout; see `AGENTS.md` "Commands").
+- **`assets/src/`** — raw source assets (`.blend` files, downloaded packs) processed into
+  `assets/client/`/`assets/server/` for actual runtime use. Nothing loads from it directly.
 
 Networking is [`lightyear`](https://github.com/cBournhonesque/lightyear) 0.30 over UDP/netcode.
 Physics is [`avian3d`](https://github.com/Jondolf/avian). Automated tests are a handful of unit
@@ -103,12 +105,12 @@ in the meantime.
 
 ## License
 
-The **code** in `client/`, `server/`, and `shared/` is dual-licensed under either the
+The **code** in `crates/` is dual-licensed under either the
 [MIT License](./LICENSE-MIT) or the [Apache License, Version 2.0](./LICENSE-APACHE), at your
 option — the standard convention across the Rust and Bevy ecosystem, matching the license of
 most of this project's own dependencies.
 
-This does **not** currently cover assets (`client/assets/`, `server/assets/`, `assets_src/`) —
+This does **not** currently cover assets (`assets/client/`, `assets/server/`, `assets/src/`) —
 those include third-party content under their own separate license terms (e.g. Kenney's CC0
 packs, OFL-licensed fonts), plus original content whose licensing hasn't been decided yet. Not
 resolved yet; treat anything under those directories as unlicensed/all-rights-reserved until

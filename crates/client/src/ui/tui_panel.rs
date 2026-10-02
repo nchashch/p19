@@ -66,13 +66,13 @@ const FONT_SIZE_PX: u32 = 16;
 /// read at runtime so no `Handle`/load-state waiting is needed at all — the panel materializes
 /// as soon as `TuiRequest::ui` is spawned.
 ///
-/// `/client/assets` is gitignored, so CI checkouts have no font file; the build script
-/// (`client/build.rs`) only emits `has_tui_font` when the file exists. Without it the panel
-/// degrades to not spawning (below) — ratatui rasterizes glyphs from real TTF bytes itself,
-/// so there is no "Bevy default font" fallback path into `TuiFontSource`.
+/// `/assets/client` is gitignored, so CI checkouts have no font file; the build script
+/// (`crates/client/build.rs`) only emits `has_tui_font` when the file exists. Without it the
+/// panel degrades to not spawning (below) — ratatui rasterizes glyphs from real TTF bytes
+/// itself, so there is no "Bevy default font" fallback path into `TuiFontSource`.
 #[cfg(has_tui_font)]
 static IBM_PLEX_MONO_REGULAR: &[u8] =
-    include_bytes!("../../assets/fonts/mono/IBMPlexMono-Regular.ttf");
+    include_bytes!("../../../../assets/client/fonts/mono/IBMPlexMono-Regular.ttf");
 #[cfg(not(has_tui_font))]
 static IBM_PLEX_MONO_REGULAR: &[u8] = &[];
 
@@ -81,7 +81,7 @@ fn spawn_main_menu_tui_panel(mut commands: Commands) {
     // the app reads it; the empty `&[]` above exists only so this file compiles.
     if IBM_PLEX_MONO_REGULAR.is_empty() {
         warn_once!(
-            "TUI panel skipped: client/assets/fonts/mono/IBMPlexMono-Regular.ttf not found \
+            "TUI panel skipped: assets/client/fonts/mono/IBMPlexMono-Regular.ttf not found \
              (asset-less checkout); the menu renders without it"
         );
         return;

@@ -22,8 +22,8 @@ need, report the API gap rather than falling back to screenshots.
 
 | Process | Binary | Env | Ports |
 |---|---|---|---|
-| Game server | `target/release/p19-server` | `BEVY_ASSET_ROOT=$PWD/server` | UDP :6000 (game) · HTTPS :6001 (connect-token endpoint — must be reachable by clients; see §4 note) · server QA: BRP :15701 + MCP :15711 (`server/state`, §3) |
-| Client (headless agent host) | `target/debug/p19-client --mcp` | `CARGO_MANIFEST_DIR=$PWD/client BEVY_ASSET_ROOT=$PWD/client` | BRP HTTP :15702 · MCP :15710 |
+| Game server | `target/release/p19-server` | none needed (dev checkout → `assets/server/`) | UDP :6000 (game) · HTTPS :6001 (connect-token endpoint — must be reachable by clients; see §4 note) · server QA: BRP :15701 + MCP :15711 (`server/state`, §3) |
+| Client (headless agent host) | `target/debug/p19-client --mcp` | none needed (dev checkout → `assets/client/`) | BRP HTTP :15702 · MCP :15710 |
 | You (the agent) | shell + `curl`/python | — | talks to :15702 |
 
 `--no-render` client variant: everything in this playbook works **except
@@ -90,9 +90,12 @@ Particularities worth remembering:
 
   A failed build leaves the *previous* binary in place; rerunning then silently
   tests stale code. This bit us more than once.
-- The env vars matter: bevy_asset resolves asset roots from **runtime**
-  `CARGO_MANIFEST_DIR`/`BEVY_ASSET_ROOT`, so running the binaries bare breaks
-  asset loading. Always launch with the env set.
+- Asset roots resolve automatically (`p19_shared::paths::asset_dir`, see `AGENTS.md`
+  "Commands"): a binary built from this checkout finds `assets/client/` / `assets/server/`
+  from any working directory, no env vars needed. Set `BEVY_ASSET_ROOT=<dir>` only to point a
+  binary at an isolated asset set (`<dir>/assets/` is then used, e.g. §10's
+  `playtest_assets/playtest_NNNN/{client,server}`). Don't set `CARGO_MANIFEST_DIR` — it no
+  longer affects asset loading.
 - The tool API is gated by the **`dev-tools` cargo feature** (works in dev *and*
   release — the gate is the feature, never the profile). `--mcp` additionally
   switches the client to the headless agent host (no window at all).
@@ -106,13 +109,12 @@ ss -tunap | grep -E ":(6000|6001)\b"             # game + token ports free?
 ss -tlnp | grep -E "15701|15702|15710|15711"      # client + server QA ports free?
 
 # server
-(BEVY_ASSET_ROOT=$PWD/server ./target/release/p19-server > "$LOG/server.log" 2>&1 &)
+(./target/release/p19-server > "$LOG/server.log" 2>&1 &)
 sleep 4                        # wait for the bind
 
 # client — put a hard lifetime on it (timeout N) and keep N big enough for the
 # whole test; a dead client answers BRP with connection-refused (silent with -s)
-(CARGO_MANIFEST_DIR=$PWD/client BEVY_ASSET_ROOT=$PWD/client \
-  timeout 300 ./target/debug/p19-client --mcp > "$LOG/client.log" 2>&1 &)
+(timeout 300 ./target/debug/p19-client --mcp > "$LOG/client.log" 2>&1 &)
 sleep 8                        # menu reachable ~2s; give slack
 
 # sanity: the MCP server must have come up
@@ -142,7 +144,7 @@ curl -s -m 6 http://127.0.0.1:15702 -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"game/state","params":{}}'
 ```
 
-Custom `game/*` methods (see `client/src/dev/tool_api.rs`):
+Custom `game/*` methods (see `crates/client/src/dev/tool_api.rs`):
 
 | Method | Params | Effect |
 |---|---|---|
@@ -187,7 +189,7 @@ curl … "game/trigger" '{"event":"connect"}'
 # poll game/state every ~2s until game_state == "Lobby" (first poll usually)
 
 # 2. list levels (Lobby only) and pick the asset_path
-curl … "game/levels"     # levels/minimal.level.ron is currently the only level in server/assets/levels/
+curl … "game/levels"     # levels/minimal.level.ron is currently the only level in assets/server/levels/
 
 # 3. select level (only if the server isn't already InGame with it — see §8)
 curl … "game/select_level" '{"asset_path":"levels/minimal.level.ron"}'
@@ -205,10 +207,10 @@ Connect requires the server's token HTTPS endpoint (:6001) to be reachable from 
 host — `game/trigger connect` fetches a netcode connect token over TLS before opening the
 game connection. The server's self-signed certificate is pinned trust-on-first-use: the first
 successful connect writes its SHA-256 fingerprint to
-`client/assets/network/token-tls-fingerprint.txt`, and later connects must match (a mismatch — MITM
+`assets/client/network/token-tls-fingerprint.txt`, and later connects must match (a mismatch — MITM
 or server cert rotation — refuses the fetch with an explicit error; delete the file to
 re-trust a legitimately rotated cert). Server restarts keep the identity (the cert/key files
-persist in `server/assets/network/`), so the pin survives restarts. Timing note: the token fetch adds
+persist in `assets/server/network/`), so the pin survives restarts. Timing note: the token fetch adds
 ~100 ms to the connect step; a fetch failure (server unreachable on :6001) logs
 `connect token fetch failed` and leaves the client at MainMenu for a retry.
 

@@ -32,7 +32,7 @@ accepts pre-encoded block data for any format since it just packages bytes witho
 Bevy's own KTX2 loader (`bevy_image`) auto-detects a 6-face KTX2 as a cube texture
 (`TextureViewDimension::Cube`) directly from the file's metadata, so the result can be loaded and
 used as a `Skybox` image with no further reinterpretation needed at runtime — unlike the legacy
-PNG-vertical-strip cubemap `client/src/camera.rs` used before (see that file's own comments on
+PNG-vertical-strip cubemap `crates/client/src/camera.rs` used before (see that file's own comments on
 `Image::reinterpret_stacked_2d_as_array`, a workaround needed only because plain PNGs carry no
 cubemap metadata at all). `bevy_image::ktx2::ktx2_format_to_texture_format` maps
 `BC6H_UFLOAT_BLOCK`/`BC6H_SFLOAT_BLOCK` straight to `TextureFormat::Bc6hRgbUfloat`/`Bc6hRgbFloat`

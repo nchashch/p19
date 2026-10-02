@@ -35,7 +35,7 @@ echo "==> Staging binary + assets at $STAGING_DIR"
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"
 cp target/release/p19-client "$STAGING_DIR/p19-client"
-cp -r client/assets "$STAGING_DIR/assets"
+cp -r assets/client "$STAGING_DIR/assets"
 
 if command -v objdump >/dev/null 2>&1; then
     max_glibc=$(objdump -T "$STAGING_DIR/p19-client" | grep -oE 'GLIBC_[0-9.]+' | sed 's/GLIBC_//' | sort -Vu | tail -1)

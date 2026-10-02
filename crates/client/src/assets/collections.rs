@@ -22,7 +22,7 @@
 //! `LoadingState` scoped to `GameState::Loading` (see `main.rs`) rather than `AssetLoading` — its
 //! manifest isn't known at `main.rs`'s build time the way `common_assets.assets.ron` is, since
 //! which level to load is a runtime choice (`config.toml`'s `level`, a console `load_level`
-//! command, or eventually a level-select UI). `client/src/loading.rs`'s `load_level` registers the
+//! command, or eventually a level-select UI). `crates/client/src/loading.rs`'s `load_level` registers the
 //! chosen `.ron` file into `DynamicAssetCollections<GameState>` for `GameState::Loading`
 //! immediately before transitioning into it, instead of it being fixed via
 //! `.with_dynamic_assets_file(...)` up front — see that module for the full flow, including why
@@ -76,7 +76,7 @@ pub struct CommonAssets {
     /// `--no-common-assets`/playtest-assets mode: the playtest's own
     /// `collections/common_assets.assets.ron` lists only the world keys, and these come back
     /// `None` (the consumers degrade to Bevy's built-in defaults: the embedded default font,
-    /// no skybox pass, no icon quads, no sample playback). The normal `client/assets` manifest
+    /// no skybox pass, no icon quads, no sample playback). The normal `assets/client` manifest
     /// lists every key, so production behavior is unchanged.
     #[asset(key = "crunch", optional)]
     pub crunch: Option<Handle<AudioSample>>,

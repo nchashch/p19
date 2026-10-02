@@ -1,4 +1,4 @@
-// Playtest 0009's remapped manifest — same keys as `client/assets/collections/common_assets.assets.ron`,
+// Playtest 0009's remapped manifest — same keys as `assets/client/collections/common_assets.assets.ron`,
 // playtest-local paths: every world is a hand-authored text `.gltf` whose only content is Skein
 // `MeshPrimitive` components (zero baked mesh data). This manifest lists ONLY the five world keys —
 // since `CommonAssets`'s furniture fields became `optional`, an omitted key resolves to `None` and

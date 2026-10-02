@@ -345,7 +345,7 @@ fn main_menu(common_assets: &CommonAssets) -> impl Scene {
 /// doesn't include it, since gamepad/keyboard D-pad navigation (`MenuControls`, above) is this
 /// project's own thing, not a `bevy_feathers` concept.
 ///
-/// "Options" and "Language" are both `selector` popups (`client/src/ui/selector.rs`) now, not
+/// "Options" and "Language" are both `selector` popups (`crates/client/src/ui/selector.rs`) now, not
 /// plain buttons — see `options_picker()`/`language_picker()`.
 pub(crate) fn main_menu_buttons() -> impl Scene {
     bsn! {
@@ -417,7 +417,7 @@ pub fn menu_button(label_key: &'static str, variant: ButtonVariant) -> impl Scen
 /// Which locale a language-selector row switches to (see `apply_selected_language`) — inserted
 /// onto whichever slot entity currently shows a given language by that option's own
 /// `selector::SelectorOption::payload` closure (see `language_options`), not set once at spawn
-/// time: `client/src/ui/selector.rs`'s slots are fixed, reused entities whose content gets rebound
+/// time: `crates/client/src/ui/selector.rs`'s slots are fixed, reused entities whose content gets rebound
 /// as its paginated window scrolls.
 #[derive(Component, Clone, Default)]
 struct LocaleOption(unic_langid::LanguageIdentifier);
@@ -458,7 +458,7 @@ fn language_picker() -> impl Scene {
 /// show every option in its own language regardless of which language is currently active, not
 /// translate "日本語" into whatever's selected now.
 ///
-/// `ja-JP` in particular exists to exercise CJK rendering — see `client/assets/locales/ja-JP/`'s
+/// `ja-JP` in particular exists to exercise CJK rendering — see `assets/client/locales/ja-JP/`'s
 /// real translations. Worth knowing before trusting what it looks like: the client's own UI font
 /// (`CommonAssets.serif_font`, IBM Plex Serif) covers Latin/Cyrillic only, so this relies on
 /// `bevy`'s `system_font_discovery` feature (added to the workspace `Cargo.toml` alongside this)

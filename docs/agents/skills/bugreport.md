@@ -58,8 +58,8 @@ Required fields:
 
 1. **Summary** — one paragraph: what is broken, where, and the user-visible consequence. No
    root-cause speculation here.
-2. **Steps to reproduce** — exact, copy-pasteable, from a cold start: launch lines (with env
-   vars — `BEVY_ASSET_ROOT`/`CARGO_MANIFEST_DIR` matter, see `docs/agents/skills/playtest.md` §2),
+2. **Steps to reproduce** — exact, copy-pasteable, from a cold start: launch lines (with any
+   env vars, e.g. `BEVY_ASSET_ROOT` for an isolated asset set — see `docs/agents/skills/playtest.md` §1b/§2),
    every `game/*` harness call with its *actual* JSON payload, waits/sleeps, and the
    observation command that shows the failure. A repro someone cannot paste into a shell is
    not a repro. Prefer the QA harness (`game/state`, `game/select`, `game/trigger`,

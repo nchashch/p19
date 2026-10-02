@@ -5,7 +5,7 @@
 //! through with a debugger instead of guessed at from logs.
 //!
 //! This only works because of three separate determinism guarantees established elsewhere in
-//! this codebase (see AGENTS.md's gap-list "Fixed" entries for each): `server/src/main.rs`'s
+//! this codebase (see AGENTS.md's gap-list "Fixed" entries for each): `crates/server/src/main.rs`'s
 //! `SingleThreadedExecutor` on `Update`/`FixedPostUpdate`/`PhysicsSchedule` (no thread-scheduling
 //! nondeterminism), `spawn.rs`'s tick-seeded `NoiseRng` (no wall-clock RNG), and `combat.rs`'s
 //! `TickDuration`-driven `Gcd`/`Dead` timers (no wall-clock timers). Recording/replay would be
@@ -18,7 +18,7 @@
 //! - 7 of the 9 client→server gameplay messages `p19_shared::replication` registers —
 //!   `AttackAttempt`, `KillAttempt`, `SpawnCubeRequest`, `SpawnNpcRequest`, `LoadLevelRequest`,
 //!   `InGameRequest`, `ClientDespawn`. **Not** `LobbyRequest` (no handler anywhere in
-//!   `server/src` today, confirmed via a full grep — nothing would be reproduced by replaying
+//!   `crates/server/src` today, confirmed via a full grep — nothing would be reproduced by replaying
 //!   it) or `ObserveRequest` (only ever inserts a `Rooms` component on the connection — pure
 //!   replication-targeting bookkeeping with no effect on authoritative simulation state, which
 //!   is all replay ever tries to reproduce).

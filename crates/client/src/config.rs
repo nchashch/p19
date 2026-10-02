@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use bevy::asset::AssetPath;
 use bevy::prelude::*;
 use futures_lite::io::AsyncReadExt;
@@ -103,22 +101,13 @@ pub fn is_vr_enabled_presync() -> bool {
     is_config_flag_enabled("vr")
 }
 
-/// Shared plumbing for the pre-sync boolean flags: the config file's `assets/config.toml`
-/// resolved via the same base-path chain `bevy_asset` uses (`BEVY_ASSET_ROOT` →
-/// `CARGO_MANIFEST_DIR` → the executable's directory), read with plain `std::fs` because this
-/// runs before any asset source exists.
+/// Shared plumbing for the pre-sync boolean flags: the client asset root's `config.toml`
+/// (resolved by [`p19_shared::paths::asset_dir`], the same function `AssetPlugin` is configured
+/// from), read with plain `std::fs` because this runs before any asset source exists.
 fn is_config_flag_enabled(flag: &str) -> bool {
-    let base_path = if let Ok(root) = std::env::var("BEVY_ASSET_ROOT") {
-        PathBuf::from(root)
-    } else if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
-        PathBuf::from(manifest_dir)
-    } else {
-        std::env::current_exe()
-            .ok()
-            .and_then(|path| path.parent().map(ToOwned::to_owned))
-            .unwrap_or_default()
-    };
-    let Ok(contents) = std::fs::read_to_string(base_path.join("assets/config.toml")) else {
+    let config_path =
+        p19_shared::paths::asset_dir(p19_shared::paths::AssetSide::Client).join("config.toml");
+    let Ok(contents) = std::fs::read_to_string(config_path) else {
         return false;
     };
     match toml::from_str::<ClientConfig>(&contents) {

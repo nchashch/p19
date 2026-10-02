@@ -105,10 +105,23 @@ impl Plugin for Prototype19 {
         // `CommonAssets` collection load at all (see the branch at the bottom of this method).
         // Implied by `--no-render`.
         let no_common_assets = config::is_no_common_assets_presync() || no_render;
+        // Assets live outside the crate (`<workspace>/assets/client/`), so Bevy's default
+        // `CARGO_MANIFEST_DIR`-relative `assets/` doesn't apply: every plugin-group branch below
+        // sets `AssetPlugin::file_path` from the shared resolver (absolute path, so it overrides
+        // Bevy's own base-path join). See `p19_shared::paths`.
+        let asset_plugin = || AssetPlugin {
+            file_path: p19_shared::paths::asset_dir(p19_shared::paths::AssetSide::Client)
+                .to_string_lossy()
+                .into_owned(),
+            ..default()
+        };
 
         if vr_enabled {
             app.add_plugins(add_xr_plugins(
-                DefaultPlugins.build().disable::<PipelinedRenderingPlugin>(),
+                DefaultPlugins
+                    .build()
+                    .disable::<PipelinedRenderingPlugin>()
+                    .set(asset_plugin()),
             ));
         } else if mcp_headless {
             // The headless-renderer pattern (bevy's own `headless_renderer` example): no winit
@@ -133,6 +146,7 @@ impl Plugin for Prototype19 {
                 .build()
                 .disable::<WinitPlugin>()
                 .disable::<PipelinedRenderingPlugin>()
+                .set(asset_plugin())
                 .set(WindowPlugin {
                     primary_window: None,
                     exit_condition: ExitCondition::DontExit,
@@ -249,7 +263,7 @@ impl Plugin for Prototype19 {
             // it carried could render either. With `target_info` fixed, the skybox/TAA/SSAO all
             // render correctly unstripped; no headless-specific carve-out needed here at all.
         } else {
-            app.add_plugins(DefaultPlugins);
+            app.add_plugins(DefaultPlugins.set(asset_plugin()));
         }
 
         app.add_plugins((
@@ -292,7 +306,7 @@ impl Plugin for Prototype19 {
             // `LightyearAvianPlugin` takes over `Position`/`Rotation` <-> `Transform`
             // synchronization and frame interpolation itself — running both at once is exactly
             // the footgun `lightyear_avian3d`'s own docs warn against (see its module doc
-            // comment), not something specific to this project. Mirrors `server/src/main.rs`'s
+            // comment), not something specific to this project. Mirrors `crates/server/src/main.rs`'s
             // identical `PhysicsPlugins` setup.
             //
             // `sync_to_transform: true` (NOT the default) makes `Transform` the authoring API

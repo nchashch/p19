@@ -34,29 +34,18 @@ const PROTOCOL_ID: u64 = 0x7072_6F74_6F31_39;
 /// backend; see [`start_token_http_endpoint`].
 const TOKEN_HTTP_PORT: u16 = 6001;
 
-/// Where the netcode private key persists, relative to the asset root (`server/assets/`).
+/// Where the netcode private key persists, relative to the server asset root
+/// (`assets/server/` in a development checkout).
 /// Plain-text hex — dev/LAN posture per the user's direction; not world-readable permissions
 /// or secret management. Created with a fresh random key on first run.
 const PRIVATE_KEY_FILE: &str = "network/netcode.key";
 
-/// Mirrors `bevy_asset`'s asset-root resolution exactly
-/// (`bevy_asset::io::file::get_base_path`): `BEVY_ASSET_ROOT`, then the *runtime*
-/// `CARGO_MANIFEST_DIR` (which `cargo run` exports — so plain `cargo run -p server` lands
-/// state in `server/assets/`), then the executable's directory (the deployed/steamrt layout:
-/// `assets/` sits beside the binary). Network state must follow the game's asset root in
-/// every launch mode — a compile-time path would break deployed builds (the build machine's
-/// directory doesn't exist on the Deck), and a cwd fallback created the stray root `./assets/`.
+/// The server asset root ([`p19_shared::paths::asset_dir`] — the same resolution
+/// `AssetPlugin` is configured from), so network state follows the game's assets in every
+/// launch mode: development checkout, `BEVY_ASSET_ROOT` override, or `assets/` beside a
+/// deployed binary.
 fn network_state_dir() -> std::path::PathBuf {
-    std::env::var("BEVY_ASSET_ROOT")
-        .or_else(|_| std::env::var("CARGO_MANIFEST_DIR"))
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| {
-            std::env::current_exe()
-                .ok()
-                .and_then(|exe| exe.parent().map(std::path::Path::to_path_buf))
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-        })
-        .join("assets")
+    p19_shared::paths::asset_dir(p19_shared::paths::AssetSide::Server)
 }
 
 fn hex_encode(bytes: &[u8]) -> String {
@@ -94,7 +83,7 @@ fn load_or_create_private_key() -> Result<lightyear::netcode::Key, String> {
 }
 
 /// TLS identity (self-signed) for the token HTTPS endpoint: cert + key persist under
-/// `server/assets/` (`token-tls.crt`/`token-tls.key` — PEM, generated on first run via
+/// `assets/server/` (`token-tls.crt`/`token-tls.key` — PEM, generated on first run via
 /// `rcgen`). SANs cover `localhost`/`127.0.0.1` plus the default-route local IP; clients don't
 /// verify the hostname anyway — they pin the certificate's SHA-256 fingerprint (TOFU, see the
 /// client's `fetch_connect_token`) — but complete SANs keep standard tooling (`curl -k`)
