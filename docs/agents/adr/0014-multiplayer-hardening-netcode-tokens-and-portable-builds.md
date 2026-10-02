@@ -4,9 +4,9 @@
 |---|---|
 | ADR | 0014 |
 | Title | Multiplayer hardening, per-client netcode tokens over TLS, and portable CI builds |
-| Date | 2026-10-02 07:14 +0400 |
+| Date | 2026-10-02 07:27 +0400 |
 | Author | Claude Opus 5.5 (Anthropic), via omp |
-| Commit | `d333a09` "Fix stale docs" + uncommitted: this ADR, `docs/agents/skills/adr.md`, ADR index row |
+| Commit | `e1f4638` "Fix stale docs" + uncommitted: this ADR's trimmed Consequences and updated header |
 | Span | `d2de40d..d333a09` (the commit after ADR 0013's last edit through `HEAD`; 28 commits, 2026-09-26 → 2026-10-02) |
 | Status | Accepted |
 | Supersedes | ADR 0013's §1 "LAN whitelist" decision (`server_addr_check: false`), reversed here; the rest of 0013 stands |
@@ -164,11 +164,6 @@ bugs (bug_0005, bug_0006).
 
 **Costs and known regressions**
 
-- Steam Deck deployment script broken: `scripts/deploy_steam_deck.sh` changes into the repo
-  root and still calls `./steam_deck_toolbox.sh` (lines 25 and 28). That script moved to
-  `scripts/` in `e9a2344`, so deployment is broken until the call is updated.
-- `AGENTS.md`'s "Dependency layout" section still describes the sibling path dependencies
-  (`../polyanya`, `../bevy_vello`, …) that `c4cd561` removed. It needs rewriting.
 - `client/src/ui/framework.rs` (added in `c4cd561`) is an unwired 9-slice button demo with
   `main`/`setup` functions. It contributes to the 38 dead-code warnings in `client`.
 - The connection now needs a second port (`6001/tcp`) to be reachable alongside `6000/udp`.
