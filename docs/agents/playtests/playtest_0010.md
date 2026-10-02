@@ -5,8 +5,8 @@
 | Date | 2026-09-23 17:23 – 17:32 UTC |
 | Commit | `5e71215` "Implement Skein mesh primitives for agent testing" — HEAD throughout; the work-in-progress `CommonAssets` changes uncommitted |
 | Agent | opencode session, GLM-5.3-Flash, driving the tool API over loopback HTTP |
-| Client | `target/debug/client --mcp` (plus one `--no-common-assets` pass), `BEVY_ASSET_ROOT=$PWD/playtest_assets/playtest_0009/client` (and `$PWD/client` for the production check) |
-| Server | `target/release/server`, `BEVY_ASSET_ROOT=$PWD/playtest_assets/playtest_0009/server` (and `$PWD/server` for the production check) |
+| Client | `target/debug/client --mcp` (plus one `--no-common-assets` pass), `BEVY_ASSET_ROOT=$PWD/docs/agents/playtests/playtest_assets/playtest_0009/client` (and `$PWD/client` for the production check) |
+| Server | `target/release/server`, `BEVY_ASSET_ROOT=$PWD/docs/agents/playtests/playtest_assets/playtest_0009/server` (and `$PWD/server` for the production check) |
 | Level | `levels/playtest.level.ron` (playtest 0009's level) |
 | Asset isolation | playtest 0009's tree, now stripped to **100% plaintext** — the furniture copies (fonts, WAVs, KTX2 skybox, atlas PNGs) deleted; manifest trimmed to the five world keys only |
 | Transports | game: UDP/netcode :6000 · QA tool API: BRP HTTP :15702 (+ MCP :15710) |
@@ -45,8 +45,8 @@ Three fresh server+client pairs, all driven through the canonical `connect` →
 
 ### Playtest 0009's tree, stripped to 100% plaintext (no flag) — the recommended playtest mode
 
-Deleted `playtest_assets/playtest_0009/client/assets/{fonts,audio,skyboxes,textures}/` and
-trimmed its manifest to only the five world keys. `find playtest_assets/playtest_0009
+Deleted `docs/agents/playtests/playtest_assets/playtest_0009/client/assets/{fonts,audio,skyboxes,textures}/` and
+trimmed its manifest to only the five world keys. `find docs/agents/playtests/playtest_assets/playtest_0009
 -type f` now lists only text files (`.gltf` JSON, RON, TOML, FTL, WGSL, YAML). The whole
 loop still works: menu, lobby, in-game, player spawned and grounded. As expected:
 
@@ -131,7 +131,7 @@ before (2891 unique colors vs 101 in the stripped pass):
 
 - Screenshots: curated copies in `docs/agents/playtests/screenshots/playtest_0010/`; the full
   capture stream in the gitignored `docs/agents/playtests/dist/screenshots/`.
-- The assets: `playtest_assets/playtest_0009/`, stripped in place to 100% plaintext (the
+- The assets: `docs/agents/playtests/playtest_assets/playtest_0009/`, stripped in place to 100% plaintext (the
   furniture is trivially re-copyable from `client/assets` if 0009 ever needs re-running
   with it).
 - Code (uncommitted, staged for the project owner): `client/src/assets/collections.rs`

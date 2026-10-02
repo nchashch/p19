@@ -707,7 +707,7 @@ accumulating, searchable history (what was tried, what was observed, on what dat
 what commit), not in any single run being significant. Don't wait to be asked.
 
 **Isolate the run's assets too (since playtest 0009)**: ship what the run needs under
-`playtest_assets/playtest_NNNN/{server,client}/assets/` as plaintext — hand-written JSON
+`docs/agents/playtests/playtest_assets/playtest_NNNN/{server,client}/assets/` as plaintext — hand-written JSON
 `.gltf` whose content is Skein components (`ClientReplicate`, `ClientWorldAsset`,
 `ColliderConstructor`, `MeshPrimitive` for zero-baked-data visuals), a per-run
 `collections/common_assets.assets.ron` remap, `.level.ron`, `config.toml`, one en-US locale.
@@ -722,7 +722,7 @@ barest boot: no loading state at all (the manifest is never read), a
 transition — in-game visuals still arrive via the `ClientWorldAsset` path, which loads by
 path, not through the manifest. The recommended playtest mode is still the manifest-driven
 one (trimmed manifest, no flag) since it keeps the `MeshPrimitive` world visuals; see
-`playtest_assets/playtest_0009/` (stripped to 100% plaintext by 0010) as the template and
+`docs/agents/playtests/playtest_assets/playtest_0009/` (stripped to 100% plaintext by 0010) as the template and
 its report, plus `docs/agents/playtests/playtest_0010.md`, for the mechanism and the gotchas.
 
 **Layout — flat, one Markdown file per report (like `docs/agents/bug_reports/`); screenshots

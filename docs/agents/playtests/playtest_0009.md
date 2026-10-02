@@ -5,8 +5,8 @@
 | Date | 2026-09-23 16:00 – 16:40 UTC |
 | Commit | `5e71215` "Implement Skein mesh primitives for agent testing" — HEAD throughout |
 | Agent | opencode session, GLM-5.3-Flash, driving the tool API over loopback HTTP |
-| Client | `target/debug/client --mcp`, `BEVY_ASSET_ROOT=$PWD/playtest_assets/playtest_0009/client` |
-| Server | `target/release/server`, `BEVY_ASSET_ROOT=$PWD/playtest_assets/playtest_0009/server` |
+| Client | `target/debug/client --mcp`, `BEVY_ASSET_ROOT=$PWD/docs/agents/playtests/playtest_assets/playtest_0009/client` |
+| Server | `target/release/server`, `BEVY_ASSET_ROOT=$PWD/docs/agents/playtests/playtest_assets/playtest_0009/server` |
 | Level | `levels/playtest.level.ron` (this playtest's own level) |
 | Asset isolation | server: 100% plaintext (one `.level.ron` + one `.gltf`). client: all **content** plaintext (five `.gltf` scenes, the manifest, config, locale); only engine furniture (2 font slots on one TTF, 2 WAVs, 1 KTX2 skybox, 2 atlas PNGs) copied from `client/assets` |
 | Transports | game: UDP/netcode :6000 · QA tool API: BRP HTTP :15702 (+ MCP :15710) |
@@ -14,8 +14,8 @@
 ## Purpose
 
 The project owner's idea: make playtests **reproducible** by isolating each playtest's assets —
-an agent writes the server assets into `playtest_assets/playtest_NNNN/server/` and the client
-assets into `playtest_assets/playtest_0009/client/`, all as **plaintext**: 3D content as plain
+an agent writes the server assets into `docs/agents/playtests/playtest_assets/playtest_NNNN/server/` and the client
+assets into `docs/agents/playtests/playtest_assets/playtest_0009/client/`, all as **plaintext**: 3D content as plain
 JSON `.gltf` (not binary `.glb`), game logic as Skein components in the glTF extras, and mock
 visuals via the new `MeshPrimitive` component (`5e71215`) so **zero baked mesh data** is needed
 anywhere. Fonts excluded on the theory that Bevy's built-in default covers ASCII; a single
@@ -108,7 +108,7 @@ been pointing the camera at the sky. At true level pitch the whole scene composi
 ## Findings
 
 - **The isolated-plaintext arrangement works end-to-end** and is the new recommended shape for
-  playtests: `playtest_assets/playtest_NNNN/{server,client}/assets/`, a per-playtest dynamic
+  playtests: `docs/agents/playtests/playtest_assets/playtest_NNNN/{server,client}/assets/`, a per-playtest dynamic
   manifest, Skein-authored logic in text glTF, `MeshPrimitive` for visuals.
 - **Remaining non-text files** are engine furniture `CommonAssets` requires (fonts, WAVs, the
   KTX2 skybox, atlas PNGs) — currently copied from `client/assets`. Making them optional would
@@ -129,7 +129,7 @@ been pointing the camera at the sky. At true level pitch the whole scene composi
 
 - Screenshots: curated copies in `docs/agents/playtests/screenshots/playtest_0009/`; the full
   capture stream in the gitignored `docs/agents/playtests/dist/screenshots/`.
-- The assets themselves: `playtest_assets/playtest_0009/` (self-contained; the only non-text
+- The assets themselves: `docs/agents/playtests/playtest_assets/playtest_0009/` (self-contained; the only non-text
   files are the copied furniture listed above).
 - The tool API surface used: `game/trigger`, `game/levels`, `game/select_level`,
   `game/state`, `game/input`, `game/screenshot`, plus the BRP builtins for querying and for

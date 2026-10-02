@@ -466,7 +466,7 @@ Full playbook: `docs/agents/skills/playtest.md`. Design: ADRs 0009–0012.
     `game/trigger observe` (no player); `game/screenshot {"camera": id}` renders a chosen camera.
   - `--no-common-assets`: skips the `CommonAssets` manifest entirely (placeholder collection);
     world content still loads by path through `ClientWorldAsset`.
-- Isolated plaintext playtest assets live in `playtest_assets/playtest_NNNN/` (point
+- Isolated plaintext playtest assets live in `docs/agents/playtests/playtest_assets/playtest_NNNN/` (point
   `BEVY_ASSET_ROOT` at them).
 
 ## Conventions

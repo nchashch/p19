@@ -22,7 +22,8 @@ back through these reports.
 | `dist/` | Gitignored local staging for raw screenshot captures from the tool API. Never committed. |
 
 Some runs also ship their own isolated, plaintext game assets under
-[`playtest_assets/`](../../../playtest_assets/) at the repo root (since playtest 0009).
+[`playtest_assets/`](playtest_assets/) in this directory (since playtest 0009; it lived at the
+repo root until 2026-10-02, so older reports' launch lines were updated to the new path).
 
 ## Writing a new report
 

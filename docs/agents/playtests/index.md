@@ -74,7 +74,7 @@ connect-time `Disconnected` re-entry into `MainMenu` observed in both modes.
 | **Report** | [`playtest_0009.md`](playtest_0009.md) |
 
 First experiment with the owner's isolated-asset idea: each playtest ships its own
-server/client assets under `playtest_assets/playtest_NNNN/` as **plaintext** — hand-written
+server/client assets under `docs/agents/playtests/playtest_assets/playtest_NNNN/` as **plaintext** — hand-written
 JSON `.gltf` scenes whose only content is Skein components (`ClientReplicate`,
 `ClientWorldAsset`, `ColliderConstructor`, and the new `MeshPrimitive` for zero-baked-data
 visuals), a per-playtest dynamic-asset manifest, config, and a single en-US locale. The whole
