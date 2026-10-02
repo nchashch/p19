@@ -13,7 +13,8 @@ and `docs/agents/skills/playtest.md` (whose harness drives the reproductions).
 - Any *reproducible* defect: crash, wrong behavior, desync, data loss, security hole,
   performance cliff, broken tooling, doc/code mismatch that cost real debugging time.
 - Design-level hazards (e.g. shared spawn points stacking joiners — see playtest 0018) are
-  filed too, tagged `by-design-question` until the owner rules on them.
+  filed too: `Status` `Open`, with the Summary saying it is a by-design question, until the
+  owner rules on it (then `By design` or a fix, per §7).
 - **One bug per file.** Two symptoms with one root cause = one file (say so); two unrelated
   causes = two files, cross-referenced.
 - File even when the bug is *already fixed by the time you write* — the report then documents
@@ -26,8 +27,9 @@ and `docs/agents/skills/playtest.md` (whose harness drives the reproductions).
   and no typst.
 - **Find the next free number; never reuse or renumber.** Numbers are permanent identities —
   reports are retained forever, fixed or not, so other documents can cite `bug_0007` stably.
-- `docs/agents/bug_reports/README.md` explains the directory and its history (reports were
-  typst until 2026-10-02); don't edit it per bug.
+- `docs/agents/bug_reports/README.md` explains the directory and its history, and carries a
+  ledger table (bug, summary, status). Add a row when you file a bug and update it whenever
+  the report's `Status` changes; the report's own `Status` row stays authoritative.
 
 ## 3. Metadata table (top of every report)
 
@@ -42,7 +44,7 @@ Required fields:
 |---|---|
 | `Bug` | `bug_XXXX` |
 | `Date discovered` | When first observed |
-| `Commit (local state actually running)` | Exact local `git log -1 --format="%h %s"` **plus a per-file list of uncommitted changes that were in the running binary** — pushed or not. The report must reflect the code that actually ran (convention established by the owner; playtests 0017–0019 follow it) |
+| `Commit (state actually running)` | Exact local `git log -1 --format="%h %s"` **plus a per-file list of uncommitted changes that were in the running binary** — pushed or not. The report must reflect the code that actually ran (convention established by the owner; playtests 0017–0019 follow it). Once fixed, append `**Fixed in** <hash> "<title>"` |
 | `Discovered by` | Session/agent/human |
 | `Component` | Module(s) involved (`server::combat`, `client::lifecycle/networking`, …) |
 | `Severity` | S1–S4 (see §6) |
@@ -94,16 +96,17 @@ Required fields:
   stash one and re-run; say in the report which commit was stashed and what the control run
   showed (playtests 0014/0015 both did this; playtest 0015's F3 would have been misfiled
   otherwise).
-- **A fix updates three places**: the bug's `Status`/`Fix` section, `AGENTS.md` (gap entries
-  and module bullets that described the bug), and — if the repro revealed a harness gap —
-  `docs/agents/skills/playtest.md` or `dev::tool_api`. A bug fix that leaves stale documentation
-  behind is an unfinished fix (this exact debt accumulated before the AGENTS.md-update
-  convention was adopted).
+- **A fix updates four places**: the bug's `Status`/`Fix` section, its row in
+  `docs/agents/bug_reports/README.md`'s ledger, `AGENTS.md` (gap entries and module bullets
+  that described the bug), and — if the repro revealed a harness gap —
+  `docs/agents/skills/playtest.md` or `dev::tool_api`. A bug fix that leaves stale
+  documentation behind is an unfinished fix (this exact debt accumulated before the
+  AGENTS.md-update convention was adopted).
 - **Severity honestly, not aspirationally.** Severity reflects player/user impact today, not
   how interesting the bug is.
 - **Fixed means verified.** `Fixed in <commit>` requires the repro run observed green after
   the fix — "it compiles" is not verification. If verification is blocked, the report stays
-  `Fix in progress` with the blocker named (see bug: the death-path panic sat behind
+  `Fix in progress` with the blocker named (see bug_0002: the death-path panic sat behind
   `ServerMutateTicks` until playtest 0016 root-caused it).
 
 ## 6. Severity guide
@@ -128,8 +131,8 @@ note on the new evidence and the new commit — the number never changes.
 - Bugs that produced harness/tooling fixes should name the tool method that now covers them
   (e.g. `game/select` exists because headless clients cannot aim the crosshair — see the
   `docs/agents/skills/playtest.md` §3 table).
-- Backfilling known-open issues into this directory is encouraged: the current open set at
-  the time this skill was written is the KCC-internal rollback-registration gap
-  (`CharacterControllerState`/`AccumulatedInput` not rollback-registered — needs ahoy-side
-  exposure), plus the by-design questions (spawn-point separation, production netcode
-  upgrade) that playtests 0018/0019 closed out.
+- Backfilling known-open issues into this directory is encouraged. bug_0001–bug_0006 are all
+  `Fixed`; issues documented elsewhere but not yet filed here include the disconnected
+  player's character never being despawned (zombie `ClientInGame` blocking a clean reconnect —
+  `AGENTS.md` gap list), the shared spawn point stacking joiners (a by-design question, playtest
+  0018), and the replay movement-rate mismatch (ADR 0013).

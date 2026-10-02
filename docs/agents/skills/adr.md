@@ -85,10 +85,10 @@ When several commits landed with no ADR:
 
 ## 7. Immutability
 
-- Once an ADR is `Accepted`, its body is **never edited** to match later changes. A new ADR
-  supersedes it. The old record's only allowed edit is its `Status` line (`Superseded by
-  NNNN`) and the matching index row.
-- Typo or broken-link fixes are allowed. Changes of meaning are not.
+- Once an ADR is `Accepted`, its body is **never edited** to match later changes; a new ADR
+  supersedes it. Only two kinds of edit are allowed afterwards: updating its `Status` row
+  (`Superseded by NNNN`) together with the matching index row, and fixing typos or broken
+  links. Changes of meaning are not allowed.
 - Never rewrite older ADRs to this skill's format (see the top of this file).
 
 ## 8. Checklist before finishing

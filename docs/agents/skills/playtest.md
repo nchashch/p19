@@ -19,7 +19,7 @@ need, report the API gap rather than falling back to screenshots.
 
 | Process | Binary | Env | Ports |
 |---|---|---|---|
-| Game server | `target/release/server` | `BEVY_ASSET_ROOT=$PWD/server` | UDP :6000 (game) · HTTPS :6001 (connect-token endpoint — must be reachable by clients; see §4 note) |
+| Game server | `target/release/server` | `BEVY_ASSET_ROOT=$PWD/server` | UDP :6000 (game) · HTTPS :6001 (connect-token endpoint — must be reachable by clients; see §4 note) · server QA: BRP :15701 + MCP :15711 (`server/state`, §3) |
 | Client (headless agent host) | `target/debug/client --mcp` | `CARGO_MANIFEST_DIR=$PWD/client BEVY_ASSET_ROOT=$PWD/client` | BRP HTTP :15702 · MCP :15710 |
 | You (the agent) | shell + `curl`/python | — | talks to :15702 |
 
@@ -46,7 +46,7 @@ are meaningful here, without trusting whatever launch line someone else used.
 | Headless agent host (default) | `--mcp` | yes, offscreen 1280×800 via lavapipe | ✓ (crop, unchanged-suppression) | ✓ load + replicate | Full playtesting, visual checks included |
 | **GPU-less agent host** | `--mcp --no-render` | **no** (no Vulkan needed at all) | ✗ clean error — use `game/ui` + `game/state` | ✗ never load (implies `--no-common-assets`) | Gameplay/UI/logic fleets on small boxes; ~0.7 core + ~0.3 GB vs ~1.3 cores + ~1.1 GB |
 | `--no-common-assets` | `--no-common-assets` (alone or implied) | yes | ✓ | none via manifest — content only via `ClientWorldAsset`s by path; fonts/sounds/icons fall back to embedded/`None` | Plaintext-asset-root playtesting (§10) |
-| Windowed dev client | none (dev build has `dev-tools`) | yes, real window | ✓ via `Screenshot::primary_window` | ✓ | Human-visible sessions; BRP still on :15702, but `game/mouse move_to`/clicks are `--mcp`-only |
+| Windowed dev client | none, but the binary must be built with `--features dev-tools` (not a default feature) | yes, real window | ✓ via `Screenshot::primary_window` | ✓ | Human-visible sessions; BRP still on :15702, but `game/mouse move_to`/clicks are `--mcp`-only |
 | Fleet member | `--mcp --brp-port N --mcp-port N` | per above flags | ✓ (isolated `screenshots/client-N/` dir) | per above flags | Many clients, one server (§9) |
 | **Observer** | `--mcp --headless-render` | yes, at **2 fps** (logic still 60 Hz via catch-up) | ✓ on demand | ✓ load + replicate | The fleet's *eye*: ~1.3 cores + GPU VRAM, but one observer serves vision for a fleet of `--no-render` clients |
 
@@ -76,6 +76,8 @@ Particularities worth remembering:
 - Windowed clients keep the OS cursor; the agent-cursor crosshair is
   headless-only.
 
+## 1b. Build and environment
+
 - Build first, and **verify the build actually succeeded**:
 
   ```sh
@@ -95,22 +97,23 @@ Particularities worth remembering:
 ## 2. Launch / teardown recipe
 
 ```sh
+LOG=/tmp/p19-playtest; mkdir -p "$LOG"   # any writable dir; the redirects below fail if it's missing
 pkill -x client 2>/dev/null; pkill -x server 2>/dev/null; sleep 1
-ss -tunap | grep 6000          # server port free?
-ss -tlnp | grep -E "15702|15710"  # QA ports free?
+ss -tunap | grep -E ":(6000|6001)\b"             # game + token ports free?
+ss -tlnp | grep -E "15701|15702|15710|15711"      # client + server QA ports free?
 
 # server
-(BEVY_ASSET_ROOT=$PWD/server ./target/release/server > /tmp/opencode/server.log 2>&1 &)
+(BEVY_ASSET_ROOT=$PWD/server ./target/release/server > "$LOG/server.log" 2>&1 &)
 sleep 4                        # wait for the bind
 
 # client — put a hard lifetime on it (timeout N) and keep N big enough for the
 # whole test; a dead client answers BRP with connection-refused (silent with -s)
 (CARGO_MANIFEST_DIR=$PWD/client BEVY_ASSET_ROOT=$PWD/client \
-  timeout 300 ./target/debug/client --mcp > /tmp/opencode/client.log 2>&1 &)
+  timeout 300 ./target/debug/client --mcp > "$LOG/client.log" 2>&1 &)
 sleep 8                        # menu reachable ~2s; give slack
 
 # sanity: the MCP server must have come up
-grep -i "mcp tool server listening" /tmp/opencode/client.log
+grep -i "mcp tool server listening" "$LOG/client.log"
 ```
 
 Hard rules learned the hard way:
@@ -149,6 +152,16 @@ Custom `game/*` methods (see `client/src/dev/tool_api.rs`):
 | `game/screenshot` | `{"label":"..."}`, `{"crop":[x,y,w,h]}` optional | Async capture; PNG written under `docs/agents/playtests/dist/screenshots/` (persistent, raw staging — not curated). `crop` saves only that sub-rect — same pixel space as `game/ui` rects, clamped to frame bounds. Prefer cropped captures of a `game/ui` rect when inspecting one element: fewer vision tokens, and no provider downscale on the region of interest |
 | `game/screenshot/get` | — | `{"ready":true,"png_base64":...,"path":...,"state":{...game/state...}}` for the newest capture; **does not consume it**. The `state` is the same payload as `game/state`, sampled at poll time, so every capture arrives with its ground truth attached — never OCR the HUD. If the newest capture's pixels are identical to the last one served in full, responds `{"ready":true,"unchanged":true,"path","state"}` WITHOUT `png_base64` — don't re-request; read the state |
 | `game/ui` | — | Accessibility-tree-style UI dump: every visible UI node's `rect` `[x,y,w,h]` **in the same pixel space `game/mouse move_to` consumes**, its text (button labels), `clickable: true` on real buttons, `interaction` (`Pressed`\|`Hovered`\|`Idle`), `pointer_hovered`, and the mocked pointer's position. Back-to-front render order. Read this to decide *what to click and where* — and crop screenshots to these rects — instead of estimating from pixels |
+| `game/client_info` | — | This client's effective launch configuration: mode flags, BRP/MCP ports, `screenshots_available` (§1a). Call first on a fresh session |
+| `game/cameras` | — | Lists camera entities and their poses — the ids `game/screenshot {"camera": <id>}` accepts (observer mode, §1a) |
+| `game/gamepad` | see §5a | Device-level gamepad mock (buttons/axes); the only way to drive UI navigation |
+| `game/keyboard` | see §5b | Device-level keyboard mock (`ButtonInput<KeyCode>`) |
+| `game/mouse` | see §5b | Device-level mouse mock: buttons, `move_to`, relative motion, wheel; `move_to`/clicks are `--mcp`-only |
+
+The **server** exposes its own BRP on :15701 (MCP :15711) with one custom method,
+`server/state`: authoritative app state, every connected client, and every live player's
+server-side transform/HP/owning connection. Compare it against a client's `game/state` when
+debugging desync (the client's view is predicted and room-filtered).
 
 Bevy builtins are **`world.*`-named** in 0.19 (`world.query`, `world.get_components`,
 `world.list_resources`, `world.get_resources`, `world.list_components`,
@@ -171,7 +184,7 @@ curl … "game/trigger" '{"event":"connect"}'
 # poll game/state every ~2s until game_state == "Lobby" (first poll usually)
 
 # 2. list levels (Lobby only) and pick the asset_path
-curl … "game/levels"     # levels/minimal.level.ron is the only working level
+curl … "game/levels"     # levels/minimal.level.ron is currently the only level in server/assets/levels/
 
 # 3. select level (only if the server isn't already InGame with it — see §8)
 curl … "game/select_level" '{"asset_path":"levels/minimal.level.ron"}'
@@ -192,7 +205,7 @@ successful connect writes its SHA-256 fingerprint to
 `client/assets/network/token-tls-fingerprint.txt`, and later connects must match (a mismatch — MITM
 or server cert rotation — refuses the fetch with an explicit error; delete the file to
 re-trust a legitimately rotated cert). Server restarts keep the identity (the cert/key files
-persist in `server/assets/`), so the pin survives restarts. Timing note: the token fetch adds
+persist in `server/assets/network/`), so the pin survives restarts. Timing note: the token fetch adds
 ~100 ms to the connect step; a fetch failure (server unreachable on :6001) logs
 `connect token fetch failed` and leaves the client at MainMenu for a retry.
 
@@ -201,9 +214,9 @@ Important state-machine facts:
 - `InGameRequest` is handled **only while the server is in `ServerState::InGame`**
   and is **silently dropped otherwise** (e.g. while `Loading`). If the server is
   already in-game with the level you want, **skip `select_level` and just `play`**.
-- `select_level` while in-game triggers the level-reload regression (a fresh
-  `WorldAssetRoot` per request, no dedup) whose multi-second hitch can drop the
-  netcode connection entirely.
+- `select_level` while a level is already `Loading`/`LevelLoaded` is **rejected** by the
+  server (`LevelState` guard, logged server-side) — nothing reloads. To switch levels,
+  restart the server.
 - `game/state`'s `position` only appears once the client has `Controlled` on its
   player (`LocalPlayer` set). `game_state:"InGame"` *without* `position` means
   you inherited a zombie player's `ClientInGame` on reconnect — restart the
@@ -620,8 +633,6 @@ squelching it with screenshots.
   unique-color counts via PIL tell you instantly whether a frame rendered
   (hundreds of colors), is the clear color (1 color), or is the menu
   (~200 colors).
-- Never open/inspect PDFs in this session — the environment breaks with
-  "Functionality not supported". (Playtest reports are Markdown now; nothing needs compiling.)
 
 Known visual divergences in `--mcp` (see AGENTS.md for the full root-cause writeup —
 both the "nothing renders at all" bug and the follow-on UI-render-order bug are fixed):
@@ -630,8 +641,7 @@ both the "nothing renders at all" bug and the follow-on UI-render-order bug are 
   composited on top (was: UI drawn underneath the background — a `bevy_ui`
   `IsDefaultUiCamera`-ambiguity bug, not an ordering problem; see AGENTS.md). The
   in-game HUD (including the crosshair) also renders now, for the same reason — it
-  never did before this fix either. Top of frames still cut off (2× `UI_SCALE` vs
-  720p, unrelated, cosmetic).
+  never did before this fix either.
 - In-game: the real starfield HDRI skybox and level geometry now render correctly.
   `levels/minimal.level.ron`'s floor renders black specifically because that level's
   content has zero light entities anywhere — not a `--mcp` bug, confirmed via BRP,
@@ -641,11 +651,11 @@ both the "nothing renders at all" bug and the follow-on UI-render-order bug are 
 
 | Symptom | Cause | Recovery |
 |---|---|---|
-| Empty curl bodies | Client dead (timeout expired) or malformed shell quoting | `ps aux | grep -c "[d]ebug/client"`; rebuild the curl |
+| Empty curl bodies | Client dead (timeout expired) or malformed shell quoting | `ps aux \| grep -c "[d]ebug/client"`; rebuild the curl |
 | Curls return nothing *and* client alive | **zsh doesn't word-split unquoted vars** — `H='-H …'; curl $H …` passes one giant arg | Always write literal URLs/headers in curls |
 | Next client logs `mcp server stopped: AddrInUse` | Stray client holds :15710/:15702 | `pkill -x client`; verify `ss` |
 | `game/state` says InGame but no `position`, forever | Zombie-player inheritance: a previous client's `Lifetime::Persistent` player replicated its `ClientInGame` to your fresh connection without `Controlled` | Restart the server (the parked reconnect bug) |
-| Connection drops mid-session after `select_level` | Level-reload hitch (no-dedup regression) exceeds netcode tolerance | Restart both; avoid re-selecting a loaded level |
+| `select_level` appears to do nothing | A level is already `Loading`/`LevelLoaded`; the server's `LevelState` guard rejects further requests (logged server-side) | Just `play`; restart the server to switch levels |
 | Test results look impossible / old behavior | Stale binary from a failed build | Rebuild, `grep -cE "^error"` must be 0 |
 | Server floods `server_late_input_mismatch` when a second client joins | Join-burst replication hitch blows the 2-tick input-delay headroom; self-heals in ~10 ticks | Benign — document, don't fix (AGENTS.md has the episode) |
 | `pkill -f` kills your own test command | `-f` matches your shell's own command line | Use `pkill -x` |
@@ -656,9 +666,11 @@ The user's windowed client and your headless client can share a server:
 
 1. User starts their client and gets in-game normally.
 2. You launch `--mcp`, `connect`, then **skip `select_level`** (the server is
-   already in-game; re-selecting triggers the reload drop) and `play` directly.
-3. Your capsule spawns at the origin and is visible to the user; movement/turns
-   are mutually visible.
+   already in-game; a second request is rejected anyway) and `play` directly.
+3. Your capsule spawns at the shared spawn point and is visible to the user;
+   movement/turns are mutually visible. All players share one spawn point, so if the
+   user is standing still there you spawn stacked on their head (playtest 0018) —
+   have them step away first if you need ground-level state.
 4. Expect the benign `server_late_input_mismatch` burst on the server during
    your join (~10 ticks of 1-tick-late input corrections).
 
