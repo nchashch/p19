@@ -1,12 +1,12 @@
 //! Client-side combat: input handling and presentation (sound, particles, `Selected` bookkeeping).
-//! The actual range check, damage application, and death detection live in `shared::combat` —
+//! The actual range check, damage application, and death detection live in `p19_shared::combat` —
 //! this module only reacts to the events that logic fires, it doesn't decide anything itself.
 
 use bevy::prelude::*;
 use bevy_ahoy::prelude::CharacterController as AhoyCharacterController;
 use bevy_hanabi::prelude::*;
 use bevy_seedling::prelude::*;
-use shared::{
+use p19_shared::{
     combat::Dead,
     server_events::{Attack, EntityDied, Kill},
 };

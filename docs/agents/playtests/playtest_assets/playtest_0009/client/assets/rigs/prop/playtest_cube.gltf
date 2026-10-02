@@ -6,7 +6,7 @@
     {
       "name": "cube-visual",
       "extras": { "skein": [
-        { "shared::mesh_primitive::MeshPrimitive": { "Cuboid": { "size": [2.0, 2.0, 2.0] } } }
+        { "p19_shared::mesh_primitive::MeshPrimitive": { "Cuboid": { "size": [2.0, 2.0, 2.0] } } }
       ] }
     }
   ]

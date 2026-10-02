@@ -23,9 +23,9 @@ use bevy_ahoy::input::{AccumulatedInput, Jump as AhoyJump, Movement as AhoyMovem
 use bevy_ahoy::prelude::CharacterController as AhoyCharacterController;
 use bevy_ahoy::{CharacterControllerState, CharacterLook};
 use bevy_enhanced_input::prelude::{Action, Actions, Bindings, TriggerState};
-use shared::cube_spawner::Cube;
-use shared::inputs::PlayerInputContext;
-use shared::npc_spawner::Npc;
+use p19_shared::cube_spawner::Cube;
+use p19_shared::inputs::PlayerInputContext;
+use p19_shared::npc_spawner::Npc;
 
 /// The command name strings passed to `ConsoleCommand::new` (and its `help` usage line, a
 /// `&'static str` baked in at `build()` time, before `Localization` even exists as a resource) are

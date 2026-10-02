@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use lightyear::prelude::*;
-use shared::client_events::SpawnNpcRequest;
-use shared::level::InGameRoot;
-use shared::npc_spawner::{ModelOffset, Npc, NpcSpawner};
-use shared::replication::OrderedReliable;
+use p19_shared::client_events::SpawnNpcRequest;
+use p19_shared::level::InGameRoot;
+use p19_shared::npc_spawner::{ModelOffset, Npc, NpcSpawner};
+use p19_shared::replication::OrderedReliable;
 
 use crate::assets::collections::CommonAssets;
 use crate::events::SpawnNpc;

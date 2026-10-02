@@ -1,11 +1,11 @@
-//! Replicates the server's available level list (`shared::level::Levels`) to clients while
+//! Replicates the server's available level list (`p19_shared::level::Levels`) to clients while
 //! they're in the lobby — see `rooms::LobbyRoom`'s doc comment for the room this rides on.
 
 use bevy::prelude::*;
 use lightyear::prelude::*;
-use shared::assets::level::{Level, LevelMetadataAssets};
-use shared::game_state::ServerState;
-use shared::level::Levels;
+use p19_shared::assets::level::{Level, LevelMetadataAssets};
+use p19_shared::game_state::ServerState;
+use p19_shared::level::Levels;
 
 use crate::rooms::LobbyRoom;
 

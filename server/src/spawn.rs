@@ -8,12 +8,12 @@ use noiz::{
     prelude::*,
     rng::{AnyValueFromBits, NoiseRng},
 };
-use shared::assets::level::ClientWorldAsset;
-use shared::npc_spawner::ModelOffset;
-use shared::{
+use p19_shared::assets::level::ClientWorldAsset;
+use p19_shared::npc_spawner::ModelOffset;
+use p19_shared::{
     client_events::SpawnCubeRequest, cube_spawner::cube, npc_spawner::npc, player::Selectable,
 };
-use shared::{client_events::SpawnNpcRequest, combat::Gcd};
+use p19_shared::{client_events::SpawnNpcRequest, combat::Gcd};
 
 pub struct ServerSpawnPlugin;
 
@@ -23,7 +23,7 @@ impl Plugin for ServerSpawnPlugin {
     }
 }
 
-/// The per-message resolution logic, extracted out of [`spawn_npc`] so `server::replay`'s
+/// The per-message resolution logic, extracted out of [`spawn_npc`] so `p19_server::replay`'s
 /// replay driver can call the exact same code path against a recorded [`SpawnNpcRequest`]
 /// instead of a live [`MessageReceiver`]-drained one.
 pub(crate) fn apply_spawn_npc(

@@ -25,21 +25,28 @@ entries here.
 ## What this is
 
 A Bevy 0.19 (Rust, edition 2024) 3D multiplayer game prototype, built "always multiplayer": even
-singleplayer runs a local client and server. Cargo workspace with three members:
+singleplayer runs a local client and server. **`p19`** (from the working title "prototype 19") is
+the internal codename only; product branding is deliberately undecided — don't introduce a public
+name. Cargo workspace with three members — package names are `p19-*` (Rust crate paths `p19_*`,
+binary names `p19-client`/`p19-server`), while the directories keep the short names:
 
-- **`client`** — rendering, UI, input, camera, presentation. Sends intent as network messages and
-  renders what the server replicates; never decides outcomes.
-- **`server`** — headless authoritative simulation: level loading (real `.glb` + Avian colliders,
-  no GPU), player spawning, movement, combat, spawning cubes/NPCs.
-- **`shared`** — what both sides must agree on: replication registration, message types, the
-  player bundle, spawn bundles, shared data components, game states.
+- **`p19-client`** (`client/`) — rendering, UI, input, camera, presentation. Sends intent as
+  network messages and renders what the server replicates; never decides outcomes.
+- **`p19-server`** (`server/`) — headless authoritative simulation: level loading (real `.glb` +
+  Avian colliders, no GPU), player spawning, movement, combat, spawning cubes/NPCs.
+- **`p19-shared`** (`shared/`) — what both sides must agree on: replication registration, message
+  types, the player bundle, spawn bundles, shared data components, game states.
+
+Reflected type paths (Skein extras in `.glb`/`.gltf`, BRP queries) therefore start with
+`p19_shared::`/`p19_client::`/`p19_server::`. Documents written before the 2026-10-02 rename
+(old ADRs, playtests, bug reports) still say `shared::…`, `client::…`, `target/release/client`.
 
 Status: pre-release, not playable end to end. Steam Deck is the primary / minimum-spec target (see
 "Platform targets").
 
 Key facts to internalize:
 
-- **Networking is `lightyear` 0.30** over UDP/netcode. `shared::replication::SharedReplicationPlugin`
+- **Networking is `lightyear` 0.30** over UDP/netcode. `p19_shared::replication::SharedReplicationPlugin`
   is the single place both binaries register replicated components (`app.component::<T>().replicate()`)
   and messages (`app.register_message::<T>().add_direction(...)`, plus `.add_map_entities()` for any
   message carrying an `Entity`). All messages use the one `OrderedReliable` channel.
@@ -69,7 +76,7 @@ Current, confirmed gaps. Don't assume these work.
 - **`levels/minimal.level.ron` is the only level** and renders black: its content has no lights.
 - **No NPC/AI input path.** `ActionMock` does not drive actions on this server (lightyear's
   `get_action_state` writes `ActionState` directly from the replicated buffer). Triggering
-  `Fire<A>` events directly works (that is how `server::replay` injects input) and is the likely
+  `Fire<A>` events directly works (that is how `p19_server::replay` injects input) and is the likely
   path for AI. Combat is likewise reachable only from a client `AttackAttempt`/`KillAttempt`.
 - **Replay movement rate mismatch**: `server --replay` reproduces sessions deterministically but
   replayed movement covers far less distance than live (~1 vs ~12.7 units over 60 ticks). Leading
@@ -96,12 +103,12 @@ Current, confirmed gaps. Don't assume these work.
   (unwired 9-slice button demo), `Character` registered for replication twice, the
   `vleue_navigator` workspace dependency (no member uses it). The main menu's Options rows and
   Credits button are stubs that log "not implemented yet".
-- **Doc/code mismatches to distrust**: `shared::assets::level::Level`'s doc comment claims
+- **Doc/code mismatches to distrust**: `p19_shared::assets::level::Level`'s doc comment claims
   `model`/`skybox` are dependency-tracked handles — the loader just converts them to plain
   `AssetPath`s. A doc comment in `server/src/main.rs` claims the server has no `assets/` of its own
   (it does: `server/assets/`). `shared/src/server_events.rs` uses stale replicon terminology.
-- **Tests**: only a handful of unit tests (`server::networking` token-address fallback,
-  `shared::player` name generation). CI builds but runs no gameplay tests.
+- **Tests**: only a handful of unit tests (`p19_server::networking` token-address fallback,
+  `p19_shared::player` name generation). CI builds but runs no gameplay tests.
 
 ## Platform targets
 
@@ -135,7 +142,7 @@ axes:
 - **`Character`** (`.character.ron`): aggregates `rig`/`controller`/`stats` as plain asset paths
   (no manifest indirection). Not registered; nothing resolves it.
 
-`shared::player::player()` is independent of all of this.
+`p19_shared::player::player()` is independent of all of this.
 
 ## Commands
 
@@ -145,10 +152,10 @@ Run from the workspace root (`prototype_19/`).
 cargo check --workspace           # fastest compile check
 cargo clippy --workspace
 cargo test --workspace            # the few unit tests
-cargo build -p client --release
-cargo build -p server --release
-cargo run -p server --release     # listens on UDP 0.0.0.0:6000 (+ HTTPS token endpoint :6001)
-cargo run -p client --release     # connects when the main menu's Connect button is pressed
+cargo build -p p19-client --release
+cargo build -p p19-server --release
+cargo run -p p19-server --release     # listens on UDP 0.0.0.0:6000 (+ HTTPS token endpoint :6001)
+cargo run -p p19-client --release     # connects when the main menu's Connect button is pressed
 ```
 
 - **Assets**: `client/assets/` and `server/assets/` are separate asset roots (Bevy resolves assets
@@ -158,22 +165,22 @@ cargo run -p client --release     # connects when the main menu's Connect button
 - **Client config**: `client/assets/config.toml` (`server_ip`, default `127.0.0.1`; `vr`, default
   `false`). Missing fields fall back to defaults. There is no in-game UI for these.
 - **Steam Deck builds**: always build inside the `steamrt4` toolbox with
-  `scripts/steam_deck_toolbox.sh cargo build -p <client|server> --release`. A host build links the
+  `scripts/steam_deck_toolbox.sh cargo build -p <p19-client|p19-server> --release`. A host build links the
   host's newer glibc and fails on the Deck (`GLIBC_2.4x not found`); since host and toolbox share
   the toolchain, cargo can't tell them apart — recover with `cargo clean -p <crate> --release`
   inside the toolbox. Check with
   `objdump -T target/release/<bin> | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -5` (should top
   out around `GLIBC_2.39`).
-- `scripts/deploy_steam_deck.sh` cleans, builds the client in the toolbox, and stages it with a
+- `scripts/build_steam_deck.sh` cleans, builds the client in the toolbox, and stages it with a
   copy of `client/assets/` in **`target/steamdeck/release/`** (wiped and recreated each run; a
   full `cargo clean` deletes it too — never keep hand-placed files there), then checks the GLIBC
   baseline. Ready for SteamOS Devkit Client's Title Upload: `Local Folder` =
-  `<repo>/target/steamdeck/release/`, `Start Command` = `./client`.
+  `<repo>/target/steamdeck/release/`, `Start Command` = `./p19-client`.
 - `../build.sh` (outside the workspace) builds in a `steamrt-sniper` podman container.
 - **CI** (`.github/workflows/ci.yml`): "Build server" (host `ubuntu-latest`, debug) and "Build
   client (steamrt4, shippable)" (release, inside `registry.gitlab.steamos.cloud/steamrt/steamrt4/sdk`,
   with a GLIBC check). Both free runner disk space first.
-- **Tracy** is opt-in: `cargo run -p client --release --features tracy`. Only use it with a Tracy
+- **Tracy** is opt-in: `cargo run -p p19-client --release --features tracy`. Only use it with a Tracy
   GUI attached — without one, `tracy-client` buffers every span in memory (RSS grows ~150 MB/s).
   `[profile.release] debug = true` exists for Tracy symbol names.
 
@@ -235,7 +242,7 @@ Modules are grouped into `controls/`, `dev/`, `gameplay/`, `lifecycle/`, `presen
 
 ### Game flow
 
-States live in `shared::game_state`: `GameState` (`AssetLoading` default, `MainMenu`, `Lobby`,
+States live in `p19_shared::game_state`: `GameState` (`AssetLoading` default, `MainMenu`, `Lobby`,
 `InGame`; `Loading`/`Paused` are unused), `VRState`, `ModalMenuState` (the in-game pause menu,
 overlaying `InGame`), `ServerState` (server-only). `InputDeviceState`
 (`KeyboardMouse`/`Gamepad`) tracks the last-used device for UI glyphs.

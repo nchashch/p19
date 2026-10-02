@@ -2,10 +2,10 @@ use avian3d::prelude::*;
 use bevy::color::palettes::css::{DARK_SLATE_GRAY, GRAY, WHITE};
 use bevy::prelude::*;
 use bevy_mod_outline::{AsyncWorldInheritOutline, OutlinePlugin, OutlineVolume};
-use shared::player::Selectable;
+use p19_shared::player::Selectable;
 
 use crate::gameplay::player_character::LocalPlayer;
-use shared::game_state::VRState;
+use p19_shared::game_state::VRState;
 
 pub struct TargetingPlugin;
 

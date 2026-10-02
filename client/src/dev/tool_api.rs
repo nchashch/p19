@@ -55,11 +55,11 @@ use bevy_enhanced_input::prelude::{Action, ActionMock, ActionValue, Actions, Moc
 use serde_json::json;
 
 use bevy_ahoy::{CharacterControllerState, CharacterLook};
-use shared::client_events::{InGameRequest, ObserveRequest};
-use shared::combat::{Dead, Gcd, HitPoints};
-use shared::game_state::GameState;
-use shared::inputs::PlayerInputContext;
-use shared::player::{PlayerCharacter, Selectable};
+use p19_shared::client_events::{InGameRequest, ObserveRequest};
+use p19_shared::combat::{Dead, Gcd, HitPoints};
+use p19_shared::game_state::GameState;
+use p19_shared::inputs::PlayerInputContext;
+use p19_shared::player::{PlayerCharacter, Selectable};
 
 use avian3d::prelude::LinearVelocity;
 
@@ -246,7 +246,7 @@ fn game_state_snapshot(world: &mut World) -> serde_json::Value {
         }));
     }
     for (entity, action_of, bound, mouse_look, stick_look) in world
-        .query_filtered::<(Entity, &bevy_enhanced_input::prelude::ActionOf<PlayerInputContext>, Has<bevy_enhanced_input::prelude::Bindings>, Has<shared::inputs::MouseLook>, Has<shared::inputs::StickLook>), With<bevy_enhanced_input::prelude::Action<bevy_ahoy::input::RotateCamera>>>()
+        .query_filtered::<(Entity, &bevy_enhanced_input::prelude::ActionOf<PlayerInputContext>, Has<bevy_enhanced_input::prelude::Bindings>, Has<p19_shared::inputs::MouseLook>, Has<p19_shared::inputs::StickLook>), With<bevy_enhanced_input::prelude::Action<bevy_ahoy::input::RotateCamera>>>()
         .iter(world)
     {
         let name = if mouse_look { "rotate_mouse" } else if stick_look { "rotate_stick" } else { "rotate?" };
@@ -1761,7 +1761,7 @@ fn select_method(params: In<Option<serde_json::Value>>, world: &mut World) -> Br
     };
 
     let selectable = world
-        .query_filtered::<(), bevy::ecs::query::With<shared::player::Selectable>>()
+        .query_filtered::<(), bevy::ecs::query::With<p19_shared::player::Selectable>>()
         .get(world, entity)
         .is_ok();
     if !selectable {
@@ -1779,8 +1779,8 @@ fn select_method(params: In<Option<serde_json::Value>>, world: &mut World) -> Br
 /// the lobby/menu's Main Menu + Disconnect.
 fn trigger_method(params: In<Option<serde_json::Value>>, mut world: &mut World) -> BrpResult {
     use crate::events::{Connect, Disconnect};
-    use shared::client_events::InGameRequest;
-    use shared::replication::OrderedReliable;
+    use p19_shared::client_events::InGameRequest;
+    use p19_shared::replication::OrderedReliable;
 
     let Some(params) = params.0 else {
         return Err(BrpError::internal("missing params"));
@@ -1806,7 +1806,7 @@ fn trigger_method(params: In<Option<serde_json::Value>>, mut world: &mut World) 
                 .iter_mut(world)
                 .next()
                 .ok_or_else(|| BrpError::internal("no MessageSender<InGameRequest> (not connected?)"))?;
-            sender.send::<shared::replication::OrderedReliable>(InGameRequest);
+            sender.send::<p19_shared::replication::OrderedReliable>(InGameRequest);
             Ok(json!({"triggered": "play", "sent": "InGameRequest"}).into())
         }
         "observe" => {
@@ -1817,7 +1817,7 @@ fn trigger_method(params: In<Option<serde_json::Value>>, mut world: &mut World) 
                 .iter_mut(world)
                 .next()
                 .ok_or_else(|| BrpError::internal("no MessageSender<ObserveRequest> (not connected?)"))?;
-            sender.send::<shared::replication::OrderedReliable>(ObserveRequest);
+            sender.send::<p19_shared::replication::OrderedReliable>(ObserveRequest);
             Ok(json!({"triggered": "observe", "sent": "ObserveRequest"}).into())
         }
         // The spawn hotkeys: client-local triggers whose observers wrap the player's current
@@ -1852,7 +1852,7 @@ fn trigger_method(params: In<Option<serde_json::Value>>, mut world: &mut World) 
 /// level picker reads): asset paths + names, so an agent can pick a level by asset path.
 fn levels_method(_params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
     // `Levels` is a replicated COMPONENT on an entity (not a resource).
-    let mut query = world.query::<&shared::level::Levels>();
+    let mut query = world.query::<&p19_shared::level::Levels>();
     let Some(levels) = query.iter(world).next() else {
         return Err(BrpError::internal(
             "no Levels entity replicated yet (not in the lobby?)",
@@ -1874,8 +1874,8 @@ fn levels_method(_params: In<Option<serde_json::Value>>, world: &mut World) -> B
 /// sender, the same message the lobby's level picker sends after a selection. `asset_path`
 /// comes from `game/levels` (e.g. `levels/minimal.level.ron`).
 fn select_level_method(params: In<Option<serde_json::Value>>, mut world: &mut World) -> BrpResult {
-    use shared::client_events::LoadLevelRequest;
-    use shared::replication::OrderedReliable;
+    use p19_shared::client_events::LoadLevelRequest;
+    use p19_shared::replication::OrderedReliable;
 
     let Some(params) = params.0 else {
         return Err(BrpError::internal("missing params"));

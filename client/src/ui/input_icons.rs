@@ -34,7 +34,7 @@ use quick_xml::events::Event;
 use quick_xml::reader::Reader as XmlReader;
 
 use crate::assets::collections::CommonAssets;
-use shared::game_state::GameState;
+use p19_shared::game_state::GameState;
 
 pub struct InputIconsPlugin;
 

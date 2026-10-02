@@ -11,10 +11,10 @@ use bevy_ahoy::CharacterLook;
 use bevy_ahoy::prelude::CharacterController as AhoyCharacterController;
 use lightyear::prelude::Controlled;
 use lightyear::prelude::{AppComponentExt, PredictionBuilderExt};
-use shared::cube_spawner::CubeSpawner;
-use shared::game_state::GameState;
-use shared::npc_spawner::NpcSpawner;
-use shared::player::PlayerCharacter;
+use p19_shared::cube_spawner::CubeSpawner;
+use p19_shared::game_state::GameState;
+use p19_shared::npc_spawner::NpcSpawner;
+use p19_shared::player::PlayerCharacter;
 
 pub struct PlayerCharacterPlugin;
 
@@ -94,7 +94,7 @@ pub fn decorate_other_players(
 /// The player's own `PlayerCharacter` entity, identified via `lightyear::prelude::Controlled` —
 /// the client automatically gets this marker on its local copy of whichever entity the server
 /// tagged `ControlledBy { owner: <that client's connection entity> }` (see
-/// `server::networking::spawn_player_for_client`). Not derived by querying `With<PlayerCharacter>`
+/// `p19_server::networking::spawn_player_for_client`). Not derived by querying `With<PlayerCharacter>`
 /// alone, since once other players are connected there can be several such entities replicated in
 /// and nothing about them locally distinguishes "mine" from "someone else's" beyond `Controlled`.
 #[derive(Resource, Deref, Clone, Copy)]
@@ -133,7 +133,7 @@ fn on_player_spawned(
                 // client-side — it's not replicated — so this inserts `RigidBody::Kinematic`,
                 // whose own requires add `LinearVelocity`/`Position`/`Rotation`),
                 // `CustomPositionIntegration`, …) insert automatically. Aliased
-                // `AhoyCharacterController` — `shared::character_controller::CharacterController`
+                // `AhoyCharacterController` — `p19_shared::character_controller::CharacterController`
                 // is still in the server-authored bundle on this same entity until M4 deletes
                 // the gutted controller.
                 AhoyCharacterController::default(),
@@ -146,7 +146,7 @@ fn on_player_spawned(
                 parent
                     // `Visibility::default()` on these two plain transform-anchor entities matters
                     // for the same reason `PlayerCharacter`'s `#[require(Visibility)]` does (see
-                    // `shared::player`) — without it, the chain from `Player` down to the camera
+                    // `p19_shared::player`) — without it, the chain from `Player` down to the camera
                     // (which does have `Visibility`, via `Camera3d`) breaks here instead, producing
                     // the same `bevy_app::hierarchy` B0004 warning one link further down.
                     .spawn((Transform::from_xyz(0., 0.5, 0.), Visibility::default()))

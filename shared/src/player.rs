@@ -15,7 +15,7 @@ use crate::inputs::{MouseLook, PlayerInputContext, StickLook};
 #[reflect(Component)]
 pub struct PlayerCharacterSpawner;
 
-/// `#[require(Visibility)]` for the same reason `shared::level::InGameRoot` needs it: the client's
+/// `#[require(Visibility)]` for the same reason `p19_shared::level::InGameRoot` needs it: the client's
 /// mirror of this entity only ever gets whatever's explicitly `.replicate::<T>()`-registered, and
 /// `Visibility`/`InheritedVisibility`/`ViewVisibility` are deliberately never replicated (meant to
 /// be computed locally, the same way `GlobalTransform` is computed locally from `Transform`).
@@ -143,7 +143,7 @@ pub fn player(player_name: String, position: Vec3) -> impl Bundle {
         Transform::from_translation(position),
         // Ahoy's KCC + its replicated input context — the M2 server-authoritative movement
         // stack. The KCC runs on BOTH binaries over the same `AccumulatedInput` stream (fed
-        // by replicated BEI action state — see `shared::inputs`), the server's being
+        // by replicated BEI action state — see `p19_shared::inputs`), the server's being
         // authoritative; the client's local copy is the prediction that M3/M4 reconcile.
         // The action entities spawn here (server-side) **without bindings** — input arrives
         // via `BEIStateSequence` replication, and the owning client adds local-only
@@ -155,7 +155,7 @@ pub fn player(player_name: String, position: Vec3) -> impl Bundle {
         // is still in this bundle until M4 deletes it.
         AhoyCharacterController::default(),
         // Server-side look is accumulated from the replicated ahoy `RotateCamera` action (see
-        // `server::input`); the client overwrites its own `CharacterLook` from its camera
+        // `p19_server::input`); the client overwrites its own `CharacterLook` from its camera
         // every frame.
         CharacterLook::default(),
         PlayerInputContext,
@@ -166,7 +166,7 @@ pub fn player(player_name: String, position: Vec3) -> impl Bundle {
             // different action-level scaling (radians/pixel vs radians/second×dt) and BEI
             // applies action-level modifiers to all of an action's bindings. The owning
             // client binds each per its marker (see `controls.rs`'s binding observers); the
-            // server-side accumulator treats both identically (see `server::input`).
+            // server-side accumulator treats both identically (see `p19_server::input`).
             context.spawn((Action::<RotateCamera>::new(), MouseLook));
             context.spawn((Action::<RotateCamera>::new(), StickLook));
         })),

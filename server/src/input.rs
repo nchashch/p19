@@ -26,7 +26,7 @@ fn accumulate_look(
     // removal starves ahoy's KCC), and this gate closes the remaining "can still look around
     // while dead" agency. Combat gating for dead *attackers* lands with the combat
     // caster-resolution fix (`resolve_attack`/`resolve_kill` currently no-op for everyone).
-    mut looks: Query<&mut CharacterLook, Without<shared::combat::Dead>>,
+    mut looks: Query<&mut CharacterLook, Without<p19_shared::combat::Dead>>,
 ) {
     let Ok(mut look) = looks.get_mut(rotate.context) else {
         return;

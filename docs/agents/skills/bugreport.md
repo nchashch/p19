@@ -49,7 +49,7 @@ Required fields:
 | `Date discovered` | When first observed |
 | `Commit (state actually running)` | Exact local `git log -1 --format="%h %s"` **plus a per-file list of uncommitted changes that were in the running binary** — pushed or not. The report must reflect the code that actually ran (convention established by the owner; playtests 0017–0019 follow it). Once fixed, append `**Fixed in** <hash> "<title>"` |
 | `Discovered by` | Session/agent/human |
-| `Component` | Module(s) involved (`server::combat`, `client::lifecycle/networking`, …) |
+| `Component` | Module(s) involved (`p19_server::combat`, `p19_client::lifecycle/networking`, …) |
 | `Severity` | S1–S4 (see §6) |
 | `Status` | `Open` → `Investigating` → `Fix in progress` → **`Fixed in <commit>`** / `Won't fix` / `By design` — updated **in place** as the bug moves |
 | `Related` | Playtest reports (by number + finding, e.g. "playtest 0015 F3"), other bug numbers, AGENTS.md gap entries |

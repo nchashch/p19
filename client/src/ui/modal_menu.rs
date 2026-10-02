@@ -13,7 +13,7 @@ use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions};
 use bevy_xr_utils::tracking_utils::XrTrackedLeftGrip;
 use crate::controls::input_device::InputDeviceState;
-use shared::game_state::{GameState, ModalMenuState, VRState};
+use p19_shared::game_state::{GameState, ModalMenuState, VRState};
 use std::f32::consts::FRAC_PI_2;
 
 /// The in-game pause menu — see `game_state::ModalMenuState`. Opened/closed by

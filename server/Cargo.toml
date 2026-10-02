@@ -1,5 +1,5 @@
 [package]
-name = "server"
+name = "p19-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -46,10 +46,10 @@ bevy = { version = "0.19.0", default-features = false, features = [
 	# which only fires because the client uses `default-features = true`.
 	"reflect_auto_register",
 	# Needed by `bevy_enhanced_input`'s own `serialize` feature (see the workspace `Cargo.toml`
-	# comment on that dependency) — `server::replay`'s recorder round-trips `ActionValue`
+	# comment on that dependency) — `p19_server::replay`'s recorder round-trips `ActionValue`
 	# through JSON.
 	"serialize",
-	# Server-side BRP + MCP debugging surface (`server::tools`) — always-on (localhost-only,
+	# Server-side BRP + MCP debugging surface (`p19_server::tools`) — always-on (localhost-only,
 	# the server is trusted, unlike the client where it's feature-gated as a cheat surface).
 	"bevy_remote",
 ] }
@@ -86,4 +86,4 @@ bevy_ahoy.workspace = true
 bevy_enhanced_input.workspace = true
 
 bevy_skein.workspace = true
-shared = { path = "../shared" }
+p19-shared = { path = "../shared" }

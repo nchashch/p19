@@ -3,7 +3,7 @@
 # the Deck/Steam Runtime — see AGENTS.md's "Commands" section) and stages it plus its `assets/`
 # directory under `target/steamdeck/release/`, ready for SteamOS Devkit Client's Title Upload:
 #   Local Folder   = <repo>/target/steamdeck/release/
-#   Start Command  = ./client
+#   Start Command  = ./p19-client
 #
 # The staging dir is build output: it lives under cargo's gitignored `target/` (a full
 # `cargo clean` removes it too) and is wiped and recreated on every run, so never keep
@@ -12,7 +12,7 @@
 # "Clean isolated run": a plain host-side `cargo build`/`cargo run` for this same target
 # silently taints cargo's cached intermediate objects with the *host's* (newer) glibc, and a
 # bare `rm` of the final binary is not enough to undo that — cargo can still decide only a
-# relink (not a full recompile) is needed and reuse the tainted objects. `cargo clean -p client
+# relink (not a full recompile) is needed and reuse the tainted objects. `cargo clean -p p19-client
 # --release`, run *inside* the toolbox before building, forces a real recompile against the
 # toolbox's own (older) glibc. Run this any time you're not sure whether the last release build
 # of `client` happened on the host or inside the toolbox — see AGENTS.md's GLIBC-mismatch note
@@ -26,19 +26,19 @@ STAGING_DIR="$REPO_ROOT/target/steamdeck/release"
 cd "$REPO_ROOT"
 
 echo "==> Cleaning client's release artifacts inside the steamrt4 toolbox"
-./scripts/steam_deck_toolbox.sh cargo clean -p client --release
+./scripts/steam_deck_toolbox.sh cargo clean -p p19-client --release
 
 echo "==> Building client --release inside the steamrt4 toolbox"
-./scripts/steam_deck_toolbox.sh cargo build -p client --release
+./scripts/steam_deck_toolbox.sh cargo build -p p19-client --release
 
 echo "==> Staging binary + assets at $STAGING_DIR"
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"
-cp target/release/client "$STAGING_DIR/client"
+cp target/release/p19-client "$STAGING_DIR/p19-client"
 cp -r client/assets "$STAGING_DIR/assets"
 
 if command -v objdump >/dev/null 2>&1; then
-    max_glibc=$(objdump -T "$STAGING_DIR/client" | grep -oE 'GLIBC_[0-9.]+' | sed 's/GLIBC_//' | sort -Vu | tail -1)
+    max_glibc=$(objdump -T "$STAGING_DIR/p19-client" | grep -oE 'GLIBC_[0-9.]+' | sed 's/GLIBC_//' | sort -Vu | tail -1)
     if [ -n "$max_glibc" ]; then
         echo "==> Highest GLIBC symbol version linked: $max_glibc"
         # Known toolbox baseline is ~2.41 (see AGENTS.md) — anything higher means this build
@@ -56,4 +56,4 @@ else
 fi
 
 echo "==> Done. Staged at $STAGING_DIR"
-echo "    In SteamOS Devkit Client's Title Upload: Local Folder = $STAGING_DIR, Start Command = ./client"
+echo "    In SteamOS Devkit Client's Title Upload: Local Folder = $STAGING_DIR, Start Command = ./p19-client"

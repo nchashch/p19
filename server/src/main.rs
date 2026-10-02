@@ -10,12 +10,12 @@ use bevy::state::app::StatesPlugin;
 use bevy_asset_loader::prelude::*;
 use lightyear::avian3d::plugin::{AvianReplicationMode, LightyearAvianPlugin};
 use lightyear::prelude::*;
-use shared::assets::SharedAssetsPlugin;
-use shared::assets::level::LevelMetadataAssets;
-use shared::game_state::ServerState;
-use shared::inputs::SharedInputsPlugin;
-use shared::mesh_primitive::SharedMeshPrimitivePlugin;
-use shared::replication::SharedReplicationPlugin;
+use p19_shared::assets::SharedAssetsPlugin;
+use p19_shared::assets::level::LevelMetadataAssets;
+use p19_shared::game_state::ServerState;
+use p19_shared::inputs::SharedInputsPlugin;
+use p19_shared::mesh_primitive::SharedMeshPrimitivePlugin;
+use p19_shared::replication::SharedReplicationPlugin;
 
 mod combat;
 mod input;
@@ -193,7 +193,7 @@ pub(crate) fn build_app<M>(networking_plugin: impl bevy::app::Plugins<M>) -> App
                 // `SERVER_REPLAY_RECORD` is set; see `replay.rs`.
                 ReplayRecorderPlugin,
                 // Registers `MeshPrimitive`'s reflection (shared with `client` — see
-                // `shared::mesh_primitive`'s own doc comment) so this binary's `AppTypeRegistry`
+                // `p19_shared::mesh_primitive`'s own doc comment) so this binary's `AppTypeRegistry`
                 // recognizes the type too, whether or not anything on this side ever reacts to
                 // it — only `client` currently does (a purely visual `Mesh3d`/`MeshMaterial3d`
                 // spawn, no collider). Nested here for the same tuple-arity reason as everything

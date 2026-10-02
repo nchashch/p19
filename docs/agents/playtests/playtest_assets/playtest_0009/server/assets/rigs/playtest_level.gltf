@@ -31,7 +31,7 @@
             "avian3d::dynamics::rigid_body::RigidBody": "Static"
           },
           {
-            "shared::assets::level::ClientReplicate": {}
+            "p19_shared::assets::level::ClientReplicate": {}
           }
         ]
       }
@@ -46,15 +46,15 @@
       "extras": {
         "skein": [
           {
-            "shared::assets::level::ClientWorldAsset": {
+            "p19_shared::assets::level::ClientWorldAsset": {
               "asset_path": "rigs/playtest_visuals.gltf"
             }
           },
           {
-            "shared::assets::level::ClientReplicate": {}
+            "p19_shared::assets::level::ClientReplicate": {}
           },
           {
-            "shared::player::PlayerCharacterSpawner": {}
+            "p19_shared::player::PlayerCharacterSpawner": {}
           }
         ]
       }

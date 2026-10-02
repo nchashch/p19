@@ -4,8 +4,8 @@ use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
 use std::time::Duration;
 
-use shared::character_controller::{Character, Idle};
-use shared::server_events::Attack;
+use p19_shared::character_controller::{Character, Idle};
+use p19_shared::server_events::Attack;
 
 use crate::assets::collections::CommonAssets;
 use crate::events::{AnimationFinished, PlayAnimationLooping, PlayAnimationOnce};

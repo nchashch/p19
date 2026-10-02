@@ -74,8 +74,8 @@ fn server_state_method(_params: In<Option<serde_json::Value>>, world: &mut World
     let mut players = world.query_filtered::<(
         Entity,
         &Transform,
-        &shared::player::PlayerCharacter,
-        &shared::combat::HitPoints,
+        &p19_shared::player::PlayerCharacter,
+        &p19_shared::combat::HitPoints,
         &lightyear::prelude::ControlledBy,
         &bevy_ahoy::CharacterLook,
     ), ()>();

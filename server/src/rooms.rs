@@ -19,7 +19,7 @@
 
 use bevy::prelude::*;
 use lightyear::prelude::*;
-use shared::level::{InGameRoot, LobbyRoot};
+use p19_shared::level::{InGameRoot, LobbyRoot};
 
 /// The single room every in-game entity currently belongs to. Only `InGameRoot` is tagged with
 /// this directly (see `networking.rs`'s `load_level_request`) — everything parented under it

@@ -3,8 +3,8 @@ use bevy_hanabi::ParticleEffect;
 use bevy_mod_xr::session::XrTrackingRoot;
 use bevy_seedling::sample::SamplePlayer;
 use lightyear::prelude::client::Remote;
-use shared::assets::level::ClientWorldAsset;
-use shared::game_state::GameState;
+use p19_shared::assets::level::ClientWorldAsset;
+use p19_shared::game_state::GameState;
 
 pub struct LoadingPlugin;
 

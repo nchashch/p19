@@ -15,11 +15,11 @@ use bevy_ahoy::input::{Jump as AhoyJump, Movement as AhoyMovement, RotateCamera 
 use bevy_ahoy::CharacterLook;
 use bevy_enhanced_input::prelude::{Press, *};
 use chill_bevy_console::console_closed;
-use shared::client_events::{AttackAttempt, KillAttempt};
-use shared::game_state::{GameState, ModalMenuState};
-use shared::inputs::{MouseLook, PlayerInputContext, StickLook};
-use shared::player::Selectable;
-use shared::replication::OrderedReliable;
+use p19_shared::client_events::{AttackAttempt, KillAttempt};
+use p19_shared::game_state::{GameState, ModalMenuState};
+use p19_shared::inputs::{MouseLook, PlayerInputContext, StickLook};
+use p19_shared::player::Selectable;
+use p19_shared::replication::OrderedReliable;
 use std::f32::consts::PI;
 
 use lightyear::prelude::*;
@@ -37,7 +37,7 @@ pub struct PlayerControls;
 
 impl Plugin for PlayerControlsPlugin {
     fn build(&self, app: &mut App) {
-        // `EnhancedInputPlugin` is also added by `shared::inputs::SharedInputsPlugin` (via
+        // `EnhancedInputPlugin` is also added by `p19_shared::inputs::SharedInputsPlugin` (via
         // `lightyear_inputs_bei`'s `InputPlugin`, which sits earlier in `main.rs`'s plugin
         // tuple since the M0 prediction wiring) — adding it unconditionally here would
         // double-register it and panic. The guard keeps this plugin self-sufficient if
@@ -221,7 +221,7 @@ fn toggle_data_frame(
 }
 
 /// Rotates the FPS camera from the replicated ahoy `RotateCamera` actions — **the same events
-/// the server's look accumulator consumes (`server::input`)**, which is the whole point of this
+/// the server's look accumulator consumes (`p19_server::input`)**, which is the whole point of this
 /// observer: ONE consumer per input. BEI gives a binding's input to the first action that reads
 /// it each tick (other actions read zero — "already consumed"), so the old dual path (legacy
 /// `FpsCameraRotation` + replicated `RotateCamera` both bound to mouse motion) split the mouse
@@ -448,7 +448,7 @@ fn bind_replicated_ahoy_actions(
             .insert((Press::new(1.0), bindings![KeyCode::Space, GamepadButton::South]));
     }
     for entity in &rotate {
-        // Look input for the server's `CharacterLook` accumulator (`server::input`): the two
+        // Look input for the server's `CharacterLook` accumulator (`p19_server::input`): the two
         // device-marked `RotateCamera` action entities get their respective bindings — mouse
         // scaled by radians/pixel, stick by the same rate×dt scaling the legacy
         // `FpsCameraRotation` stick binding uses — so each action's per-tick value is radians,

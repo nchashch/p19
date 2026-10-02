@@ -6,16 +6,16 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use bevy::prelude::*;
 use lightyear::prelude::*;
 use rustls::pki_types::CertificateDer;
-use shared::client_events::ClientDespawn;
-use shared::game_state::GameState;
-use shared::replication::ClientInGame;
+use p19_shared::client_events::ClientDespawn;
+use p19_shared::game_state::GameState;
+use p19_shared::replication::ClientInGame;
 
 use crate::config::load_client_config;
 use crate::events::{Connect, Disconnect};
 
 const SERVER_PORT: u16 = 6000;
 
-/// Port of the server's token-issuing HTTP endpoint (`server::networking`'s
+/// Port of the server's token-issuing HTTP endpoint (`p19_server::networking`'s
 /// `start_token_http_endpoint`). In production this becomes an HTTPS request to a real
 /// backend — or an asymmetric LAN key-exchange — so the token can't be stolen in flight on an
 /// unsecured LAN; the plain-HTTP request here is the explicitly-acknowledged dev/LAN posture.
@@ -72,7 +72,7 @@ fn on_out_of_game(
         // net for any future leave path where the client goes to Lobby while its
         // `Lifetime::Persistent` player somehow survives server-side.
         if let Ok(mut sender) = senders.single_mut() {
-            sender.send::<shared::replication::OrderedReliable>(ClientDespawn);
+            sender.send::<p19_shared::replication::OrderedReliable>(ClientDespawn);
         }
         commands.set_state(GameState::Lobby);
     }
@@ -232,7 +232,7 @@ fn token_tls_config() -> rustls::ClientConfig {
 }
 
 /// Blocking fetch of a netcode connect token from the server's token HTTPS endpoint
-/// (`server::networking`'s `start_token_http_endpoint`): `GET /connect_token` over TLS with the
+/// (`p19_server::networking`'s `start_token_http_endpoint`): `GET /connect_token` over TLS with the
 /// server's self-signed certificate, body = the raw 2048-byte encrypted connect token. The
 /// certificate is fingerprint-pinned trust-on-first-use ([`tls_fingerprint_store_path`]) — this
 /// is what keeps the token un-stealable on the wire after the first connection. In production
@@ -415,7 +415,7 @@ fn on_disconnect_request(
     // immediately instead of waiting for the netcode timeout (see `on_app_exit` for the
     // shutdown variant of the same concern).
     if let Ok(mut sender) = senders.single_mut() {
-        sender.send::<shared::replication::OrderedReliable>(ClientDespawn);
+        sender.send::<p19_shared::replication::OrderedReliable>(ClientDespawn);
     }
     commands.trigger(lightyear::prelude::Disconnect { entity: link.0 });
     commands.trigger(Unlink {
@@ -442,7 +442,7 @@ fn send_client_despawn_on_exit(
         }
         if connected.contains(link.0) && let Ok(mut sender) = senders.single_mut() {
             info!("app exit: sending ClientDespawn before shutdown");
-            sender.send::<shared::replication::OrderedReliable>(ClientDespawn);
+            sender.send::<p19_shared::replication::OrderedReliable>(ClientDespawn);
         }
     }
 }

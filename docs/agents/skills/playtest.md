@@ -22,8 +22,8 @@ need, report the API gap rather than falling back to screenshots.
 
 | Process | Binary | Env | Ports |
 |---|---|---|---|
-| Game server | `target/release/server` | `BEVY_ASSET_ROOT=$PWD/server` | UDP :6000 (game) · HTTPS :6001 (connect-token endpoint — must be reachable by clients; see §4 note) · server QA: BRP :15701 + MCP :15711 (`server/state`, §3) |
-| Client (headless agent host) | `target/debug/client --mcp` | `CARGO_MANIFEST_DIR=$PWD/client BEVY_ASSET_ROOT=$PWD/client` | BRP HTTP :15702 · MCP :15710 |
+| Game server | `target/release/p19-server` | `BEVY_ASSET_ROOT=$PWD/server` | UDP :6000 (game) · HTTPS :6001 (connect-token endpoint — must be reachable by clients; see §4 note) · server QA: BRP :15701 + MCP :15711 (`server/state`, §3) |
+| Client (headless agent host) | `target/debug/p19-client --mcp` | `CARGO_MANIFEST_DIR=$PWD/client BEVY_ASSET_ROOT=$PWD/client` | BRP HTTP :15702 · MCP :15710 |
 | You (the agent) | shell + `curl`/python | — | talks to :15702 |
 
 `--no-render` client variant: everything in this playbook works **except
@@ -84,8 +84,8 @@ Particularities worth remembering:
 - Build first, and **verify the build actually succeeded**:
 
   ```sh
-  cargo build -p client --features dev-tools 2>&1 | grep -cE "^error"   # must print 0
-  cargo build -p server --release 2>&1 | grep -cE "^error"              # must print 0
+  cargo build -p p19-client --features dev-tools 2>&1 | grep -cE "^error"   # must print 0
+  cargo build -p p19-server --release 2>&1 | grep -cE "^error"              # must print 0
   ```
 
   A failed build leaves the *previous* binary in place; rerunning then silently
@@ -101,18 +101,18 @@ Particularities worth remembering:
 
 ```sh
 LOG=/tmp/p19-playtest; mkdir -p "$LOG"   # any writable dir; the redirects below fail if it's missing
-pkill -x client 2>/dev/null; pkill -x server 2>/dev/null; sleep 1
+pkill -x p19-client 2>/dev/null; pkill -x p19-server 2>/dev/null; sleep 1
 ss -tunap | grep -E ":(6000|6001)\b"             # game + token ports free?
 ss -tlnp | grep -E "15701|15702|15710|15711"      # client + server QA ports free?
 
 # server
-(BEVY_ASSET_ROOT=$PWD/server ./target/release/server > "$LOG/server.log" 2>&1 &)
+(BEVY_ASSET_ROOT=$PWD/server ./target/release/p19-server > "$LOG/server.log" 2>&1 &)
 sleep 4                        # wait for the bind
 
 # client — put a hard lifetime on it (timeout N) and keep N big enough for the
 # whole test; a dead client answers BRP with connection-refused (silent with -s)
 (CARGO_MANIFEST_DIR=$PWD/client BEVY_ASSET_ROOT=$PWD/client \
-  timeout 300 ./target/debug/client --mcp > "$LOG/client.log" 2>&1 &)
+  timeout 300 ./target/debug/p19-client --mcp > "$LOG/client.log" 2>&1 &)
 sleep 8                        # menu reachable ~2s; give slack
 
 # sanity: the MCP server must have come up
@@ -121,9 +121,9 @@ grep -i "mcp tool server listening" "$LOG/client.log"
 
 Hard rules learned the hard way:
 
-- **Never `pkill -f "debug/client"`** — the pattern matches your *own shell's*
+- **Never `pkill -f "debug/p19-client"`** — the pattern matches your *own shell's*
   command line and kills the test command itself (no output, no log file). Use
-  `pkill -x client` / `pkill -x server` (exact process names).
+  `pkill -x p19-client` / `pkill -x p19-server` (exact process names).
 - **Stray clients hold :15702/:15710.** The next client's MCP then logs
   `mcp server stopped: Os { code: 98, kind: AddrInUse }` and its BRP bind can
   fail too. Always teardown first, verify with `ss`.
@@ -396,7 +396,7 @@ duration-based — budget a release call, or use `{"reset":true}`.
 at its actual screenshot pixel coordinates transitioned the client into
 `Lobby` through the real `bevy_ui`/`bevy_picking` pipeline (confirmed via
 `game/state`), and clicking "Options" opened/closed its real `selector` popup
-(confirmed via the `client::ui::selector` log lines it emits). This is the
+(confirmed via the `p19_client::ui::selector` log lines it emits). This is the
 first method in this API that reaches UI by *position* rather than by
 navigating focus and confirming.
 
@@ -439,7 +439,7 @@ this ceiling.
 
 Everything above (§5-§5b) is the `--mcp` headless harness: agent-injected input
 mocked at the ECS level, no real window, no real OS input device. Sometimes you
-need the *other* thing — a real windowed client (`target/debug/client`, no
+need the *other* thing — a real windowed client (`target/debug/p19-client`, no
 `--mcp` flag, still needs `--features dev-tools` built in) driven by genuine
 synthetic OS input (a real uinput/Wayland device, indistinguishable from actual
 hardware to the app) — e.g. to close the loop on something `--mcp` can't test
@@ -582,8 +582,8 @@ Known-correct paths (0.19): `bevy_camera::camera::Camera`,
 `bevy_transform::components::global_transform::GlobalTransform`,
 `bevy_ecs::hierarchy::Children` (not `relationship::`),
 `bevy_world_serialization::components::WorldAssetRoot`,
-`shared::cube_spawner::Cube`, `shared::assets::level::ClientWorldAsset`,
-`client::controls::fps_controller::FpsCamera`.
+`p19_shared::cube_spawner::Cube`, `p19_shared::assets::level::ClientWorldAsset`,
+`p19_client::controls::fps_controller::FpsCamera`.
 
 **The single biggest trap: serialization failure ≠ absence.** Components holding
 asset handles (`Mesh3d`, `RenderTarget`, `WorldAssetRoot`, …) cannot BRP-serialize
@@ -653,7 +653,7 @@ mechanics"; the investigations are playtests 0003 and 0004):
 |---|---|---|
 | Empty curl bodies | Client dead (timeout expired) or malformed shell quoting | `ps aux \| grep -c "[d]ebug/client"`; rebuild the curl |
 | Curls return nothing *and* client alive | **zsh doesn't word-split unquoted vars** — `H='-H …'; curl $H …` passes one giant arg | Always write literal URLs/headers in curls |
-| Next client logs `mcp server stopped: AddrInUse` | Stray client holds :15710/:15702 | `pkill -x client`; verify `ss` |
+| Next client logs `mcp server stopped: AddrInUse` | Stray client holds :15710/:15702 | `pkill -x p19-client`; verify `ss` |
 | `game/state` says InGame but no `position`, forever | Zombie-player inheritance: a previous client's `Lifetime::Persistent` player replicated its `ClientInGame` to your fresh connection without `Controlled` | Restart the server (the parked reconnect bug) |
 | `select_level` appears to do nothing | A level is already `Loading`/`LevelLoaded`; the server's `LevelState` guard rejects further requests (logged server-side) | Just `play`; restart the server to switch levels |
 | Test results look impossible / old behavior | Stale binary from a failed build | Rebuild, `grep -cE "^error"` must be 0 |
@@ -681,7 +681,7 @@ with `AddrInUse`):
 
 ```sh
 # client N: BRP on 1600N, MCP on 1700N
-./target/debug/client --mcp --brp-port 1600$N --mcp-port 1700$N
+./target/debug/p19-client --mcp --brp-port 1600$N --mcp-port 1700$N
 # address client N's BRP at http://127.0.0.1:1600$N (JSON-RPC POST, same methods)
 ```
 

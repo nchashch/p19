@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use lightyear::prelude::*;
-use shared::client_events::SpawnCubeRequest;
-use shared::cube_spawner::{Cube, CubeSpawner};
-use shared::level::InGameRoot;
-use shared::replication::OrderedReliable;
+use p19_shared::client_events::SpawnCubeRequest;
+use p19_shared::cube_spawner::{Cube, CubeSpawner};
+use p19_shared::level::InGameRoot;
+use p19_shared::replication::OrderedReliable;
 
 use crate::assets::collections::CommonAssets;
 use crate::controls::fps_controller::FpsCamera;

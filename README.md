@@ -34,8 +34,8 @@ LFS pointer text instead of images for those specific files.
 
 ```sh
 cargo check --workspace   # fastest way to confirm everything compiles
-cargo run -p server --release   # start the authoritative server (listens on 0.0.0.0:6000)
-cargo run -p client --release   # start the game client (connects once you press Connect)
+cargo run -p p19-server --release   # start the authoritative server (listens on 0.0.0.0:6000)
+cargo run -p p19-client --release   # start the game client (connects once you press Connect)
 ```
 
 To drive the client as an agent instead of a human — headless, no window, scriptable over
@@ -53,20 +53,21 @@ needs to support more than one working copy. (This doesn't apply to `docs/agents
 specifically — those *are* tracked, via Git LFS, since they're small and meant as durable
 history rather than runtime content.)
 
-`cargo build -p <client|server> --release` on the host machine produces a binary linked
+`cargo build -p <p19-client|p19-server> --release` on the host machine produces a binary linked
 against the host's glibc, which will *not* run correctly on a Steam Deck or inside the
 project's `steamrt4` toolbox — see `AGENTS.md`'s "Commands" section for why, and use
-`scripts/steam_deck_toolbox.sh cargo build -p <client|server> --release` instead when targeting
+`scripts/steam_deck_toolbox.sh cargo build -p <p19-client|p19-server> --release` instead when targeting
 either.
 
 ## Project layout
 
-- **`client/`** — the playable game: rendering, UI, input, camera, presentation. Sends intent
-  as network messages; never decides outcomes itself.
-- **`server/`** — the headless authoritative simulation: physics, level loading, player
-  spawning, movement/combat resolution.
-- **`shared/`** — simulation logic and network-message types both sides need to agree on
-  (character controller, combat, player bundle, spawners, replication registration).
+- **`client/`** (package `p19-client`) — the playable game: rendering, UI, input, camera,
+  presentation. Sends intent as network messages; never decides outcomes itself.
+- **`server/`** (package `p19-server`) — the headless authoritative simulation: physics, level
+  loading, player spawning, movement/combat resolution.
+- **`shared/`** (package `p19-shared`) — simulation logic and network-message types both sides
+  need to agree on (character controller, combat, player bundle, spawners, replication
+  registration).
 - **`assets_src/`** — raw source assets (`.blend` files, downloaded packs) processed into
   `client/assets/`/`server/assets/` for actual runtime use. Nothing loads from it directly.
 

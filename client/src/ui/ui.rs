@@ -27,7 +27,7 @@ use bevy_enhanced_input::prelude::{Press, *};
 use bevy_fluent::prelude::Locale;
 use bevy_xr_utils::tracking_utils::XrTrackedLeftGrip;
 use chill_bevy_console::console_closed;
-use shared::game_state::{GameState, VRState};
+use p19_shared::game_state::{GameState, VRState};
 use std::f32::consts::FRAC_PI_2;
 use unic_langid::langid;
 

@@ -15,8 +15,8 @@ use bevy::{
 };
 use bevy_fluent::prelude::Localization;
 use fluent::FluentArgs;
-use shared::combat::{ATTACK_RANGE, DAMAGE, GCD_DURATION, Gcd, HitPoints};
-use shared::game_state::GameState;
+use p19_shared::combat::{ATTACK_RANGE, DAMAGE, GCD_DURATION, Gcd, HitPoints};
+use p19_shared::game_state::GameState;
 
 /// The in-game HUD: the crosshair (always visible), the `DataFrame` debug panel (hidden by
 /// default, toggled by `Tab`/`GamepadButton::Select` — see `DataFrameVisible`), and the ability

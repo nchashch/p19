@@ -44,17 +44,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build
-        run: cargo build -p server
+        run: cargo build -p p19-server
 
       - name: Upload server binary
         uses: actions/upload-artifact@v4
         with:
-          name: server-linux-debug
-          path: target/debug/server
+          name: p19-server-linux-debug
+          path: target/debug/p19-server
 
   # Shippable Steam client: built inside the official steamrt4 SDK container so the binary
   # links the Steam Runtime's own (older) glibc and libraries — the container equivalent of
-  # the local `scripts/steam_deck_toolbox.sh cargo build -p client --release` workflow (see
+  # the local `scripts/steam_deck_toolbox.sh cargo build -p p19-client --release` workflow (see
   # AGENTS.md's GLIBC-taint gotcha: a host-built binary fails on the Deck with
   # `GLIBC_2.4x not found`). The repo never reaches this job's linker from the host, so
   # this job does not need the host free-disk/apt steps.
@@ -106,16 +106,16 @@ jobs:
         # the runner's disk. CI is a shippable-binary build, not a Tracy session — the shipped
         # artifact doesn't need symbols. `strip` additionally drops the symbol table.
         run: >
-          cargo build -p client --release
+          cargo build -p p19-client --release
           --config 'profile.release.debug=false'
           --config 'profile.release.strip="symbols"'
 
       - name: Verify GLIBC baseline
         run: |
-          objdump -T target/release/client | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -5
+          objdump -T target/release/p19-client | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -5
 
       - name: Upload client binary
         uses: actions/upload-artifact@v4
         with:
-          name: client-linux-steamrt4
-          path: target/release/client
+          name: p19-client-linux-steamrt4
+          path: target/release/p19-client

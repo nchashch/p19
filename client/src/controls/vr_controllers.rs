@@ -14,20 +14,20 @@ use bevy_xr_utils::tracking_utils::{
 };
 use lightyear::prelude::*;
 use bevy_ahoy::input::RotateCamera as AhoyRotate;
-use shared::inputs::{MouseLook, PlayerInputContext};
-use shared::player::{PlayerCharacter, Selectable};
+use p19_shared::inputs::{MouseLook, PlayerInputContext};
+use p19_shared::player::{PlayerCharacter, Selectable};
 use std::f32::consts::PI;
 
 use crate::controls::targeting::{Hovered, SELECT_RANGE, Selected};
 use crate::gameplay::player_character::LocalPlayer;
-use shared::game_state::ModalMenuState;
+use p19_shared::game_state::ModalMenuState;
 
 const SNAP_TURN_ANGLE: f32 = 15f32.to_radians();
 const SNAP_TURN_THRESHOLD: f32 = 0.6;
 const STICK_DEAD_ZONE_LOWER: f32 = 0.15;
 const STICK_DEAD_ZONE_UPPER: f32 = 1.0;
 /// Vertical offset from the player capsule's origin (its geometric center, per
-/// `shared::player::player`'s `Collider::capsule(0.4, 1.0)`) down to the floor the capsule
+/// `p19_shared::player::player`'s `Collider::capsule(0.4, 1.0)`) down to the floor the capsule
 /// stands on — mirrors the same `-0.9` used for the visible `rig.glb` model in
 /// `player_character.rs`'s `decorate_other_players`. Without this, the OpenXR playspace's floor
 /// would sit at the capsule's mid-height, and the HMD's real tracked height above it would put

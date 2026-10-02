@@ -3,14 +3,14 @@
 //! any object (a bare Empty works fine, it needs no mesh data of its own) via Skein's normal
 //! "add component" panel, matching its own presets/known-types list against whatever this app's
 //! `AppTypeRegistry` exposes over BRP (`docs/agents/adr/0009-agent-tool-api-via-brp.md`) — the same
-//! mechanism this project already uses for `shared::level::InGameRoot`/`assets::character::RigRoot`
+//! mechanism this project already uses for `p19_shared::level::InGameRoot`/`assets::character::RigRoot`
 //! and every other Skein-authored marker.
 //!
 //! Both `client` and `server` register [`SharedMeshPrimitivePlugin`], so the type is known to
 //! either binary's `AppTypeRegistry` regardless of which one a given `.glb` is loaded by — this
 //! is not a replicated component, there is no network hop involved (see `AGENTS.md`'s "Server"
 //! section for how the two binaries each load level content independently). Only `client`
-//! reacts to it (`client::presentation::mesh_primitive` turns it into a real
+//! reacts to it (`p19_client::presentation::mesh_primitive` turns it into a real
 //! `Mesh3d`/`MeshMaterial3d` for rendering, purely visual — no collider is generated from this
 //! component). Neither side needs a single baked vertex in the glTF file to do that — the whole
 //! point.
@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 /// Registers [`MeshPrimitive`]/[`MeshPrimitiveShape`] for reflection so Skein can discover them
 /// (over BRP, from a running dev-tools-enabled `client` — see ADR 0009) and so `bevy_skein`'s
 /// glTF-extras importer can deserialize an authored value back into a real component on either
-/// binary. No systems of its own — `client::presentation::mesh_primitive` registers the actual
+/// binary. No systems of its own — `p19_client::presentation::mesh_primitive` registers the actual
 /// spawn reaction on top of this (see the module doc comment).
 pub struct SharedMeshPrimitivePlugin;
 
@@ -58,7 +58,7 @@ pub struct MeshPrimitive(pub MeshPrimitiveShape);
 /// Blender-authored value (accidentally non-unit-length, even literally zero) can never fail to
 /// deserialize into a valid shape; it just silently degrades to whatever `Dir3`'s own fallback
 /// does, matching this project's general "authoring mistake should degrade, not panic or reject
-/// the whole file" posture (see `shared::assets::level::Level`'s own doc comment for the same
+/// the whole file" posture (see `p19_shared::assets::level::Level`'s own doc comment for the same
 /// reasoning applied to a different asset).
 #[derive(Reflect, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum MeshPrimitiveShape {

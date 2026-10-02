@@ -15,7 +15,7 @@
 //! # What gets recorded
 //! - Connect/disconnect, keyed by [`PeerId`] (stable across a session, unlike the ephemeral
 //!   connection `Entity`).
-//! - 7 of the 9 client→server gameplay messages `shared::replication` registers —
+//! - 7 of the 9 client→server gameplay messages `p19_shared::replication` registers —
 //!   `AttackAttempt`, `KillAttempt`, `SpawnCubeRequest`, `SpawnNpcRequest`, `LoadLevelRequest`,
 //!   `InGameRequest`, `ClientDespawn`. **Not** `LobbyRequest` (no handler anywhere in
 //!   `server/src` today, confirmed via a full grep — nothing would be reproduced by replaying
@@ -71,13 +71,13 @@ use bevy_ahoy::input::{Jump, Movement, RotateCamera};
 use bevy_enhanced_input::prelude::{Action, ActionOf, ActionValue, Fire, TriggerState};
 use lightyear::prelude::*;
 use serde::{Deserialize, Serialize};
-use shared::client_events::{
+use p19_shared::client_events::{
     AttackAttempt, ClientDespawn, InGameRequest, KillAttempt, LoadLevelRequest, SpawnCubeRequest,
     SpawnNpcRequest,
 };
-use shared::combat::Dead;
-use shared::inputs::{MouseLook, PlayerInputContext, StickLook};
-use shared::game_state::ServerState;
+use p19_shared::combat::Dead;
+use p19_shared::inputs::{MouseLook, PlayerInputContext, StickLook};
+use p19_shared::game_state::ServerState;
 use std::time::Duration;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -298,12 +298,12 @@ fn record_actions(
 
 use bevy::time::TimeUpdateStrategy;
 use avian3d::prelude::SpatialQuery;
-use shared::combat::{Gcd, HitPoints};
-use shared::level::InGameRoot;
-use shared::player::{PlayerCharacter, PlayerCharacterSpawner};
+use p19_shared::combat::{Gcd, HitPoints};
+use p19_shared::level::InGameRoot;
+use p19_shared::player::{PlayerCharacter, PlayerCharacterSpawner};
 use crate::level_state::LevelState;
 use crate::rooms::GameRoom;
-use shared::assets::level::Level;
+use p19_shared::assets::level::Level;
 use std::collections::HashMap;
 
 fn event_tick(event: &RecordedEvent) -> u32 {
@@ -394,7 +394,7 @@ fn replay_connections(
 /// `Fire<A>` event BEI would have triggered for it, directly — **not** via [`ActionMock`].
 ///
 /// `ActionMock` was the first approach here and is the documented mechanism
-/// `client::dev::tool_api`'s `game/input` uses — but that only works because the *client*
+/// `p19_client::dev::tool_api`'s `game/input` uses — but that only works because the *client*
 /// keeps BEI's own per-context resolution system (`bevy_enhanced_input`'s generic `update()`,
 /// registered in `FixedPreUpdate` via `add_input_context_to`) actually consuming mocks every
 /// tick. Confirmed live (three separate diagnostic passes: mock-insertion confirmed happening
@@ -411,7 +411,7 @@ fn replay_connections(
 ///
 /// The fix: skip both of those pipelines and trigger the `Fire<A>` event *directly* —
 /// `apply_movement`/`apply_jump` (`bevy_ahoy::input`) and `accumulate_look`
-/// (`server::input::accumulate_look`) all read straight from the event's own `value` field, not
+/// (`p19_server::input::accumulate_look`) all read straight from the event's own `value` field, not
 /// by re-querying `ActionValue`/`Action<A>` — so this is a complete, correct substitute for
 /// those three consumers specifically (confirmed by reading each observer's body — none of them
 /// touch any other action-entity component). Does **not** update `ActionValue`/`Action<A>`
@@ -781,7 +781,7 @@ pub fn run_replay(path: &Path) {
     for _ in 0..600 {
         app.update();
     }
-    // Final report: dumps the same player summary `server::tools`'s `server/state` BRP method
+    // Final report: dumps the same player summary `p19_server::tools`'s `server/state` BRP method
     // reports, so a replay run's final position/HP is visible without needing BRP still up (the
     // process is about to exit). Direct `EntityRef::get` rather than a fresh multi-component
     // `QueryState` — confirmed live that a `QueryState` built this late, this ad hoc, with
@@ -792,13 +792,13 @@ pub fn run_replay(path: &Path) {
     // whichever `QueryState` edge case that was entirely.
     let mut player_entities = app
         .world_mut()
-        .query_filtered::<Entity, With<shared::player::PlayerCharacter>>();
+        .query_filtered::<Entity, With<p19_shared::player::PlayerCharacter>>();
     let player_entities: Vec<Entity> = player_entities.iter(app.world()).collect();
     println!("replay: {} player(s) at end of replay", player_entities.len());
     for entity in player_entities {
         let entity_ref = app.world().entity(entity);
         let position = entity_ref.get::<Transform>().map(|t| t.translation);
-        let hit_points = entity_ref.get::<shared::combat::HitPoints>().map(|h| h.hit_points);
+        let hit_points = entity_ref.get::<p19_shared::combat::HitPoints>().map(|h| h.hit_points);
         let owner = entity_ref.get::<ControlledBy>().map(|c| c.owner);
         println!(
             "replay: final state — player {entity}: position {position:?}, {hit_points:?} hp, owning connection {owner:?}"

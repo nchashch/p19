@@ -55,7 +55,7 @@ header:
 1. **Context**: the problem, the forces and constraints, and what was already true. State
    facts, not intentions.
 2. **Decision**: what was actually done. Name the concrete files, types and config fields
-   (`server::networking::start_endpoint`, `NetcodeConfig.server_addr_check`). Use numbered
+   (`p19_server::networking::start_endpoint`, `NetcodeConfig.server_addr_check`). Use numbered
    subsections if there are several decisions.
 3. **Alternatives considered**: every real option that was weighed, with the reason it lost.
    An option that was tried and reverted belongs here, with the evidence that killed it.

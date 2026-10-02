@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use lightyear::prelude::*;
-use shared::replication::OrderedReliable;
-use shared::{client_events::LoadLevelRequest, game_state::GameState};
+use p19_shared::replication::OrderedReliable;
+use p19_shared::{client_events::LoadLevelRequest, game_state::GameState};
 
 use crate::{
     assets::collections::CommonAssets,

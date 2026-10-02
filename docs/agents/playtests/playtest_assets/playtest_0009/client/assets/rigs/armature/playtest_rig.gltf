@@ -6,7 +6,7 @@
     {
       "name": "rig-visual",
       "extras": { "skein": [
-        { "shared::mesh_primitive::MeshPrimitive": { "Capsule": { "radius": 0.4, "length": 1.0 } } }
+        { "p19_shared::mesh_primitive::MeshPrimitive": { "Capsule": { "radius": 0.4, "length": 1.0 } } }
       ] }
     }
   ]

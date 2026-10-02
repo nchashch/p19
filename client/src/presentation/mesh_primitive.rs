@@ -1,12 +1,12 @@
-//! Turns a Skein-authored `shared::mesh_primitive::MeshPrimitive` into real, renderable geometry
+//! Turns a Skein-authored `p19_shared::mesh_primitive::MeshPrimitive` into real, renderable geometry
 //! — see that module's own doc comment for the full authoring story (an Empty in Blender, no
 //! baked mesh data at all, just the primitive's parameters). Purely visual (`Mesh3d`/
 //! `MeshMaterial3d`, no collider) — `server` registers the same component's reflection too (see
-//! `shared::mesh_primitive::SharedMeshPrimitivePlugin`) but doesn't react to it.
+//! `p19_shared::mesh_primitive::SharedMeshPrimitivePlugin`) but doesn't react to it.
 
 use bevy::pbr::{MeshMaterial3d, StandardMaterial};
 use bevy::prelude::*;
-use shared::mesh_primitive::MeshPrimitive;
+use p19_shared::mesh_primitive::MeshPrimitive;
 
 pub struct ClientMeshPrimitivePlugin;
 

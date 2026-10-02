@@ -12,10 +12,10 @@ use bevy_seedling::prelude::*;
 use bevy_skein::SkeinPlugin;
 use lightyear::prelude::*;
 use lightyear_avian3d::plugin::{AvianReplicationMode, LightyearAvianPlugin};
-use shared::assets::SharedAssetsPlugin;
-use shared::inputs::SharedInputsPlugin;
-use shared::mesh_primitive::SharedMeshPrimitivePlugin;
-use shared::replication::SharedReplicationPlugin;
+use p19_shared::assets::SharedAssetsPlugin;
+use p19_shared::inputs::SharedInputsPlugin;
+use p19_shared::mesh_primitive::SharedMeshPrimitivePlugin;
+use p19_shared::replication::SharedReplicationPlugin;
 use std::time::Duration;
 
 use controls::fps_controller::FpsControllerPlugin;
@@ -29,7 +29,7 @@ use gameplay::cube_spawner::CubeSpawnerPlugin;
 use gameplay::player_character::PlayerCharacterPlugin;
 use presentation::mesh_primitive::ClientMeshPrimitivePlugin;
 use presentation::particles::ParticleEffectsPlugin;
-use shared::game_state::{GameState, GameStatePlugin};
+use p19_shared::game_state::{GameState, GameStatePlugin};
 
 use bevy_mod_openxr::{add_xr_plugins, resources::OxrSessionConfig};
 use openxr::EnvironmentBlendMode;
@@ -316,7 +316,7 @@ impl Plugin for Prototype19 {
             // ("Resource does not exist: LastConfirmedInput") the moment a connection starts.
             // The ahoy/prediction migration's M0 resolves that the idiomatic way:
             // `lightyear_inputs_bei` (BEI is ahoy's native input layer) is registered via
-            // `shared::inputs::SharedInputsPlugin` below, so the plugin runs un-disabled.
+            // `p19_shared::inputs::SharedInputsPlugin` below, so the plugin runs un-disabled.
             client::ClientPlugins {
                 tick_duration: Duration::from_secs_f32(1.0 / 60.0),
             },

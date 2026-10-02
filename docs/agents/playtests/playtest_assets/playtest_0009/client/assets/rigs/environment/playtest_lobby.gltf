@@ -10,7 +10,7 @@
       "name": "backdrop",
       "translation": [0.0, 0.0, -30.0],
       "extras": { "skein": [
-        { "shared::mesh_primitive::MeshPrimitive": { "Torus": { "inner_radius": 5.0, "outer_radius": 1.5 } } }
+        { "p19_shared::mesh_primitive::MeshPrimitive": { "Torus": { "inner_radius": 5.0, "outer_radius": 1.5 } } }
       ] }
     },
     { "name": "lobby-camera", "camera": 0, "translation": [0.0, 0.0, 10.0] }

@@ -6,11 +6,11 @@ use bevy::gltf::GltfLoaderSettings;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldInstanceReady;
 use lightyear::prelude::*;
-use shared::assets::level::{ClientReplicate, Level};
-use shared::client_events::{ClientDespawn, InGameRequest, LoadLevelRequest, ObserveRequest};
-use shared::player::PlayerCharacter;
-use shared::replication::ClientInGame;
-use shared::{
+use p19_shared::assets::level::{ClientReplicate, Level};
+use p19_shared::client_events::{ClientDespawn, InGameRequest, LoadLevelRequest, ObserveRequest};
+use p19_shared::player::PlayerCharacter;
+use p19_shared::replication::ClientInGame;
+use p19_shared::{
     game_state::ServerState,
     level::InGameRoot,
     player::{PlayerCharacterSpawner, player},
@@ -299,7 +299,7 @@ impl Plugin for NetworkingPlugin {
 /// The player(s) belonging to a connection, for cleanup: everything the server spawned for
 /// that client's `player()` bundle is `ControlledBy { owner: <connection> }` — including the
 /// `Lifetime::Persistent` player that would otherwise linger after the client leaves.
-/// Also the caster-resolution path for `server::spawn` (the connection has no `Gcd` — the
+/// Also the caster-resolution path for `p19_server::spawn` (the connection has no `Gcd` — the
 /// player character it owns does).
 pub(crate) fn owned_players(
     connection: Entity,
@@ -319,7 +319,7 @@ pub(crate) fn owned_players(
 /// `Disconnected`-observer path catches every other kind of disconnect (netcode timeout,
 /// hard crash) once lightyear notices.
 ///
-/// The actual work is [`apply_client_despawn`], extracted so `server::replay`'s replay driver
+/// The actual work is [`apply_client_despawn`], extracted so `p19_server::replay`'s replay driver
 /// can call the exact same code path against a recorded [`ClientDespawn`] instead of a live
 /// [`MessageReceiver`]-drained one.
 pub(crate) fn apply_client_despawn(
@@ -388,7 +388,7 @@ fn setup_client_replicate(entities: Query<Entity, With<ClientReplicate>>, mut co
 // TODO: Gate this on some form of authentication and authorization, so only game host can load
 // levels at will, or perhaps people the host has given the rights to change level.
 /// The per-message resolution logic, extracted out of [`load_level_request`] so
-/// `server::replay`'s replay driver can call the exact same code path against a recorded
+/// `p19_server::replay`'s replay driver can call the exact same code path against a recorded
 /// [`LoadLevelRequest`] instead of a live [`MessageReceiver`]-drained one.
 pub(crate) fn apply_load_level_request(
     asset_path: bevy::asset::AssetPath<'static>,
@@ -492,7 +492,7 @@ fn on_level_ready(
     Ok(())
 }
 
-/// The per-message resolution logic, extracted out of [`in_game_request`] so `server::replay`'s
+/// The per-message resolution logic, extracted out of [`in_game_request`] so `p19_server::replay`'s
 /// replay driver can call the exact same code path against a recorded [`InGameRequest`] instead
 /// of a live [`MessageReceiver`]-drained one.
 pub(crate) fn apply_in_game_request(
@@ -512,7 +512,7 @@ pub(crate) fn apply_in_game_request(
         // semantics. `taken` is every existing player's `Name`.
         let taken: std::collections::HashSet<String> =
             names.iter().map(Name::to_string).collect();
-        let name = shared::player::generate_player_name(name_seed, &taken);
+        let name = p19_shared::player::generate_player_name(name_seed, &taken);
         let at = player_spawner_transform.translation;
         let room = game_room.0;
         commands.entity(entity).insert(Rooms::single(room));

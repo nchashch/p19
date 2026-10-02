@@ -1,7 +1,7 @@
 use bevy::color::palettes::css::{DARK_SLATE_GRAY, GREEN};
 use bevy::prelude::*;
-use shared::combat::HitPoints;
-use shared::game_state::GameState;
+use p19_shared::combat::HitPoints;
+use p19_shared::game_state::GameState;
 
 pub struct NameplatePlugin;
 

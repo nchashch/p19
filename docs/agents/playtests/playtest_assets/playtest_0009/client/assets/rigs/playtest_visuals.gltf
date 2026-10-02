@@ -19,7 +19,7 @@
       "extras": {
         "skein": [
           {
-            "shared::mesh_primitive::MeshPrimitive": {
+            "p19_shared::mesh_primitive::MeshPrimitive": {
               "Cuboid": {
                 "size": [
                   40.0,
@@ -48,7 +48,7 @@
       "extras": {
         "skein": [
           {
-            "shared::mesh_primitive::MeshPrimitive": {
+            "p19_shared::mesh_primitive::MeshPrimitive": {
               "Sphere": {
                 "radius": 2.0
               }

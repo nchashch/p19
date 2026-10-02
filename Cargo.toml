@@ -39,7 +39,7 @@ bevy = { version = "0.19.0", default-features = true, features = [
 ] }
 avian3d = { version = "0.7.0", features = ["simd", "serialize"] }
 bevy_skein = "0.6.0"
-# `serialize` (added for the server-side replay recorder — `server::replay` — which needs to
+# `serialize` (added for the server-side replay recorder — `p19_server::replay` — which needs to
 # round-trip `ActionValue` through JSON to log and later re-mock resolved Movement/Jump/
 # RotateCamera action state) requires `bevy/serialize`, already on for `client`'s workspace
 # `bevy` entry above; `server`'s own separate, smaller `bevy` feature list (its Cargo.toml can't
@@ -61,7 +61,7 @@ bevy_common_assets = { version = "0.17.0", default-features = false, features = 
 ] }
 bevy_hanabi = "0.19.0"
 # Client-only: renders a ratatui terminal UI as a GPU texture on a Bevy UI node (main menu demo
-# panel — `client::ui::tui_panel`). Version pins matter here: the crate's own Cargo.toml requires
+# panel — `p19_client::ui::tui_panel`). Version pins matter here: the crate's own Cargo.toml requires
 # its `wgpu` dependency to exactly match whatever `wgpu` version this `bevy` release pins
 # internally (currently 29.0.3) — 0.3.x is the release line built against bevy 0.19/ratatui 0.30.
 #
@@ -72,12 +72,12 @@ bevy_hanabi = "0.19.0"
 # `TypeId`-mismatch panic at startup, regardless of plugin registration order relative to
 # `DefaultPlugins`. See `bevy_tui_texture/src/bevy_plugin.rs`'s own `LOCAL PATCH` comment for the
 # fix (drops just the conflicting loader registration; `TuiFontSource::Ready`, what
-# `client::ui::tui_panel` actually uses, is unaffected).
+# `p19_client::ui::tui_panel` actually uses, is unaffected).
 bevy_tui_texture = { git = "https://github.com/nchashch/bevy_tui_texture", branch = "fix/fonts" }
 ratatui = "0.30.2"
 serde = { version = "1.0.228", features = ["derive"] }
 
-# Token-endpoint TLS (`server::networking`'s HTTPS connect-token issuer + the client's
+# Token-endpoint TLS (`p19_server::networking`'s HTTPS connect-token issuer + the client's
 # fingerprint-pinned fetch). Already in the graph via rmcp; promoted to direct deps so the
 # server can serve the endpoint over self-signed TLS and the client can pin its fingerprint.
 rustls = "0.23"
@@ -127,7 +127,7 @@ lightyear = { version = "0.30.0", features = [
 lightyear_avian3d = "0.30.0"
 # BEI-action input replication — the missing piece that un-blocks lightyear's `PredictionPlugin`
 # (which hard-depends on one of the `lightyear_inputs_*` plugins having initialized
-# `LastConfirmedInput`). Registered via `shared::inputs::SharedInputsPlugin` on both binaries;
+# `LastConfirmedInput`). Registered via `p19_shared::inputs::SharedInputsPlugin` on both binaries;
 # each member enables its own `client`/`server` feature on top of this entry. Already present
 # in `Cargo.lock` at 0.30.0 as a transitive dep, so this adds no version churn.
 lightyear_inputs_bei = "0.30.0"

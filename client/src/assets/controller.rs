@@ -2,7 +2,7 @@ use avian3d::math::{Scalar, Vector};
 use avian3d::prelude::*;
 use bevy::prelude::*;
 use serde::Deserialize;
-use shared::character_controller::GameLayer;
+use p19_shared::character_controller::GameLayer;
 
 #[derive(Asset, TypePath, Deserialize)]
 pub struct Controller {

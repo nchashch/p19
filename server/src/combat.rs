@@ -4,7 +4,7 @@ use lightyear::core::tick::TickDuration;
 use lightyear::prelude::*;
 use crate::networking::owned_players;
 use crate::replay::{RecordedMessage, ReplayRecorder};
-use shared::{
+use p19_shared::{
     client_events::{AttackAttempt, KillAttempt},
     combat::{Dead, Gcd, HitPoints, ATTACK_RANGE, DAMAGE},
     player::Selectable,
@@ -39,7 +39,7 @@ impl Plugin for ServerCombatPlugin {
 }
 
 // Dead players have no agency: they can't move (the `RigidBody` removal below starves ahoy's
-// KCC), look around (`server::input::accumulate_look` gates on `Without<Dead>`), or attack
+// KCC), look around (`p19_server::input::accumulate_look` gates on `Without<Dead>`), or attack
 // (`apply_attack`/`apply_kill` only resolve a living caster). The death-path client panic found
 // in playtest 0015 is fixed: `--no-render` now adds `SyncWorldPlugin` — see the AGENTS.md
 // dead-player entry.
@@ -51,7 +51,7 @@ fn kill_zero_hp(
 ) -> Result {
     for (entity, hit_points, transform) in query {
         if hit_points.hit_points <= 0 {
-            // Sent before the despawn below, not after — client presentation (`client::combat`'s
+            // Sent before the despawn below, not after — client presentation (`p19_client::gameplay::combat`'s
             // `on_entity_died`) needs this as the unambiguous "actually died in combat" signal,
             // distinct from `HitPoints` merely being removed for some other reason (returning to
             // the main menu despawns every `InGame`-scoped entity at once via `DespawnOnExit`).
@@ -94,7 +94,7 @@ fn tick_gcd(tick_duration: Res<TickDuration>, mut query: Query<&mut Gcd>) {
     }
 }
 
-/// The per-message resolution logic, extracted out of [`resolve_kill`] so `server::replay`'s
+/// The per-message resolution logic, extracted out of [`resolve_kill`] so `p19_server::replay`'s
 /// replay driver can call the exact same code path against a recorded [`KillAttempt`] instead
 /// of a live [`MessageReceiver`]-drained one.
 pub(crate) fn apply_kill(

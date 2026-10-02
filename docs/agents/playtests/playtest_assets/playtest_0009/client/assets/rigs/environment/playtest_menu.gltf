@@ -10,7 +10,7 @@
       "name": "backdrop",
       "translation": [0.0, 0.0, -30.0],
       "extras": { "skein": [
-        { "shared::mesh_primitive::MeshPrimitive": { "Sphere": { "radius": 8.0 } } }
+        { "p19_shared::mesh_primitive::MeshPrimitive": { "Sphere": { "radius": 8.0 } } }
       ] }
     },
     { "name": "menu-camera", "camera": 0, "translation": [0.0, 0.0, 10.0] }

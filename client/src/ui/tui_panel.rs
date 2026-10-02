@@ -33,7 +33,7 @@ use bevy_tui_texture::{Font as TerminalFont, Fonts as TerminalFonts};
 use ratatui::layout::Alignment;
 use ratatui::style::{Color as RatatuiColor, Modifier, Style};
 use ratatui::widgets::{Block, Gauge, Paragraph};
-use shared::game_state::GameState;
+use p19_shared::game_state::GameState;
 use std::sync::Arc;
 
 pub struct TuiPanelPlugin;

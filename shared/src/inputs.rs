@@ -85,7 +85,7 @@ impl Plugin for SharedInputsPlugin {
         // `ceil(RTT/tick)`, which is ~0 on loopback, but the send happens in PostUpdate and
         // lands next tick's PreUpdate — a structural 1-tick lateness no RTT measurement
         // reports. Harmless for state-based input, but look input is delta-accumulated
-        // server-side (`server::input`), and wrong-tick deltas corrupt the accumulation and
+        // server-side (`p19_server::input`), and wrong-tick deltas corrupt the accumulation and
         // fight the prediction. A 2-tick floor (~33ms) guarantees the lead covers scheduling.
         app.insert_resource(InputTimelineConfig::default().with_input_delay(InputDelayConfig {
             minimum_input_delay_ticks: 2,

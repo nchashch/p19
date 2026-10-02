@@ -13,10 +13,10 @@ use bevy::{
 use bevy_fluent::prelude::Localization;
 use fluent_content::Content;
 use lightyear::prelude::MessageSender;
-use shared::client_events::{InGameRequest, LoadLevelRequest};
-use shared::game_state::GameState;
-use shared::level::Levels;
-use shared::replication::OrderedReliable;
+use p19_shared::client_events::{InGameRequest, LoadLevelRequest};
+use p19_shared::game_state::GameState;
+use p19_shared::level::Levels;
+use p19_shared::replication::OrderedReliable;
 
 use crate::{
     assets::collections::CommonAssets,
@@ -113,7 +113,7 @@ pub(crate) struct LevelPicker;
 
 /// The "Level" button plus its (initially empty/hidden) selector popup — the same
 /// `selector::selector_popup()` widget `ui.rs`'s `language_picker()`/`options_picker()` use,
-/// populated from the server-replicated `shared::level::Levels` rather than static local data —
+/// populated from the server-replicated `p19_shared::level::Levels` rather than static local data —
 /// see `sync_level_options`.
 fn level_picker() -> impl Scene {
     bsn! {

@@ -12,7 +12,7 @@ use crate::combat::HitPoints;
 
 // `Reflect` + `#[reflect(Component)]` (matching `Cube`'s derive set): `bevy_remote`'s BRP
 // resolves component names through `AppTypeRegistry`, so without reflection the `game/*` QA
-// tooling can't see spawned NPCs at all — `world.query` for `shared::npc_spawner::Npc`
+// tooling can't see spawned NPCs at all — `world.query` for `p19_shared::npc_spawner::Npc`
 // silently matches nothing even on entities that carry it (confirmed live: the same query
 // pattern works for `Cube`, which is reflected).
 #[derive(Component, Serialize, Deserialize, Default, Clone, Reflect, Debug)]
