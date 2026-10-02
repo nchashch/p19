@@ -8,6 +8,9 @@ reports are regression armor: they encode the repro, the root cause, and the fix
 class of bug is cheap to recognize the next time. Supplements (does not replace) `AGENTS.md`
 and `docs/agents/skills/playtest.md` (whose harness drives the reproductions).
 
+**`docs/humans/` is human-only: never create, edit, move or delete anything there** (see
+`AGENTS.md` "Rules"). Bug reports go in `docs/agents/bug_reports/` only.
+
 ## 1. When to file
 
 - Any *reproducible* defect: crash, wrong behavior, desync, data loss, security hole,
@@ -97,8 +100,8 @@ Required fields:
   showed (playtests 0014/0015 both did this; playtest 0015's F3 would have been misfiled
   otherwise).
 - **A fix updates four places**: the bug's `Status`/`Fix` section, its row in
-  `docs/agents/bug_reports/README.md`'s ledger, `AGENTS.md` (gap entries and module bullets
-  that described the bug), and — if the repro revealed a harness gap —
+  `docs/agents/bug_reports/README.md`'s ledger, `AGENTS.md` ("Known gaps" and the module
+  bullets that described the bug), and — if the repro revealed a harness gap —
   `docs/agents/skills/playtest.md` or `dev::tool_api`. A bug fix that leaves stale
   documentation behind is an unfinished fix (this exact debt accumulated before the
   AGENTS.md-update convention was adopted).
@@ -134,5 +137,5 @@ note on the new evidence and the new commit — the number never changes.
 - Backfilling known-open issues into this directory is encouraged. bug_0001–bug_0006 are all
   `Fixed`; issues documented elsewhere but not yet filed here include the disconnected
   player's character never being despawned (zombie `ClientInGame` blocking a clean reconnect —
-  `AGENTS.md` gap list), the shared spawn point stacking joiners (a by-design question, playtest
+  `AGENTS.md` "Known gaps"), the shared spawn point stacking joiners (a by-design question, playtest
   0018), and the replay movement-rate mismatch (ADR 0013).

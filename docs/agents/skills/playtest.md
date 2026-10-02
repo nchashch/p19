@@ -5,6 +5,9 @@ playbook for launching the game headlessly, driving it through the QA tool API,
 observing state, capturing what you see, and avoiding every trap hit so far.
 Supplements (does not replace) `AGENTS.md` and `docs/agents/adr/0009-agent-tool-api-via-brp.md`.
 
+**`docs/humans/` is human-only: never create, edit, move or delete anything there** (see
+`AGENTS.md` "Rules"). Playtest reports go in `docs/agents/playtests/` only.
+
 **Default input method: gamepad** (§5) — you are emulating a Steam Deck player,
 the primary target platform. Use keyboard+mouse only when the task explicitly
 targets them.
@@ -634,14 +637,11 @@ squelching it with screenshots.
   (hundreds of colors), is the clear color (1 color), or is the menu
   (~200 colors).
 
-Known visual divergences in `--mcp` (see AGENTS.md for the full root-cause writeup —
-both the "nothing renders at all" bug and the follow-on UI-render-order bug are fixed):
+Known visual divergences in `--mcp` (the mechanics are in `AGENTS.md`'s "Headless camera
+mechanics"; the investigations are playtests 0003 and 0004):
 
-- Menu/lobby: UI and the real `.glb` background both render correctly, UI properly
-  composited on top (was: UI drawn underneath the background — a `bevy_ui`
-  `IsDefaultUiCamera`-ambiguity bug, not an ordering problem; see AGENTS.md). The
-  in-game HUD (including the crosshair) also renders now, for the same reason — it
-  never did before this fix either.
+- Menu/lobby: UI and the real `.glb` background both render, UI composited on top. The
+  in-game HUD (including the crosshair) renders too.
 - In-game: the real starfield HDRI skybox and level geometry now render correctly.
   `levels/minimal.level.ron`'s floor renders black specifically because that level's
   content has zero light entities anywhere — not a `--mcp` bug, confirmed via BRP,
@@ -657,7 +657,7 @@ both the "nothing renders at all" bug and the follow-on UI-render-order bug are 
 | `game/state` says InGame but no `position`, forever | Zombie-player inheritance: a previous client's `Lifetime::Persistent` player replicated its `ClientInGame` to your fresh connection without `Controlled` | Restart the server (the parked reconnect bug) |
 | `select_level` appears to do nothing | A level is already `Loading`/`LevelLoaded`; the server's `LevelState` guard rejects further requests (logged server-side) | Just `play`; restart the server to switch levels |
 | Test results look impossible / old behavior | Stale binary from a failed build | Rebuild, `grep -cE "^error"` must be 0 |
-| Server floods `server_late_input_mismatch` when a second client joins | Join-burst replication hitch blows the 2-tick input-delay headroom; self-heals in ~10 ticks | Benign — document, don't fix (AGENTS.md has the episode) |
+| Server floods `server_late_input_mismatch` when a second client joins | Join-burst replication hitch blows the 2-tick input-delay headroom; self-heals in ~10 ticks | Benign — don't fix (`AGENTS.md` "Known gaps") |
 | `pkill -f` kills your own test command | `-f` matches your shell's own command line | Use `pkill -x` |
 
 ## 9. Multi-client testing

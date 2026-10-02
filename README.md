@@ -13,8 +13,8 @@ the same architecture a shipped multiplayer game would use.
 **Status: pre-release prototype, actively evolving, not currently playable end-to-end.**
 Movement/prediction, combat, and cube/NPC spawning genuinely work now, but known gaps remain —
 most visibly, disconnected players' characters aren't cleaned up (blocking a clean reconnect),
-and all players share one spawn point — see [`AGENTS.md`](./AGENTS.md)'s "what's
-still genuinely missing or actively broken" list for the current, specific set, and
+and all players share one spawn point — see [`AGENTS.md`](./AGENTS.md)'s "Known gaps"
+section for the current, specific set, and
 [`docs/agents/adr/`](./docs/agents/adr/) for the reasoning behind major decisions. Expect things to be broken
 or half-built; this is a live development snapshot, not a demo.
 

@@ -8,6 +8,9 @@ Read this skill before writing one.
 This skill applies to ADRs written **from 0014 onward**. Records 0001–0013 came before it and
 are **not** retrofitted to this format — never edit them to match.
 
+**`docs/humans/` is human-only: never create, edit, move or delete anything there** (see
+`AGENTS.md` "Rules"). ADRs go in `docs/agents/adr/` only.
+
 ## 1. When to write one
 
 Write an ADR when a change:
