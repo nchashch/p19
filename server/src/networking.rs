@@ -37,7 +37,27 @@ const TOKEN_HTTP_PORT: u16 = 6001;
 /// Where the netcode private key persists, relative to the asset root (`server/assets/`).
 /// Plain-text hex — dev/LAN posture per the user's direction; not world-readable permissions
 /// or secret management. Created with a fresh random key on first run.
-const PRIVATE_KEY_FILE: &str = "assets/netcode.key";
+const PRIVATE_KEY_FILE: &str = "network/netcode.key";
+
+/// Mirrors `bevy_asset`'s asset-root resolution exactly
+/// (`bevy_asset::io::file::get_base_path`): `BEVY_ASSET_ROOT`, then the *runtime*
+/// `CARGO_MANIFEST_DIR` (which `cargo run` exports — so plain `cargo run -p server` lands
+/// state in `server/assets/`), then the executable's directory (the deployed/steamrt layout:
+/// `assets/` sits beside the binary). Network state must follow the game's asset root in
+/// every launch mode — a compile-time path would break deployed builds (the build machine's
+/// directory doesn't exist on the Deck), and a cwd fallback created the stray root `./assets/`.
+fn network_state_dir() -> std::path::PathBuf {
+    std::env::var("BEVY_ASSET_ROOT")
+        .or_else(|_| std::env::var("CARGO_MANIFEST_DIR"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::env::current_exe()
+                .ok()
+                .and_then(|exe| exe.parent().map(std::path::Path::to_path_buf))
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+        })
+        .join("assets")
+}
 
 fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
@@ -56,8 +76,7 @@ fn hex_decode_32(text: &str) -> Option<[u8; 32]> {
 /// the key lives server-side; clients never see it — they receive pre-encrypted connect tokens
 /// over the token HTTP endpoint.
 fn load_or_create_private_key() -> Result<lightyear::netcode::Key, String> {
-    let path = std::path::Path::new(&std::env::var("BEVY_ASSET_ROOT").unwrap_or_else(|_| ".".into()))
-        .join(PRIVATE_KEY_FILE);
+    let path = network_state_dir().join(PRIVATE_KEY_FILE);
     if let Ok(text) = std::fs::read_to_string(&path) {
         let key = hex_decode_32(text.trim())
             .ok_or_else(|| format!("{} is not 32 bytes of hex", path.display()))?;
@@ -83,9 +102,12 @@ fn load_or_create_private_key() -> Result<lightyear::netcode::Key, String> {
 /// at startup so an operator can pre-pin clients).
 fn load_or_create_tls_identity()
 -> Result<(std::sync::Arc<rustls::ServerConfig>, String), String> {
-    let root = std::env::var("BEVY_ASSET_ROOT").unwrap_or_else(|_| ".".into());
-    let cert_path = std::path::Path::new(&root).join("assets/token-tls.crt");
-    let key_path = std::path::Path::new(&root).join("assets/token-tls.key");
+    let cert_path = network_state_dir().join("network/token-tls.crt");
+    let key_path = network_state_dir().join("network/token-tls.key");
+    if let Some(parent) = cert_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("creating {}: {error}", parent.display()))?;
+    }
     let (cert_pem, key_pem) =
         if let (Ok(cert), Ok(key)) = (std::fs::read_to_string(&cert_path), std::fs::read_to_string(&key_path)) {
             (cert, key)

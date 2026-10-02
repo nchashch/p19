@@ -189,7 +189,7 @@ Connect requires the server's token HTTPS endpoint (:6001) to be reachable from 
 host — `game/trigger connect` fetches a netcode connect token over TLS before opening the
 game connection. The server's self-signed certificate is pinned trust-on-first-use: the first
 successful connect writes its SHA-256 fingerprint to
-`client/assets/token-tls-fingerprint.txt`, and later connects must match (a mismatch — MITM
+`client/assets/network/token-tls-fingerprint.txt`, and later connects must match (a mismatch — MITM
 or server cert rotation — refuses the fetch with an explicit error; delete the file to
 re-trust a legitimately rotated cert). Server restarts keep the identity (the cert/key files
 persist in `server/assets/`), so the pin survives restarts. Timing note: the token fetch adds

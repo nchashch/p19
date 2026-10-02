@@ -156,9 +156,28 @@ fn hex_encode(bytes: &[u8]) -> String {
 /// (hex SHA-256 of the leaf DER). First successful connection records the fingerprint;
 /// later connections must match, or the fetch fails (MITM / cert-rotation alarm — delete the
 /// file to re-trust a legitimately rotated cert).
+/// Mirrors `bevy_asset`'s asset-root resolution exactly
+/// (`bevy_asset::io::file::get_base_path`): `BEVY_ASSET_ROOT`, then the *runtime*
+/// `CARGO_MANIFEST_DIR` (which `cargo run` exports — so plain `cargo run -p client` lands
+/// state in `client/assets/`), then the executable's directory (the deployed/steamrt layout:
+/// `assets/` sits beside the binary). Network state must follow the game's asset root in
+/// every launch mode — a compile-time path would break deployed builds (the build machine's
+/// directory doesn't exist on the Deck), and a cwd fallback created the stray root `./assets/`.
+fn network_state_dir() -> std::path::PathBuf {
+    std::env::var("BEVY_ASSET_ROOT")
+        .or_else(|_| std::env::var("CARGO_MANIFEST_DIR"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::env::current_exe()
+                .ok()
+                .and_then(|exe| exe.parent().map(std::path::Path::to_path_buf))
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+        })
+        .join("assets")
+}
+
 fn tls_fingerprint_store_path() -> std::path::PathBuf {
-    std::path::Path::new(&std::env::var("BEVY_ASSET_ROOT").unwrap_or_else(|_| ".".into()))
-        .join("assets/token-tls-fingerprint.txt")
+    network_state_dir().join("network/token-tls-fingerprint.txt")
 }
 
 /// TLS config for the token fetch: self-signed server certs are accepted at the TLS layer and
@@ -274,7 +293,12 @@ fn fetch_connect_token(host: &str, port: u16) -> Result<Vec<u8>, String> {
         }
         (None, Some(presented)) => {
             // First use: pin what we saw.
-            std::fs::write(tls_fingerprint_store_path(), hex_encode(&presented))
+            let store_path = tls_fingerprint_store_path();
+            if let Some(parent) = store_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|error| format!("creating {}: {error}", parent.display()))?;
+            }
+            std::fs::write(&store_path, hex_encode(&presented))
                 .map_err(|error| format!("writing tls fingerprint: {error}"))?;
             info!(
                 "pinned token endpoint TLS fingerprint (first use): {}",
