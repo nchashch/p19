@@ -1,0 +1,86 @@
+#set document(
+  title: "Bug 0005 — Connect token embedded the client's own IP as the server address (LAN connect impossible)",
+  author: ("opencode agent (GLM-5.3-Flash)",),
+)
+#set page(margin: 2cm, numbering: "1 / 1")
+#set text(size: 10pt)
+#set heading(numbering: "1.")
+
+= Bug 0005 — Connect token embedded the client's own IP as the server address
+
+#table(
+  columns: (auto, auto),
+  stroke: 0.5pt,
+  inset: 6pt,
+  [*Bug*], [bug_0005],
+  [*Date discovered*], [2026-10-02 (first real Steam Deck run against the LAN server)],
+  [*Commit (state actually running)*], [Discovered at `81d75bf` "Issue actual per client tokens when clients connect". *Fixed in* the uncommitted working tree (`server/src/networking.rs`: `token_server_ip` + unit tests); will be pinned to the commit that lands it],
+  [*Discovered by*], [Project owner (live Steam Deck test); root cause by opencode agent (GLM-5.3-Flash)],
+  [*Component*], [`server::networking` (`start_token_http_endpoint` — connect-token server-address construction)],
+  [*Severity*], [S2 — LAN clients cannot connect at all; loopback was the only working configuration],
+  [*Status*], [*Fixed* (uncommitted) — verified: unit tests for all three fallback tiers; both Host-header and fallback paths issue tokens live],
+  [*Related*], [playtest 0019 (introduced the token endpoint with this flaw); AGENTS.md token-endpoint entries; the netcode standard's connect-token server-address semantics (client connects to the token's address list, not to any address it chooses)],
+)
+
+= Summary
+
+The connect-token endpoint embedded the *HTTP peer's IP* (the *client's* address) into the
+token's server-address whitelist. Netcode clients connect to the addresses carried in their
+token — so on a LAN the Deck was told "the server is at your own IP:6000" and knocked on its
+own door forever. Loopback testing never caught it: client and server share 127.0.0.1, where
+the peer's IP coincidentally *is* the server's IP.
+
+= Steps to reproduce
+
+1. Server on machine S (LAN IP 192.168.101.X), client on machine C (LAN IP 192.168.101.6) —
+   different machines, both running this code at `81d75bf`.
+2. C: press Connect. C fetches the token over HTTPS from S (server logs
+   `issued connect token #N to 192.168.101.6:<port>`).
+3. C applies the token; the netcode client attempts to connect to the token's server address.
+
+*Expected:* the token names S (192.168.101.X:6000); the handshake completes; C reaches Lobby.
+*Actual:* the token names 192.168.101.6:6000 — C's own address. The connect attempt never
+completes; C stalls in `Connecting` until the 30 s token expiry, then `Disconnected`. The
+server never logs an authorized client. (Secondary symptom: on some second-connect presses
+the Deck app exited — not yet root-caused; see F3.)
+
+= Evidence
+
+Steam Deck live run at `81d75bf` (owner-reported): server repeatedly issued tokens
+(`#3`, `#4`, `#5` to 192.168.101.6) with no `authorized client` line between them. Localhost
+runs were green throughout — the peer-IP/embeds coincidence masked the flaw exactly on the
+only configuration that had been tested.
+
+= Root cause
+
+`start_token_http_endpoint` built the token's server address as
+`SocketAddr::new(peer.ip(), PORT)` — `peer` being the *HTTPS client*. The reasoning ("the
+client reached us over that IP, so it can reach the game on it too") inverts the
+relationship: the peer IP identifies the *client*, and the netcode client connects to the
+*token's* address list. The correct source is the address the client used to reach the
+endpoint — carried in the request's `Host` header — which is the server's address by
+definition.
+
+= Fix
+
+Uncommitted working tree, `server/src/networking.rs`:
+
+- New `token_server_ip(request, peer)` helper with the documented fallback chain:
+  `Host` header IP (authoritative — the exact address the client used, which also handles
+  multi-homed servers) → this host's default-route IP (hostname `Host` values) → peer IP
+  (loopback last resort).
+- The token construction uses `token_server_ip(&request, peer)`.
+- Unit tests: `Host`-header IP wins (the LAN case), loopback `Host` works, missing-`Host`
+  falls back through the chain.
+
+= Follow-ups
+
+- *RESOLVED (owner-confirmed on the Deck, after bug_0006's whitelist fix)*: the secondary
+  symptom from this report's discovery run — the app exiting on some reconnect presses — no
+  longer occurs. It was a side effect of the stuck `Connecting` → 30 s token-expiry →
+  `Disconnected` → re-fetch cycle (see F3's original text in the git history of this file);
+  with tokens validating and connections completing, the cycle is gone and the death-path
+  style panics that class could produce never had room to recur. Closed without a separate
+  bug number.
+- Production upgrade unchanged (playtest 0019): CA-signed cert on a real backend; the
+  `Host`-header mechanism maps directly onto reverse-proxy deployments.

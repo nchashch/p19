@@ -134,6 +134,34 @@ fn default_local_ip() -> Option<std::net::IpAddr> {
     socket.local_addr().ok().map(|address| address.ip())
 }
 
+/// The IP a client should use to reach the *game* server, derived from its token request.
+/// The request's `Host` header is authoritative: it names the exact address the client used
+/// to reach this endpoint, and the game server is reachable on that same IP (only the port
+/// differs). This matters on LAN/multi-homed setups — using the *peer's* IP instead (a
+/// plausible-looking but wrong choice, correct only on loopback) told the client the "server"
+/// was at its own address, and the netcode handshake knocked on the client's own door
+/// forever (bug_0005). Fallback chain: `Host` header IP → this host's default-route IP → the
+/// peer's IP (loopback-only last resort).
+fn token_server_ip(request: &str, peer: std::net::SocketAddr) -> std::net::IpAddr {
+    for line in request.lines() {
+        let Some(host) = line
+            .strip_prefix("Host: ")
+            .or_else(|| line.strip_prefix("host: "))
+        else {
+            continue;
+        };
+        // `Host` is `ip:port` for IPv4 configs (the only supported client addressing); strip
+        // the port and parse. A hostname falls through to the default-route IP.
+        if let Some(ip_text) = host.rsplit_once(':').map(|(ip, _)| ip) {
+            if let Ok(ip) = ip_text.parse::<std::net::IpAddr>() {
+                return ip;
+            }
+        }
+        break;
+    }
+    default_local_ip().unwrap_or(peer.ip())
+}
+
 /// Minimal HTTPS token issuer (`GET /connect_token` on [`TOKEN_HTTP_PORT`], TLS via the
 /// self-signed identity from [`load_or_create_tls_identity`]) so headless clients can fetch a
 /// fresh connect token without holding the private key — the "basic flow"; in production this
@@ -173,10 +201,12 @@ fn start_token_http_endpoint(
                 let response = if !request.starts_with("GET /connect_token") {
                     b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_vec()
                 } else {
-                    // The token's public server address = the HTTPS peer's IP + the game
-                    // port: the client reached us over that IP, so it can reach the game on
-                    // it too. (The port differs; only the IP is carried over.)
-                    let server_addr = std::net::SocketAddr::new(peer.ip(), PORT);
+                    // The token's public server address = the address the client used to
+                    // reach this endpoint (its `Host` header) + the game port — see
+                    // `token_server_ip` for why the peer's own IP would be wrong everywhere
+                    // except loopback.
+                    let server_addr =
+                        std::net::SocketAddr::new(token_server_ip(&request, peer), PORT);
                     let client_id =
                         NEXT_CLIENT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     match lightyear::netcode::ConnectToken::build(
@@ -547,18 +577,30 @@ fn start_endpoint(mut commands: Commands) {
     };
     info!("token TLS cert fingerprint (sha256): {tls_fingerprint}");
     start_token_http_endpoint(tls_identity, private_key);
+    // The netcode server validates connect tokens against the address it is bound on —
+    // `LocalAddr` below is `0.0.0.0:6000`, a wildcard that no concrete token address can
+    // match (`server_addr_matches` compares exact IPs; its loopback special-cases don't help
+    // LAN clients). Tokens legitimately contain the concrete address the client used to
+    // reach the token endpoint (its `Host` header = this host's LAN IP for LAN clients,
+    // 127.0.0.1 for local ones), so advertise exactly those as expected.
+    let mut additional_expected_addresses =
+        vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), PORT)];
+    if let Some(local_ip) = default_local_ip() {
+        additional_expected_addresses.push(SocketAddr::new(local_ip, PORT));
+    }
     let server_entity = commands
         .spawn((
             server::NetcodeServer::new(server::NetcodeConfig {
                 protocol_id: PROTOCOL_ID,
                 private_key,
-                // The token-issuing endpoint (see `start_token_http_endpoint`) embeds the HTTP
-                // requester's own IP + the game port in every connect token, so the netcode
-                // server-address whitelist matches exactly the address the client will play
-                // from — the check can stay ON (the standard, secure posture). This is why the
-                // check used to be disabled: the old flow had every client mint its own token
-                // with `0.0.0.0`, which never matched a real interface address.
+                // The token-issuing endpoint (see `start_token_http_endpoint`) embeds the
+                // address the client used to reach it, and `additional_expected_addresses`
+                // above whitelists this host's concrete addresses for the validation — the
+                // standard, secure posture, satisfiable despite the wildcard bind. This is
+                // why the check used to be disabled: the old flow had every client mint its
+                // own token with `0.0.0.0`, which never matched a real interface address.
                 server_addr_check: true,
+                additional_expected_addresses,
                 ..default()
             }),
             LocalAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), PORT)),
@@ -607,5 +649,39 @@ fn on_client_disconnected(
         for player in owned {
             commands.entity(player).despawn();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn host_header_ip_wins() {
+        let request = "GET /connect_token HTTP/1.1\r\nHost: 192.168.101.5:6001\r\n\r\n";
+        let peer = "192.168.101.6:36272".parse().unwrap();
+        assert_eq!(
+            token_server_ip(request, peer),
+            "192.168.101.5".parse::<std::net::IpAddr>().unwrap()
+        );
+    }
+
+    #[test]
+    fn loopback_host_header() {
+        let request = "GET /connect_token HTTP/1.1\r\nHost: 127.0.0.1:6001\r\n\r\n";
+        let peer = "127.0.0.1:40000".parse().unwrap();
+        assert_eq!(
+            token_server_ip(request, peer),
+            "127.0.0.1".parse::<std::net::IpAddr>().unwrap()
+        );
+    }
+
+    #[test]
+    fn missing_host_falls_back_to_default_route_then_peer() {
+        let request = "GET /connect_token HTTP/1.1\r\n\r\n";
+        let peer: std::net::SocketAddr = "192.168.101.6:36272".parse().unwrap();
+        // Chain: Host header (absent here) -> this host's default-route IP -> peer IP.
+        let expected = default_local_ip().unwrap_or(peer.ip());
+        assert_eq!(token_server_ip(request, peer), expected);
     }
 }

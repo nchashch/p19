@@ -19,7 +19,7 @@ need, report the API gap rather than falling back to screenshots.
 
 | Process | Binary | Env | Ports |
 |---|---|---|---|
-| Game server | `target/release/server` | `BEVY_ASSET_ROOT=$PWD/server` | UDP :6000 (game) |
+| Game server | `target/release/server` | `BEVY_ASSET_ROOT=$PWD/server` | UDP :6000 (game) · HTTPS :6001 (connect-token endpoint — must be reachable by clients; see §4 note) |
 | Client (headless agent host) | `target/debug/client --mcp` | `CARGO_MANIFEST_DIR=$PWD/client BEVY_ASSET_ROOT=$PWD/client` | BRP HTTP :15702 · MCP :15710 |
 | You (the agent) | shell + `curl`/python | — | talks to :15702 |
 
@@ -184,6 +184,17 @@ curl … "game/trigger" '{"event":"play"}'
 
 Timings on a fresh pair: connect→Lobby ≈ 2s; select→server `Loading`→`InGame`
 ≈ 1–2s; play→player-spawn ≈ 2s. Total ~15–20s including client boot.
+
+Connect requires the server's token HTTPS endpoint (:6001) to be reachable from the client
+host — `game/trigger connect` fetches a netcode connect token over TLS before opening the
+game connection. The server's self-signed certificate is pinned trust-on-first-use: the first
+successful connect writes its SHA-256 fingerprint to
+`client/assets/token-tls-fingerprint.txt`, and later connects must match (a mismatch — MITM
+or server cert rotation — refuses the fetch with an explicit error; delete the file to
+re-trust a legitimately rotated cert). Server restarts keep the identity (the cert/key files
+persist in `server/assets/`), so the pin survives restarts. Timing note: the token fetch adds
+~100 ms to the connect step; a fetch failure (server unreachable on :6001) logs
+`connect token fetch failed` and leaves the client at MainMenu for a retry.
 
 Important state-machine facts:
 

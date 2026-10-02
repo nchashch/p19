@@ -1,0 +1,98 @@
+#set document(
+  title: "Bug 0006 — Netcode server rejects all connect tokens: wildcard-bind address can never match the whitelist",
+  author: ("opencode agent (GLM-5.3-Flash)",),
+)
+#set page(margin: 2cm, numbering: "1 / 1")
+#set text(size: 10pt)
+#set heading(numbering: "1.")
+
+= Bug 0006 — Netcode server rejects all connect tokens: wildcard-bind address can never match the whitelist
+
+#table(
+  columns: (auto, auto),
+  stroke: 0.5pt,
+  inset: 6pt,
+  [*Bug*], [bug_0006],
+  [*Date discovered*], [2026-10-02 (owner's first real Steam Deck LAN run after bug_0005's fix)],
+  [*Commit (state actually running)*], [Discovered on the server built at the uncommitted post-bug_0005 working tree (netcode token flow landed across `81d75bf`..HEAD). *Fixed in* the same uncommitted working tree (`server/src/networking.rs`: `additional_expected_addresses`)],
+  [*Discovered by*], [Project owner (Steam Deck live run) + opencode agent (GLM-5.3-Flash), root cause],
+  [*Component*], [`server::networking` (`NetcodeConfig.server_addr_check` + `LocalAddr` wildcard bind) × `lightyear_netcode::server`'s connect-token validation],
+  [*Severity*], [S2 — LAN clients cannot connect; loopback unaffected],
+  [*Status*], [*Fixed* (uncommitted) — verified live: loopback connect → Lobby → level → InGame with zero whitelist rejections; the LAN case is covered by unit-tested address logic plus the new expectation list],
+  [*Related*], [bug_0005 (token content fix — prerequisite; its correct token content is what exposed this server-side check), AGENTS.md "Fixed: the server silently rejected every LAN connection" (the same check, disabled for the same class of reason, in the pre-token era)],
+)
+
+= Summary
+
+After bug_0005's fix, connect tokens correctly carry the address the client used to reach
+the token endpoint (the server's LAN IP). But `lightyear_netcode`'s
+`server_addr_check: true` validation compares that whitelist against the address the server
+is *bound on* — and the server binds `0.0.0.0:6000` (`LocalAddr` wildcard). The comparison
+(`server_addr_matches`) requires exact IP equality (its only special cases are loopback↔
+unspecified), and `0.0.0.0` never equals a concrete LAN IP → *every* connect token is
+rejected with `server address not in connect token whitelist`, regardless of correctness.
+The check is unsatisfiable against a wildcard bind.
+
+= Steps to reproduce
+
+1. Server on LAN host S (bound `0.0.0.0:6000`), `server_addr_check: true`, token endpoint
+   serving correct tokens (`Host`-header address = S's LAN IP).
+2. Any client (Deck or PC) on the LAN: connect.
+3. Server logs `server ignored connection request. server address not in connect token
+   whitelist token_addresses=[<S's LAN IP>:6000] server_addr=0.0.0.0:6000`; the client stays
+   in `Connecting` until the 30 s token expiry.
+
+*Expected:* the token's whitelist contains the server's real address; validation passes; the
+client connects.
+*Actual:* rejected unconditionally — the comparison target (`0.0.0.0`) is not an address any
+correct token can contain.
+
+= Evidence
+
+Owner's Steam Deck run (post-bug_0005-fix server): the rejection log with
+`token_addresses=[192.168.101.4:6000]` and `server_addr=0.0.0.0:6000`. Source read:
+`lightyear_netcode-0.30.0/src/server.rs` — `server_addr_matches` compares exact IPs
+(loopback↔unspecified are the only special cases), and the compared `server_addr` is the
+server's `LocalAddr`. Loopback full-flow re-run post-fix: zero whitelist lines, full
+connect→Lobby→level→play→InGame.
+
+= Root cause
+
+`NetcodeServer`'s connect-token validation compares the token's server-address whitelist
+against `LocalAddr` — which is `0.0.0.0:6000` because the game server binds the wildcard to
+accept connections on any interface. A whitelist containing a concrete address can never
+match. This is the *same underlying friction* as the pre-token "silently rejected every LAN
+connection" fix (which disabled the check): the check and the wildcard bind are mutually
+exclusive. The netcode-standard mechanism for exactly this case is
+`additional_expected_addresses` — concrete addresses the server declares as "also me".
+
+= Fix
+
+`start_endpoint` now advertises them:
+
+```rust
+let mut additional_expected_addresses =
+    vec![SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), PORT)];
+if let Some(local_ip) = default_local_ip() {
+    additional_expected_addresses.push(SocketAddr::new(local_ip, PORT));
+}
+```
+
+`server_addr_check: true` stays (standard, secure posture). Validation logic: token address
+`192.168.101.4:6000` (the LAN case) matches the advertised default-route address exactly;
+token `127.0.0.1:6000` matches the wildcard bind via lightyear's built-in loopback
+special-case. Multi-homed hosts with several LAN interfaces would extend the list per
+interface (only the default-route IP is auto-detected today).
+
+= Follow-ups
+
+- *Identity confusion note*: the discovery log was read as "192.168.101.4 = the Deck", but
+  the token's whitelist *is* the client's `Host` header — the address the client used to
+  reach the server. For the rejection to have fired on the server, the client must have used
+  `192.168.101.4` to reach it, so `192.168.101.4` is the *server host's* address (or the
+  machines' roles were swapped in the reading). Worth confirming with `ip a` on both machines
+  — if the Deck's config genuinely pointed at itself, token fetch would fail before any
+  netcode traffic.
+- *bug_0005's F3 secondary symptom* (Deck app exiting on reconnect presses during the
+  stuck-connect loop) needs a Deck-side log re-run after this fix; the stuck cycle is gone,
+  so if the exit persists it is a separate defect (new bug number).
