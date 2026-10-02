@@ -127,7 +127,7 @@ note on the new evidence and the new commit — the number never changes.
 
 ## 8. Cross-references
 
-- Playtest reports live in `docs/agents/playtests/playtest_NNNN.typ`; cite as
+- Playtest reports live in `docs/agents/playtests/playtest_NNNN.md`; cite as
   "playtest NNNN F<finding>".
 - Bugs that produced harness/tooling fixes should name the tool method that now covers them
   (e.g. `game/select` exists because headless clients cannot aim the crosshair — see the

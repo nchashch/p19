@@ -22,7 +22,7 @@ An agent-driven QA tool API (BRP + MCP, gated behind the `dev-tools` cargo featu
 coding agent actually play the game headlessly — connect, navigate menus, move, inject input,
 take screenshots — to drive real regression testing and bug-hunting through the same replicated
 pipeline a human player uses, not a separate mock. Its findings accumulate as dated reports in
-[`docs/agents/playtests/`](./docs/agents/playtests/index.typ) (start at that index) rather than being lost
+[`docs/agents/playtests/`](./docs/agents/playtests/index.md) (start at that index) rather than being lost
 after each session; several real bugs in this repo were found and root-caused this way.
 
 ## Getting started
@@ -90,7 +90,7 @@ tests (`cargo test --workspace`); there is no integration test suite yet.
   the agent tool API) and [`bugreport.md`](./docs/agents/skills/bugreport.md) (how to file bug reports) — read the
   relevant one before attempting its task; it encodes gotchas that otherwise cost the same
   debugging time again.
-- **[`docs/agents/playtests/`](./docs/agents/playtests/index.typ)** — dated reports from every agent-driven
+- **[`docs/agents/playtests/`](./docs/agents/playtests/index.md)** — dated reports from every agent-driven
   playtest session (state tours, bug reproductions, fix verifications), each with screenshots
   of what the agent actually saw. Start at the index; every report cites the exact git commit
   it was run against. Written to be a real, searchable debugging history, not a one-off log —

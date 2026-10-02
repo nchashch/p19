@@ -620,9 +620,8 @@ squelching it with screenshots.
   unique-color counts via PIL tell you instantly whether a frame rendered
   (hundreds of colors), is the clear color (1 color), or is the menu
   (~200 colors).
-- Never open/inspect compiled PDFs in this session — the environment breaks with
-  "Functionality not supported". Compile typst reports, but verify only that the
-  compile command exits 0 (§10).
+- Never open/inspect PDFs in this session — the environment breaks with
+  "Functionality not supported". (Playtest reports are Markdown now; nothing needs compiling.)
 
 Known visual divergences in `--mcp` (see AGENTS.md for the full root-cause writeup —
 both the "nothing renders at all" bug and the follow-on UI-render-order bug are fixed):
@@ -685,7 +684,7 @@ and note server-side player count + the zombie-player disconnect gap (§8).
 Each client instance generates a fresh nanosecond netcode client-id — no
 collision by design.
 
-## 10. Reporting (typst playtests)
+## 10. Reporting (Markdown playtests)
 
 **Every run gets a report, no exceptions.** Any session where a client gets started,
 driven through the MCP/BRP tool API in any way, and then torn down — a full formal state
@@ -712,31 +711,35 @@ transition — in-game visuals still arrive via the `ClientWorldAsset` path, whi
 path, not through the manifest. The recommended playtest mode is still the manifest-driven
 one (trimmed manifest, no flag) since it keeps the `MeshPrimitive` world visuals; see
 `playtest_assets/playtest_0009/` (stripped to 100% plaintext by 0010) as the template and
-its report, plus `docs/agents/playtests/playtest_0010.typ`, for the mechanism and the gotchas.
+its report, plus `docs/agents/playtests/playtest_0010.md`, for the mechanism and the gotchas.
 
-**Layout — flat, one file per report (like `docs/agents/bug_reports/`); screenshots and the
-compiled PDF live separately, since only the screenshots need Git LFS and only the PDF needs to
-stay out of git entirely:**
+**Layout — flat, one Markdown file per report (like `docs/agents/bug_reports/`); screenshots
+live separately because they need Git LFS:**
 
-- `docs/agents/playtests/playtest_NNNN.typ` (find the next free number; four digits,
-  zero-padded) — the report source, a single file directly in `docs/agents/playtests/`, no
-  per-report directory. Plain text, tracked normally (not LFS).
+- `docs/agents/playtests/playtest_NNNN.md` (find the next free number; four digits,
+  zero-padded) — the report, a single GitHub-flavored Markdown file directly in
+  `docs/agents/playtests/`, no per-report directory. Plain text, tracked normally (not LFS).
+  GitHub renders it directly; no build step, no typst.
 - `docs/agents/playtests/screenshots/playtest_NNNN/*.png` — the *curated* screenshots this
   report actually references (copy the relevant ones in from the raw capture staging
   directory, `docs/agents/playtests/dist/screenshots/` — see §7 — don't dump every capture
   from the session, just what's worth keeping). Tracked via **Git LFS**
   (`.gitattributes` covers `docs/agents/playtests/screenshots/**/*.png`) — confirm
   `git lfs status` shows them as LFS objects, not plain git blobs, before committing.
-- `docs/agents/playtests/dist/playtest_NNNN.pdf` — the compiled report. **Gitignored**
-  (`/docs/agents/playtests/dist` in `.gitignore`) — regenerable from the `.typ`, never commit
-  it directly.
 
-Reference screenshots from the report **relatively**, e.g.
-`image("screenshots/playtest_NNNN/<file>.png", ...)` (the report sits directly in
-`docs/agents/playtests/`, next to the `screenshots/` directory — no `../`);
-use `#figure(image(...), caption:[...])`, a metadata `#table`, numbered `= Sections`, and
-a `<findings>` label for the findings block (see `docs/agents/playtests/playtest_0001.typ`
-for the house style, and the latest report for the current header table).
+**House style** (see the latest report, e.g. `docs/agents/playtests/playtest_0020.md`):
+
+- `# Agent Playtest NNNN — <title>` as the only H1, then a two-column metadata table
+  (`| Field | Value |`) with at least Date, Commit, Agent, Client(s), Server, Level, Transports.
+- `##` for sections (Purpose, Method, State tour/Verification, Findings, …), `###` below that.
+  Name the findings section `## Findings` so other documents can link `playtest_NNNN.md#findings`.
+- Figures: a relative image link plus an italic caption paragraph directly under it —
+  `![<file>.png](screenshots/playtest_NNNN/<file>.png)` then `*<caption>*` (the report sits
+  directly in `docs/agents/playtests/`, next to `screenshots/` — no `../`).
+- Findings as bold-led paragraphs or bullets (`**F1 — <headline>**: …`); results tables as
+  ordinary Markdown tables; command output in fenced code blocks.
+- Escape a literal `|` inside table cells as `\|`, and a literal `<word>` outside code as
+  `\<word>` (GitHub would otherwise swallow it as an HTML tag).
 
 **The findings section isn't just confirmed bugs.** Record observations, suspicions,
 things that looked odd but weren't chased down, open questions, anything that would help
@@ -750,27 +753,11 @@ don't omit it either. Cross-reference earlier reports by number when a run confi
 contradicts, or narrows something an earlier one said (`playtest_0002` superseding
 `playtest_0001`'s unverified `spawn_cube` caption is the working example of this).
 
-Compile with:
-
-```sh
-typst compile --root docs/agents/playtests \
-  docs/agents/playtests/playtest_NNNN.typ \
-  docs/agents/playtests/dist/playtest_NNNN.pdf
-```
-
-(`--root docs/agents/playtests` keeps every path a report may touch — its own file and
-`screenshots/` — inside typst's sandbox; it is harmless with the flat layout and protects
-against a report reaching outside that directory.)
-
-Check the exit code only. Do **not** open or read the produced PDF. typst 0.15.1 is at
-`/usr/sbin/typst`.
-
-**Also update `docs/agents/playtests/index.typ`** — add a new entry (newest first) with the date,
-agent, report path, and a short explanation of what the playtest covered and found, in the
-same style as the existing entries. This is part of filing a report, not an optional later
-chore — the index only stays useful for navigation if every playtest actually lands in it.
-Recompile it too (`typst compile --root docs/agents/playtests docs/agents/playtests/index.typ
-docs/agents/playtests/dist/index.pdf`) and check the exit code.
+**Also update `docs/agents/playtests/index.md`** — add a new entry (newest first) with the date,
+commit, agent, a link to the report (`[playtest_NNNN.md](playtest_NNNN.md)`), and a short
+explanation of what the playtest covered and found, in the same style as the existing entries.
+This is part of filing a report, not an optional later chore — the index only stays useful for
+navigation if every playtest actually lands in it.
 
 **Both the report's own metadata table and its index entry need a `Commit` field** — the git
 `HEAD` the run was actually performed against, so the chronology and the actual code under
@@ -797,4 +784,4 @@ covers the whole run.
    report any data-surface gap you hit (§10).
 8. Capture logs from both processes; teardown when done (or leave the pair for
    the user, saying which processes are yours).
-9. Write the playtest report (see §10 for the three-location layout); compile with `--root docs/agents/playtests`; never inspect the PDF.
+9. Write the playtest report as `docs/agents/playtests/playtest_NNNN.md` and add its index entry (§10).

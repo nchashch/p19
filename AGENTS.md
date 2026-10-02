@@ -6,14 +6,14 @@ This file provides guidance to AI coding agents when working with code in this r
 
 `docs/agents/skills/` holds distilled, task-specific how-tos for agents working on this project — read the relevant one **before** attempting its task, it encodes hard-won gotchas that will otherwise cost you the same debugging time again:
 
-- `docs/agents/skills/playtest.md` — how to drive the game headlessly (launch the server + `--mcp` client, the `game/*` BRP methods, input injection semantics, screenshots, known failure modes, and how to write the typst playtest reports under `docs/agents/playtests/`).
+- `docs/agents/skills/playtest.md` — how to drive the game headlessly (launch the server + `--mcp` client, the `game/*` BRP methods, input injection semantics, screenshots, known failure modes, and how to write the Markdown playtest reports under `docs/agents/playtests/`).
 - `docs/agents/skills/bugreport.md` — how to file bug reports as individual numbered typst files under `docs/agents/bug_reports/` (bug_0001, bug_0002, …): date, exact local commit state, repro steps, evidence, root cause, severity, and a `Status` field that flips to `Fixed in <commit>` when the fix lands. **Agents file defects they discover there** — reproducible crashes, silently-dropped behaviors, desyncs, design-level hazards — following the skill's one-bug-per-file / reproduce-first / corrections-not-rewrites rules. Reports are retained forever, fixed or not: a `Fixed` report is regression armor, so never delete one and never close one silently. The ledger is live: `bug_0001`–`bug_0006` (all `Fixed` as of the netcode-token arc — combat
 caster resolution, death-path panic, room-filter leak, KCC rollback registration, token
 peer-IP and whitelist validation). New defects found by agents or the owner get the next
 free number.
 - `docs/agents/skills/adr.md` — how to write Architecture Decision Records under `docs/agents/adr/` (from 0014 onward): header table (date, exact author model, `HEAD` commit, span), Context/Decision/Alternatives/Consequences, evidence rules, catch-up ADRs spanning many commits, and immutability (supersede, never edit; 0001–0013 are not retrofitted).
 
-Existing playtest reports (`docs/agents/playtests/playtest_NNNN.typ` — flat files like `bug_reports/`, screenshots in `docs/agents/playtests/screenshots/playtest_NNNN/`, compiled PDFs in the gitignored `docs/agents/playtests/dist/`) are worked examples of what a completed agent playtest looks like — consult the latest one before writing a new one.
+Existing playtest reports (`docs/agents/playtests/playtest_NNNN.md` — flat GitHub-flavored Markdown files, indexed in `docs/agents/playtests/index.md`; curated screenshots in `docs/agents/playtests/screenshots/playtest_NNNN/`; raw capture staging in the gitignored `docs/agents/playtests/dist/`) are worked examples of what a completed agent playtest looks like — consult the latest one before writing a new one. No typst is needed for playtests.
 
 ## What this is
 

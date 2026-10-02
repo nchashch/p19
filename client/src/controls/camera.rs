@@ -168,7 +168,7 @@ pub fn shim_camera_computed(mut cameras: Query<&mut Camera>) {
 /// those three specific reverted attempts individually once the ambiguity fix below was in
 /// place (only against the current, simple order/clear scheme).
 ///
-/// The fix, confirmed working end-to-end (`docs/agents/playtests/playtest_0004.typ`: main menu, lobby,
+/// The fix, confirmed working end-to-end (`docs/agents/playtests/playtest_0004.md`: main menu, lobby,
 /// in-game — including the HUD, which never rendered at all before this either — and a full
 /// disconnect-back-to-main-menu round-trip), has two independent parts, in
 /// `maintain_default_ui_camera`/`keep_ui_camera_drawn_last` below: (1) keep the invariant
