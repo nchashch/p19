@@ -53,7 +53,7 @@ This is the first report in an accumulating series: each playtest's `report.typ`
 == Asset loading
 
 #figure(
-  image("../screenshots/playtest_0001/1790116733474-pt1-asset-loading.png", width: 78%),
+  image("screenshots/playtest_0001/1790116733474-pt1-asset-loading.png", width: 78%),
   caption: [The earliest readable moment after client start. The frame is pure black: the
   offscreen render target exists and is cleared, but nothing renders yet — the menu UI (and the
   loaded-world cameras) do not exist until `CommonAssets` finishes loading. By the time the
@@ -64,7 +64,7 @@ This is the first report in an accumulating series: each playtest's `report.typ`
 == Main menu
 
 #figure(
-  image("../screenshots/playtest_0001/1790116736004-pt1-main-menu.png", width: 78%),
+  image("screenshots/playtest_0001/1790116736004-pt1-main-menu.png", width: 78%),
   caption: [`GameState::MainMenu`. The feathers panel with the Connect / Options / Credits /
   Quit / Language buttons renders correctly into the offscreen target. The top of the frame is
   cut off — the known 2× `UI_SCALE` overflow of the 720p offscreen target (cosmetic). The
@@ -79,7 +79,7 @@ connection (`Client Netcode(1790116738538578825) connected`) and the `On<Add, Co
 observer moved it to `GameState::Lobby`.
 
 #figure(
-  image("../screenshots/playtest_0001/1790116740567-pt1-lobby.png", width: 78%),
+  image("screenshots/playtest_0001/1790116740567-pt1-lobby.png", width: 78%),
   caption: [`GameState::Lobby`. The lobby panel renders: the Play button and the level picker
   are cut off above the frame (same `UI_SCALE` overflow); the "Main Menu" button is visible.
   The server-replicated `Levels` singleton is readable here — the agent resolves level asset
@@ -96,7 +96,7 @@ gets `Controlled` → `LocalPlayer`), and the client's `On<Add, ClientInGame>` o
 to `GameState::InGame`. Player spawned on the first poll, grounded at the origin.
 
 #figure(
-  image("../screenshots/playtest_0001/1790116750145-pt1-ingame-fresh.png", width: 78%),
+  image("screenshots/playtest_0001/1790116750145-pt1-ingame-fresh.png", width: 78%),
   caption: [`GameState::InGame`, fresh spawn at (0, 0.92, 0), grounded, 100 HP. This is where
   the known headless camera bug bites: the frame is *pure clear color* — the player camera
   renders nothing at all (see #ref(<findings>)). A human on a windowed client sees the world
@@ -132,19 +132,19 @@ than the ~0.5 s capture round-trip, so the mid-air sample shows the landing inst
 spawns them (all confirmed through the same path a human hotkey drives).
 
 #figure(
-  image("../screenshots/playtest_0001/1790116755712-pt1-ingame-walked.png", width: 78%),
+  image("screenshots/playtest_0001/1790116755712-pt1-ingame-walked.png", width: 78%),
   caption: [After the turn + walk. State says (−18.67, 0.92, 0.00) — the simulation is exactly
   where it should be; the *pixels* are still the clear color. Data-path ✓, visual-path ✗.],
 )
 
 #figure(
-  image("../screenshots/playtest_0001/1790116758752-pt1-ingame-jump.png", width: 78%),
+  image("screenshots/playtest_0001/1790116758752-pt1-ingame-jump.png", width: 78%),
   caption: [Post-jump sample (y = 0.96 vs standing 0.92 — the landing tail; airtime is shorter
   than the capture round-trip).],
 )
 
 #figure(
-  image("../screenshots/playtest_0001/1790116764936-pt1-ingame-cubes.png", width: 78%),
+  image("screenshots/playtest_0001/1790116764936-pt1-ingame-cubes.png", width: 78%),
   caption: [After three `spawn_cube` triggers. The cubes exist server-side and replicate, but
   are of course invisible here for the same reason as everything else in-game.],
 )

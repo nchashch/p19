@@ -55,7 +55,7 @@ entities.
 == Main menu
 
 #figure(
-  image("../screenshots/playtest_0002/1790119533573-poke-mainmenu.png", width: 78%),
+  image("screenshots/playtest_0002/1790119533573-poke-mainmenu.png", width: 78%),
   caption: [`GameState::MainMenu`, fresh client boot. 292 unique pixel colors (measured via
   PIL) confirm the feathers panel renders correctly into the offscreen target — consistent with
   playtest 0001.],
@@ -106,7 +106,7 @@ evidence over 0001's unverified caption for this specific claim.
 = Bug reproduction: frozen headless in-game rendering <camera-bug>
 
 #figure(
-  image("../screenshots/playtest_0002/1790119585777-poke-ingame.png", width: 78%),
+  image("screenshots/playtest_0002/1790119585777-poke-ingame.png", width: 78%),
   caption: [In-game, fresh spawn. Single unique color `(26, 26, 38)` — the clear color, not a
   rendered frame — reproducing playtest 0001's finding exactly.],
 )

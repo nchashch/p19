@@ -69,7 +69,7 @@ triggering that while genuinely in-game (live player, live connection) exercises
 code path the pause-menu button now calls.
 
 #figure(
-  image("../screenshots/playtest_0005/1790126684711-mainmenu-fix-ingame.png", width: 70%),
+  image("screenshots/playtest_0005/1790126684711-mainmenu-fix-ingame.png", width: 70%),
   caption: [In-game, immediately before the disconnect trigger -- confirmed via `game/state`
   (`game_state: "InGame"`, real `player_entity`).],
 )
@@ -80,7 +80,7 @@ wrapper and the client binary alive), the client log had zero panic/`todo!()`/`u
 lines, and `game/state` read back `{"game_state": "MainMenu", "player_despawned": true}`.
 
 #figure(
-  image("../screenshots/playtest_0005/1790126696512-mainmenu-fix-postdisconnect.png", width: 70%),
+  image("screenshots/playtest_0005/1790126696512-mainmenu-fix-postdisconnect.png", width: 70%),
   caption: [Main menu after the disconnect: UI correctly on top of the real background (the
   `playtest_0004` render-order fix, unaffected by this change), no crash.],
 )

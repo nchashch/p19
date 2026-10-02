@@ -81,7 +81,7 @@ finding that changes any recommendation.
 = Verification: real UI clicks and real key input
 
 #figure(
-  image("../screenshots/playtest_0007/1790138046757-kbm-test-mainmenu.png", width: 65%),
+  image("screenshots/playtest_0007/1790138046757-kbm-test-mainmenu.png", width: 65%),
   caption: [Main menu, before any agent input this run. "Connect" is already highlighted --
   `AutoFocus`, not agent-driven hover.],
 )
@@ -90,7 +90,7 @@ finding that changes any recommendation.
 above) then `{"input":"button","button":"Left","pressed":true}`/`pressed:false`:
 
 #figure(
-  image("../screenshots/playtest_0007/1790138119065-kbm-click-options.png", width: 65%),
+  image("screenshots/playtest_0007/1790138119065-kbm-click-options.png", width: 65%),
   caption: [The Options `selector` popup opens for real -- through the actual
   `bevy_ui`/`bevy_picking` hit-testing and the button's `Activate` observer, confirmed
   independently via the `client::ui::selector` "after toggle popup open = true" / "Selector

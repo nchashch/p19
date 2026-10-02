@@ -60,7 +60,7 @@ live anyway (habit, not suspicion): pressed gamepad `Start` in-game, expecting t
 to open.
 
 #figure(
-  image("../screenshots/playtest_0006/1790127488401-gamepad-modal-open.png", width: 65%),
+  image("screenshots/playtest_0006/1790127488401-gamepad-modal-open.png", width: 65%),
   caption: [After pressing and releasing `Start` with the `digital_mut()` implementation: no
   modal, no error, nothing -- just the same in-game frame as before. Silent failure, not a
   crash -- the kind of bug that's easy to miss if you only check "did it compile" or "did it
@@ -82,7 +82,7 @@ Rebuilt, fresh server + client, connect -> select level -> play -> confirmed `ga
 instead of an equivalent one:
 
 #figure(
-  image("../screenshots/playtest_0006/1790127689078-gamepad-modal-open2.png", width: 65%),
+  image("screenshots/playtest_0006/1790127689078-gamepad-modal-open2.png", width: 65%),
   caption: [`{"input":"button","button":"Start","pressed":true}` then `pressed:false` -- the
   pause modal opens for real, through the actual `PlayerControls` binding
   (`bindings![KeyCode::Escape, GamepadButton::Start]`). "Resume" is focused, matching its
@@ -90,7 +90,7 @@ instead of an equivalent one:
 )
 
 #figure(
-  image("../screenshots/playtest_0006/1790127710297-gamepad-modal-navigated.png", width: 65%),
+  image("screenshots/playtest_0006/1790127710297-gamepad-modal-navigated.png", width: 65%),
   caption: [`DPadUp` press+release: focus moves from "Resume" to "Main Menu" above it, through
   `MenuControls`'s real `Cardinal::dpad()` binding and `AutoDirectionalNavigator`.],
 )

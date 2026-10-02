@@ -69,13 +69,13 @@ condition to be true on the very next pass, regardless of the `is_added()`/`Asse
 above. No value mutation needed, just the change-detection flag.
 
 #figure(
-  image("../screenshots/playtest_0003/1790122139920-final2-mainmenu.png", width: 78%),
+  image("screenshots/playtest_0003/1790122139920-final2-mainmenu.png", width: 78%),
   caption: [Main menu after the fix: the real `.glb` background renders (spheres, a glowing
   panel, a mug -- 3332 unique pixel colors, up from 292 before), with the UI panel on top.],
 )
 
 #figure(
-  image("../screenshots/playtest_0003/1790122166331-final2-ingame.png", width: 78%),
+  image("screenshots/playtest_0003/1790122166331-final2-ingame.png", width: 78%),
   caption: [In-game after the fix: the real starfield HDRI skybox renders (was: a single flat
   clear color for the whole frame). The floor is black -- see @floor-lighting, a separate,
   unrelated finding.],
@@ -95,7 +95,7 @@ scheme (`camera.order` increases with arrival, most-recent-wins), draws on top o
 clear.
 
 #figure(
-  image("../screenshots/playtest_0003/1790121136105-orderfix-mainmenu.png", width: 78%),
+  image("screenshots/playtest_0003/1790121136105-orderfix-mainmenu.png", width: 78%),
   caption: [Before this was reverted: the UI panel correctly composited on top of the real
   background, via bumping the UI camera's order to always stay above whatever last claimed.],
 )
@@ -117,7 +117,7 @@ Three variations on "make the UI camera draw last" were tried, in order:
   `target_info`.
 
 #figure(
-  image("../screenshots/playtest_0003/1790121537326-v3-ingame.png", width: 78%),
+  image("screenshots/playtest_0003/1790121537326-v3-ingame.png", width: 78%),
   caption: [Attempt 2 (re-derive clear ownership every tick), in-game: config confirmed correct
   via BRP (player camera order 8 `Default`, UI camera order 9 `None`), yet still a single flat
   clear color -- the concrete evidence that this wasn't actually about clear-ownership logic

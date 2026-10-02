@@ -7,7 +7,7 @@
 
 = Playtest Index
 
-One entry per run in `docs/agents/playtests/playtest_NNNN/` (see `docs/agents/skills/playtest.md` §10 for
+One entry per run, as `docs/agents/playtests/playtest_NNNN.typ` (see `docs/agents/skills/playtest.md` §10 for
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
@@ -22,7 +22,7 @@ filed — that's part of filing it, not a separate later chore.
   [*Date*], [2026-09-25 00:30 -- 01:45 local (+04)],
   [*Commit*], [`f4180af` + temporary desync instrumentation in `controls.rs` (marked for removal) as of this entry],
   [*Agent*], [opencode agent (GLM-5.3-Flash)],
-  [*Report*], [`docs/agents/playtests/playtest_0012/report.typ`],
+  [*Report*], [`docs/agents/playtests/playtest_0012.typ`],
 )
 
 Loops playtest 0011's intermittent multi-client look/movement desync across client modes with
@@ -42,7 +42,7 @@ instrumented reproduction on the owner's exact configuration.
   [*Date*], [2026-09-24 17:20 -- 20:30 UTC (one long session, several restarts)],
   [*Commit*], [`f4180af` "Fix no dev-tools feature build failure" at the end; the session's work (server tools, `ObserveRequest`, no-render decorate fix, playbook updates) uncommitted as of this entry],
   [*Agent*], [opencode agent (GLM-5.3-Flash), with the project owner co-driving a windowed client],
-  [*Report*], [`docs/agents/playtests/playtest_0011/report.typ`],
+  [*Report*], [`docs/agents/playtests/playtest_0011.typ`],
 )
 
 Three linked verifications on live sessions: the data-first vision tooling (`game/ui`,
@@ -64,7 +64,7 @@ and the next-step instrumentation plan for the desync.
   [*Date*], [2026-09-23 17:23 -- 17:32 UTC],
   [*Commit*], [`5e71215` "Implement Skein mesh primitives for agent testing"; the `CommonAssets` changes not yet committed as of this entry],
   [*Agent*], [opencode agent (GLM-5.3-Flash)],
-  [*Report*], [`docs/agents/playtests/playtest_0010/report.typ`],
+  [*Report*], [`docs/agents/playtests/playtest_0010.typ`],
 )
 
 Implements playtest 0009's closing proposal: the 9 engine-furniture fields of `CommonAssets`
@@ -91,7 +91,7 @@ connect-time `Disconnected` re-entry into `MainMenu` observed in both modes.
   [*Date*], [2026-09-23 16:00 -- 16:40 UTC],
   [*Commit*], [`5e71215` "Implement Skein mesh primitives for agent testing"],
   [*Agent*], [opencode agent (GLM-5.3-Flash)],
-  [*Report*], [`docs/agents/playtests/playtest_0009/report.typ`],
+  [*Report*], [`docs/agents/playtests/playtest_0009.typ`],
 )
 
 First experiment with the owner's isolated-asset idea: each playtest ships its own
@@ -115,7 +115,7 @@ sign convention), plus a new playtest technique: injecting lights via BRP
   [*Date*], [2026-09-23 13:35 -- 14:09 UTC],
   [*Commit*], [Started at `736ec01`; the `lobby.rs` fix not yet committed as of this entry],
   [*Agent*], [Claude (Sonnet 5)],
-  [*Report*], [`docs/agents/playtests/playtest_0008/report.typ`],
+  [*Report*], [`docs/agents/playtests/playtest_0008.typ`],
 )
 
 Requested directly: verify every functional element (main menu, lobby, in-game) is reachable by
@@ -146,7 +146,7 @@ control across all three input methods.
   [*Date*], [2026-09-23 08:33 -- 08:41 UTC],
   [*Commit*], [Started at `b340541`; not yet committed as of this entry],
   [*Agent*], [Claude (Sonnet 5)],
-  [*Report*], [`docs/agents/playtests/playtest_0007/report.typ`],
+  [*Report*], [`docs/agents/playtests/playtest_0007.typ`],
 )
 
 Extended `game/gamepad` (`playtest_0006`) to keyboard and mouse: `game/keyboard` mocks
@@ -173,7 +173,7 @@ camera only after the event-based fix.
   [*Date*], [2026-09-23 01:37 -- 01:42 UTC],
   [*Commit*], [Started at `05a416c`; not yet committed as of this entry],
   [*Agent*], [Claude (Sonnet 5)],
-  [*Report*], [`docs/agents/playtests/playtest_0006/report.typ`],
+  [*Report*], [`docs/agents/playtests/playtest_0006.typ`],
 )
 
 Added `game/gamepad` (mocks real `bevy_input::gamepad::Gamepad` button/axis state on a
@@ -197,7 +197,7 @@ pause modal) -> DPadUp (navigate focus to "Main Menu") -> South (activate) -- co
   [*Date*], [2026-09-23 01:22 -- 01:24 UTC],
   [*Commit*], [Started at `80b6f0f`; fix not yet committed as of this entry],
   [*Agent*], [Claude (Sonnet 5)],
-  [*Report*], [`docs/agents/playtests/playtest_0005/report.typ`],
+  [*Report*], [`docs/agents/playtests/playtest_0005.typ`],
 )
 
 User-reported crash on the real windowed client: in-game -> pause modal -> "Main Menu" ->
@@ -221,7 +221,7 @@ had to work around.
   [*Date*], [2026-09-23 00:53 UTC],
   [*Commit*], [Started at `41e29a9`; fix not yet committed as of this entry],
   [*Agent*], [Claude (Sonnet 5)],
-  [*Report*], [`docs/agents/playtests/playtest_0004/report.typ`],
+  [*Report*], [`docs/agents/playtests/playtest_0004.typ`],
 )
 
 Root-caused and fixed `playtest_0003`'s open follow-on: the menu/lobby UI panel rendering
@@ -248,7 +248,7 @@ correctly.
   [*Commit*], [Started at `329c9bc`; fix landed as `e5fe6c6` (committed after this run's
   verification) -- spans both sides of a code change, not a static state],
   [*Agent*], [Claude (Sonnet 5)],
-  [*Report*], [`docs/agents/playtests/playtest_0003/report.typ`],
+  [*Report*], [`docs/agents/playtests/playtest_0003.typ`],
 )
 
 Root-caused and fixed the bug `playtest_0001`/`playtest_0002` both hit: `--mcp` mode's cameras
@@ -273,7 +273,7 @@ content (renders black on any client, not a `--mcp`-specific issue).
   [*Date*], [2026-09-22 ~23:25 UTC],
   [*Commit*], [`329c9bc` "Add playtest.md skill"],
   [*Agent*], [Claude (Sonnet 5)],
-  [*Report*], [`docs/agents/playtests/playtest_0002/report.typ`],
+  [*Report*], [`docs/agents/playtests/playtest_0002.typ`],
 )
 
 A targeted re-verification pass, not a full state tour: checked two things `AGENTS.md`'s gap
@@ -294,7 +294,7 @@ and fix.
   [*Date*], [2026-09-23 ~02:38 local (2026-09-22 22:38 UTC)],
   [*Commit*], [`89f5eca` "Implement headless --mcp mode for client"],
   [*Agent*], [opencode session, GLM-5.3-Flash],
-  [*Report*], [`docs/agents/playtests/playtest_0001/report.typ`],
+  [*Report*], [`docs/agents/playtests/playtest_0001.typ`],
 )
 
 The first formal playtest: verified the agent/QA tool API (ADR 0009) end-to-end against a fresh

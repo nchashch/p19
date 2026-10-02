@@ -58,7 +58,7 @@ failed, every single time, across two independent fresh server+client pairs. "Ma
 activated both successfully every time.
 
 #figure(
-  image("../screenshots/playtest_0008/1790171017643-mouse-play-race-fail.png", width: 60%),
+  image("screenshots/playtest_0008/1790171017643-mouse-play-race-fail.png", width: 60%),
   caption: [Level selected, "Play" clicked immediately after (the reported scenario) -- still
   in `Lobby`, no `InGameRequest sent` log line at all.],
 )
@@ -87,7 +87,7 @@ click.
 `crate::ui::widgets::Activate`), matching how `selector.rs`/`ui.rs` already do it correctly.
 
 #figure(
-  image("../screenshots/playtest_0008/1790172166050-fix-verify-ingame.png", width: 60%),
+  image("screenshots/playtest_0008/1790172166050-fix-verify-ingame.png", width: 60%),
   caption: [Post-fix, fresh server+client: select a level then immediately click "Play" with the
   mouse (the exact reported scenario) -- reaches `GameState::InGame` with a real player, confirmed
   via `game/state`.],
@@ -124,7 +124,7 @@ their activation (`on_ui_confirm_enter`'s direct `LegacyActivate` trigger) never
 `dispatch_focused_input` at all.
 
 #figure(
-  image("../screenshots/playtest_0008/1790172206051-kb-pause-modal-open.png", width: 55%),
+  image("screenshots/playtest_0008/1790172206051-kb-pause-modal-open.png", width: 55%),
   caption: [Pause modal opened via literal `Escape`; "Resume"/"Main Menu" (hand-rolled widgets)
   both later confirmed reachable via literal `Enter` alone -- no gamepad, no mouse.],
 )

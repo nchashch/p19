@@ -712,29 +712,31 @@ transition — in-game visuals still arrive via the `ClientWorldAsset` path, whi
 path, not through the manifest. The recommended playtest mode is still the manifest-driven
 one (trimmed manifest, no flag) since it keeps the `MeshPrimitive` world visuals; see
 `playtest_assets/playtest_0009/` (stripped to 100% plaintext by 0010) as the template and
-its report, plus `docs/agents/playtests/playtest_0010/`, for the mechanism and the gotchas.
+its report, plus `docs/agents/playtests/playtest_0010.typ`, for the mechanism and the gotchas.
 
-**Layout — three separate locations, not one directory, since only the screenshots need
-Git LFS and only the PDF needs to stay out of git entirely:**
+**Layout — flat, one file per report (like `docs/agents/bug_reports/`); screenshots and the
+compiled PDF live separately, since only the screenshots need Git LFS and only the PDF needs to
+stay out of git entirely:**
 
-- `docs/agents/playtests/playtest_NNNN/report.typ` (find the next free number) — the report
-  source. Plain text, tracked normally (not LFS).
+- `docs/agents/playtests/playtest_NNNN.typ` (find the next free number; four digits,
+  zero-padded) — the report source, a single file directly in `docs/agents/playtests/`, no
+  per-report directory. Plain text, tracked normally (not LFS).
 - `docs/agents/playtests/screenshots/playtest_NNNN/*.png` — the *curated* screenshots this
-  report's `report.typ` actually references (copy the relevant ones in from the raw
-  capture staging directory, `docs/agents/playtests/dist/screenshots/` — see §7 — don't dump
-  every capture from the session, just what's worth keeping). Tracked via **Git LFS**
+  report actually references (copy the relevant ones in from the raw capture staging
+  directory, `docs/agents/playtests/dist/screenshots/` — see §7 — don't dump every capture
+  from the session, just what's worth keeping). Tracked via **Git LFS**
   (`.gitattributes` covers `docs/agents/playtests/screenshots/**/*.png`) — confirm
   `git lfs status` shows them as LFS objects, not plain git blobs, before committing.
 - `docs/agents/playtests/dist/playtest_NNNN.pdf` — the compiled report. **Gitignored**
-  (`/docs/agents/playtests/dist` in `.gitignore`) — regenerable from `report.typ`, never commit
+  (`/docs/agents/playtests/dist` in `.gitignore`) — regenerable from the `.typ`, never commit
   it directly.
 
-Reference screenshots from `report.typ` **relatively**, e.g.
-`image("../screenshots/playtest_NNNN/<file>.png", ...)` (the report lives one level
-under `docs/agents/playtests/`, the screenshots one level under `docs/agents/playtests/screenshots/`);
+Reference screenshots from the report **relatively**, e.g.
+`image("screenshots/playtest_NNNN/<file>.png", ...)` (the report sits directly in
+`docs/agents/playtests/`, next to the `screenshots/` directory — no `../`);
 use `#figure(image(...), caption:[...])`, a metadata `#table`, numbered `= Sections`, and
-a `<findings>` label for the findings block (see `docs/agents/playtests/playtest_0001/report.typ`
-for the house style).
+a `<findings>` label for the findings block (see `docs/agents/playtests/playtest_0001.typ`
+for the house style, and the latest report for the current header table).
 
 **The findings section isn't just confirmed bugs.** Record observations, suspicions,
 things that looked odd but weren't chased down, open questions, anything that would help
@@ -748,15 +750,17 @@ don't omit it either. Cross-reference earlier reports by number when a run confi
 contradicts, or narrows something an earlier one said (`playtest_0002` superseding
 `playtest_0001`'s unverified `spawn_cube` caption is the working example of this).
 
-Compile with (the `--root` matters — a bare `typst compile docs/agents/playtests/playtest_NNNN/report.typ`
-fails with "path would escape the project root" the moment it hits a `../screenshots/...`
-reference, since typst sandboxes relative paths to the input file's own directory by default):
+Compile with:
 
 ```sh
 typst compile --root docs/agents/playtests \
-  docs/agents/playtests/playtest_NNNN/report.typ \
+  docs/agents/playtests/playtest_NNNN.typ \
   docs/agents/playtests/dist/playtest_NNNN.pdf
 ```
+
+(`--root docs/agents/playtests` keeps every path a report may touch — its own file and
+`screenshots/` — inside typst's sandbox; it is harmless with the flat layout and protects
+against a report reaching outside that directory.)
 
 Check the exit code only. Do **not** open or read the produced PDF. typst 0.15.1 is at
 `/usr/sbin/typst`.

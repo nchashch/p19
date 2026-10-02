@@ -72,7 +72,7 @@ en-US `.ftl` locale included. This playtest is the first experiment with that ar
   hand-written `.gltf`, rendered through the scene's own glTF camera) behind the full UI:
 
 #figure(
-  image("../screenshots/playtest_0009/1790179668808-0009-menu.png", width: 78%),
+  image("screenshots/playtest_0009/1790179668808-0009-menu.png", width: 78%),
   caption: [`GameState::MainMenu` on the isolated assets. The gray sphere is the
   `MeshPrimitive`-authored backdrop from the plaintext `.gltf`; the full feathers UI composites
   over it (the `UI_SCALE` cut-off even looks milder here than in earlier playtests).],
@@ -107,7 +107,7 @@ the injected `pitch_delta` is inverted relative to it — the earlier "look down
 been pointing the camera at the sky. At true level pitch the whole scene composites:
 
 #figure(
-  image("../screenshots/playtest_0009/1790181321233-0009-pitch0.png", width: 78%),
+  image("screenshots/playtest_0009/1790181321233-0009-pitch0.png", width: 78%),
   caption: [In-game at level pitch: the `MeshPrimitive` floor (bright under the BRP-injected
   ambient light), the floating `MeshPrimitive` sphere ahead, the starfield HDRI skybox, and the
   HUD crosshair — *all* of it from the isolated plaintext assets (the floor and sphere exist
@@ -115,7 +115,7 @@ been pointing the camera at the sky. At true level pitch the whole scene composi
 )
 
 #figure(
-  image("../screenshots/playtest_0009/1790180095715-0009-fulldown.png", width: 78%),
+  image("screenshots/playtest_0009/1790180095715-0009-fulldown.png", width: 78%),
   caption: [The same scene at `look_pitch` +1.5 — the sky-only view that read as "the floor
   doesn't render" for most of this run. The pitch convention is documented correctly in
   `docs/agents/skills/playtest.md` §5 now.],

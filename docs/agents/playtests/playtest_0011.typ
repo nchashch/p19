@@ -68,7 +68,7 @@ launch-loop port-formatting gotcha recorded in #ref(<findings>)).
   malformed crop rejected cleanly.
 
 #figure(
-  image("../screenshots/playtest_0011/1790273438257-connect-crop.png", width: 40%),
+  image("screenshots/playtest_0011/1790273438257-connect-crop.png", width: 40%),
   caption: [The Connect button captured via `game/screenshot {"crop":[61,281,200,24]}` —
   200×24, 1.8 KB base64. The crop coordinates came straight off a `game/ui` dump row.]
 )
@@ -89,7 +89,7 @@ launch-loop port-formatting gotcha recorded in #ref(<findings>)).
   draw-order borrow (see #ref(<findings>) for the fresh-image trap this replaced).
 
 #figure(
-  image("../screenshots/playtest_0011/1790281230656-observer-player-vision.png", width: 78%),
+  image("screenshots/playtest_0011/1790281230656-observer-player-vision.png", width: 78%),
   caption: [The observer's aimed capture: `ObserverCamera` repositioned to (0, 1.4, 4)
   looking at the fleet client's replicated player capsule (server truth (0, 0.92, 0)),
   rendered via `game/screenshot {"camera": …}`. Brightness profile varies with rows
@@ -102,7 +102,7 @@ launch-loop port-formatting gotcha recorded in #ref(<findings>)).
 first live `server/state` call immediately paid for the feature — see §4.
 
 #figure(
-  image("../screenshots/playtest_0011/1790274035894-deck800.png", width: 78%),
+  image("screenshots/playtest_0011/1790274035894-deck800.png", width: 78%),
   caption: [First 800p capture, full frame. Same as the agent "sees" on the Steam Deck's
   native resolution.]
 )

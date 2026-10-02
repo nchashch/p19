@@ -67,7 +67,7 @@ loop still works: menu, lobby, in-game, player spawned and grounded. As expected
   `Skybox.image: None` simply skips the skybox pass:
 
 #figure(
-  image("../screenshots/playtest_0010/1790184263865-stripped-ingame.png", width: 78%),
+  image("screenshots/playtest_0010/1790184263865-stripped-ingame.png", width: 78%),
   caption: [In-game on the fully-plaintext assets. Floor + sphere render (flat-shaded grays
   under the ambient light); behind them is the app's clear color `(26, 26, 38)` — 29% of the
   frame *exactly* that color, vs 0% in production — where the starfield skybox would be. The
@@ -78,7 +78,7 @@ loop still works: menu, lobby, in-game, player spawned and grounded. As expected
   longer names any font), over the `MeshPrimitive` sphere backdrop:
 
 #figure(
-  image("../screenshots/playtest_0010/1790184333674-stripped-menu.png", width: 78%),
+  image("screenshots/playtest_0010/1790184333674-stripped-menu.png", width: 78%),
   caption: [`MainMenu` on the stripped assets: UI panel, button labels, and the sphere
   backdrop all render without any font/image furniture in the asset root.],
 )
@@ -92,7 +92,7 @@ unlike the no-flag pass, not even a `Path not found` error appears in the log (t
 font suppression at work):
 
 #figure(
-  image("../screenshots/playtest_0010/1790184455686-flag-menu-barest.png", width: 78%),
+  image("screenshots/playtest_0010/1790184455686-flag-menu-barest.png", width: 78%),
   caption: [`--no-common-assets` menu: full feathers UI over bare clear color — the sphere
   backdrop is gone (82.6% of the frame is the exact clear color), and the UI still works.
   In-game (see the next figure) the level visuals still arrive because `ClientWorldAsset`s
@@ -100,7 +100,7 @@ font suppression at work):
 )
 
 #figure(
-  image("../screenshots/playtest_0010/1790184485475-flag-ingame.png", width: 78%),
+  image("screenshots/playtest_0010/1790184485475-flag-ingame.png", width: 78%),
   caption: [`--no-common-assets` in-game: the playtest level's floor + sphere render exactly
   as in the no-flag pass, crosshair included — the `ClientWorldAsset` path is fully
   independent of `CommonAssets`.],
@@ -114,7 +114,7 @@ the in-game view has *zero* clear-color pixels — the starfield skybox renders 
 before (2891 unique colors vs 101 in the stripped pass):
 
 #figure(
-  image("../screenshots/playtest_0010/1790184631604-prod-ingame.png", width: 78%),
+  image("screenshots/playtest_0010/1790184631604-prod-ingame.png", width: 78%),
   caption: [Production assets after the `Option`-ification: starfield skybox, level floor,
   HUD — indistinguishable from pre-change behavior, as intended.],
 )

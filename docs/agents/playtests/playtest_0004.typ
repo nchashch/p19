@@ -88,17 +88,17 @@ round-trip (including the disconnect-back-to-menu direction) has been tested in 
 all:
 
 #figure(
-  image("../screenshots/playtest_0004/1790124794028-orderfix2-mainmenu.png", width: 70%),
+  image("screenshots/playtest_0004/1790124794028-orderfix2-mainmenu.png", width: 70%),
   caption: [Main menu: UI panel correctly composited on top of the real `.glb` background.],
 )
 
 #figure(
-  image("../screenshots/playtest_0004/1790124808556-orderfix2-lobby.png", width: 70%),
+  image("screenshots/playtest_0004/1790124808556-orderfix2-lobby.png", width: 70%),
   caption: [Lobby: same background asset, Play/Level/Main Menu panel on top, correct.],
 )
 
 #figure(
-  image("../screenshots/playtest_0004/1790124817618-orderfix2-ingame.png", width: 70%),
+  image("screenshots/playtest_0004/1790124817618-orderfix2-ingame.png", width: 70%),
   caption: [In-game: the starfield HDRI still renders (no regression from `playtest_0003`'s
   fix), and for the first time ever in `--mcp` mode the HUD also renders on top of the world --
   the small white dot at screen center is the crosshair, which never appeared at all before this
@@ -106,7 +106,7 @@ all:
 )
 
 #figure(
-  image("../screenshots/playtest_0004/1790124840549-orderfix2-postdisconnect.png", width: 70%),
+  image("screenshots/playtest_0004/1790124840549-orderfix2-postdisconnect.png", width: 70%),
   caption: [After `game/trigger disconnect` (`game_state` confirmed `MainMenu`,
   `player_despawned: true` via `game/state`): UI correctly on top again, confirming the marker
   hand-*back* to the bootstrap camera works, not just the initial hand-off to the player.],
