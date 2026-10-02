@@ -7,6 +7,7 @@ This file provides guidance to AI coding agents when working with code in this r
 `docs/skills/` holds distilled, task-specific how-tos for agents working on this project — read the relevant one **before** attempting its task, it encodes hard-won gotchas that will otherwise cost you the same debugging time again:
 
 - `docs/skills/playtest.md` — how to drive the game headlessly (launch the server + `--mcp` client, the `game/*` BRP methods, input injection semantics, screenshots, known failure modes, and how to write the typst playtest reports under `docs/playtests/`).
+- `docs/skills/bugreport.md` — how to file bug reports as individual numbered typst files under `docs/bug_reports/` (bug_0001, bug_0002, …): date, exact local commit state, repro steps, evidence, root cause, severity, and a `Status` field that flips to `Fixed in <commit>` when the fix lands. **Agents file defects they discover there** — reproducible crashes, silently-dropped behaviors, desyncs, design-level hazards — following the skill's one-bug-per-file / reproduce-first / corrections-not-rewrites rules. Reports are retained forever, fixed or not: a `Fixed` report is regression armor, so never delete one and never close one silently. Known-open items should be backfilled as they are identified.
 
 Existing playtest reports (`docs/playtests/playtest_*/report.typ`, screenshots in `docs/playtests/screenshots/playtest_*/`, compiled PDFs in the gitignored `docs/playtests/dist/`) are worked examples of what a completed agent playtest looks like — consult the latest one before writing a new one.
 

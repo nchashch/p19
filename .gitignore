@@ -11,3 +11,5 @@
 # tracked — see .gitattributes) is NOT covered by this and stays tracked.
 /docs/playtests/dist
 /docs/playtests/*.pdf
+/docs/bug_reports/dist
+/docs/bug_reports/*.pdf
