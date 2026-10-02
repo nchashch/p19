@@ -14,11 +14,11 @@
   inset: 6pt,
   [*Bug*], [bug_0006],
   [*Date discovered*], [2026-10-02 (owner's first real Steam Deck LAN run after bug_0005's fix)],
-  [*Commit (state actually running)*], [Discovered on the server built at the uncommitted post-bug_0005 working tree (netcode token flow landed across `81d75bf`..HEAD). *Fixed in* the same uncommitted working tree (`server/src/networking.rs`: `additional_expected_addresses`)],
+  [*Commit (state actually running)*], [Discovered on the server built at the uncommitted post-bug_0005 working tree (netcode token flow landed across `81d75bf`..`89e44cc`). *Fixed in* `89e44cc` "Fix Steam Deck failing to connect over LAN" (`server/src/networking.rs`: `additional_expected_addresses`), together with bug_0005],
   [*Discovered by*], [Project owner (Steam Deck live run) + opencode agent (GLM-5.3-Flash), root cause],
   [*Component*], [`server::networking` (`NetcodeConfig.server_addr_check` + `LocalAddr` wildcard bind) × `lightyear_netcode::server`'s connect-token validation],
   [*Severity*], [S2 — LAN clients cannot connect; loopback unaffected],
-  [*Status*], [*Fixed* (uncommitted) — verified live: loopback connect → Lobby → level → InGame with zero whitelist rejections; the LAN case is covered by unit-tested address logic plus the new expectation list],
+  [*Status*], [*Fixed in* `89e44cc` — verified live: loopback connect → Lobby → level → InGame with zero whitelist rejections; the LAN case is covered by unit-tested address logic plus the new expectation list],
   [*Related*], [bug_0005 (token content fix — prerequisite; its correct token content is what exposed this server-side check), AGENTS.md "Fixed: the server silently rejected every LAN connection" (the same check, disabled for the same class of reason, in the pre-token era)],
 )
 

@@ -4,9 +4,8 @@
 //! (`bevy_ahoy::CharacterController`, on the player bundle — aliased `AhoyCharacterController`
 //! at use sites to disambiguate from the old shared type of the same name, now deleted). What
 //! survives here is the replicated vocabulary the rest of the game speaks: `Character`/`Idle`
-//! (animation markers), `GameLayer` (collision layers), and `Grounded` — plus a small bridge
-//! that keeps `Grounded` written from ahoy's own ground state (the old controller used to be
-//! its writer; see `bridge_grounded`).
+//! (animation markers) and `GameLayer` (collision layers). Grounded state has no marker of its
+//! own — consumers read ahoy's `CharacterControllerState::grounded` directly.
 
 use avian3d::prelude::PhysicsLayer;
 use bevy::prelude::*;

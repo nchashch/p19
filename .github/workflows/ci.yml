@@ -54,7 +54,7 @@ jobs:
 
   # Shippable Steam client: built inside the official steamrt4 SDK container so the binary
   # links the Steam Runtime's own (older) glibc and libraries — the container equivalent of
-  # the local `steam_deck_toolbox.sh cargo build -p client --release` workflow (see
+  # the local `scripts/steam_deck_toolbox.sh cargo build -p client --release` workflow (see
   # AGENTS.md's GLIBC-taint gotcha: a host-built binary fails on the Deck with
   # `GLIBC_2.4x not found`). The repo never reaches this job's linker from the host, so
   # this job does not need the host free-disk/apt steps.

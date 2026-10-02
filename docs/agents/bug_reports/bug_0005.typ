@@ -14,11 +14,11 @@
   inset: 6pt,
   [*Bug*], [bug_0005],
   [*Date discovered*], [2026-10-02 (first real Steam Deck run against the LAN server)],
-  [*Commit (state actually running)*], [Discovered at `81d75bf` "Issue actual per client tokens when clients connect". *Fixed in* the uncommitted working tree (`server/src/networking.rs`: `token_server_ip` + unit tests); will be pinned to the commit that lands it],
+  [*Commit (state actually running)*], [Discovered at `81d75bf` "Issue actual per client tokens when clients connect". *Fixed in* `89e44cc` "Fix Steam Deck failing to connect over LAN" (`server/src/networking.rs`: `token_server_ip` + unit tests)],
   [*Discovered by*], [Project owner (live Steam Deck test); root cause by opencode agent (GLM-5.3-Flash)],
   [*Component*], [`server::networking` (`start_token_http_endpoint` — connect-token server-address construction)],
   [*Severity*], [S2 — LAN clients cannot connect at all; loopback was the only working configuration],
-  [*Status*], [*Fixed* (uncommitted) — verified: unit tests for all three fallback tiers; both Host-header and fallback paths issue tokens live],
+  [*Status*], [*Fixed in* `89e44cc` — verified: unit tests for all three fallback tiers; both Host-header and fallback paths issue tokens live],
   [*Related*], [playtest 0019 (introduced the token endpoint with this flaw); AGENTS.md token-endpoint entries; the netcode standard's connect-token server-address semantics (client connects to the token's address list, not to any address it chooses)],
 )
 
@@ -63,7 +63,7 @@ definition.
 
 = Fix
 
-Uncommitted working tree, `server/src/networking.rs`:
+`89e44cc`, `server/src/networking.rs`:
 
 - New `token_server_ip(request, peer)` helper with the documented fallback chain:
   `Host` header IP (authoritative — the exact address the client used, which also handles

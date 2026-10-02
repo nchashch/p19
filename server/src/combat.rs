@@ -38,12 +38,11 @@ impl Plugin for ServerCombatPlugin {
     }
 }
 
-// TODO: Handle player death properly, currently it is broken. A player can't move (RigidBody
-// removal below starves ahoy's KCC) or look around (`server::input::accumulate_look` gates on
-// `Without<Dead>`) while dead, but dead *attackers* still need gating in
-// `apply_attack`/`apply_kill` — unreachable until the caster-resolution fix below lands, since
-// combat currently no-ops for everyone. (The death-path client panic found in playtest 0015 is
-// fixed: `--no-render` now adds `SyncWorldPlugin` — see the AGENTS.md dead-player gap entry.)
+// Dead players have no agency: they can't move (the `RigidBody` removal below starves ahoy's
+// KCC), look around (`server::input::accumulate_look` gates on `Without<Dead>`), or attack
+// (`apply_attack`/`apply_kill` only resolve a living caster). The death-path client panic found
+// in playtest 0015 is fixed: `--no-render` now adds `SyncWorldPlugin` — see the AGENTS.md
+// dead-player entry.
 fn kill_zero_hp(
     query: Query<(Entity, &HitPoints, &Transform), Without<Dead>>,
     mut commands: Commands,

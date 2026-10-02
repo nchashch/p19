@@ -15,12 +15,12 @@
   [*Bug*], [bug_0004],
   [*Date discovered*], [Long-standing; documented in AGENTS.md's movement gap list since the ahoy migration (M0–M2)]
   ,
-  [*Commit (state actually running)*], [Open at `81d75bf` "Issue actual per client tokens when clients connect" + uncommitted docs. Present in every commit since the ahoy migration]
+  [*Commit (state actually running)*], [Open at `81d75bf` "Issue actual per client tokens when clients connect" + uncommitted docs. Present in every commit since the ahoy migration. *Fixed in* `c2c4b76` "Fix bug_0004, don't replicat Transform, add ModelOffset"]
   ,
   [*Discovered by*], [opencode agent (GLM-5.3-Flash), AGENTS.md gap review; behavior consistent with the ahoy migration's design notes],
   [*Component*], [`bevy_ahoy` KCC × `lightyear` prediction/rollback (`CharacterControllerState`, `AccumulatedInput`)],
   [*Severity*], [S3 — visible input glitching for the affected player after corrections; no crash],
-  [*Status*], [*Fixed* in the uncommitted working tree (`client/src/gameplay/player_character.rs`; will be pinned to the commit that lands it) — verified live: the predicted player carries `PredictionHistory<CharacterControllerState>` alongside the four physics histories, movement unaffected],
+  [*Status*], [*Fixed in* `c2c4b76` — verified live (playtest 0020): the predicted player carries `PredictionHistory<CharacterControllerState>` alongside the four physics histories, movement unaffected],
   [*Related*], [AGENTS.md movement "Remaining gaps" bullet; playtest 0014 (interpolation work notes the gap adjacent to its fix)],
 )
 

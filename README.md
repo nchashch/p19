@@ -11,10 +11,9 @@ local input is simulated immediately and reconciled against the server's authori
 the same architecture a shipped multiplayer game would use.
 
 **Status: pre-release prototype, actively evolving, not currently playable end-to-end.**
-Movement/prediction genuinely works now, but several specific interaction systems have known,
-confirmed-live bugs — a caster-resolution regression silently drops every spawn/attack/kill
-request, level reloading has no dedup protection, disconnected players' characters aren't
-cleaned up (blocking a clean reconnect), and more — see [`AGENTS.md`](./AGENTS.md)'s "what's
+Movement/prediction, combat, and cube/NPC spawning genuinely work now, but known gaps remain —
+most visibly, disconnected players' characters aren't cleaned up (blocking a clean reconnect),
+and all players share one spawn point — see [`AGENTS.md`](./AGENTS.md)'s "what's
 still genuinely missing or actively broken" list for the current, specific set, and
 [`docs/agents/adr/`](./docs/agents/adr/) for the reasoning behind major decisions. Expect things to be broken
 or half-built; this is a live development snapshot, not a demo.
@@ -57,7 +56,7 @@ history rather than runtime content.)
 `cargo build -p <client|server> --release` on the host machine produces a binary linked
 against the host's glibc, which will *not* run correctly on a Steam Deck or inside the
 project's `steamrt4` toolbox — see `AGENTS.md`'s "Commands" section for why, and use
-`./steam_deck_toolbox.sh cargo build -p <client|server> --release` instead when targeting
+`scripts/steam_deck_toolbox.sh cargo build -p <client|server> --release` instead when targeting
 either.
 
 ## Project layout
@@ -72,7 +71,8 @@ either.
   `client/assets/`/`server/assets/` for actual runtime use. Nothing loads from it directly.
 
 Networking is [`lightyear`](https://github.com/cBournhonesque/lightyear) 0.30 over UDP/netcode.
-Physics is [`avian3d`](https://github.com/Jondolf/avian). No test suite exists yet.
+Physics is [`avian3d`](https://github.com/Jondolf/avian). Automated tests are a handful of unit
+tests (`cargo test --workspace`); there is no integration test suite yet.
 
 ## Documentation
 

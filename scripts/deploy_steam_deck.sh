@@ -22,10 +22,10 @@ STAGING_DIR="$REPO_ROOT/steam_deck_staging"
 cd "$REPO_ROOT"
 
 echo "==> Cleaning client's release artifacts inside the steamrt4 toolbox"
-./steam_deck_toolbox.sh cargo clean -p client --release
+./scripts/steam_deck_toolbox.sh cargo clean -p client --release
 
 echo "==> Building client --release inside the steamrt4 toolbox"
-./steam_deck_toolbox.sh cargo build -p client --release
+./scripts/steam_deck_toolbox.sh cargo build -p client --release
 
 echo "==> Staging binary + assets at $STAGING_DIR"
 mkdir -p "$STAGING_DIR"
