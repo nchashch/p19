@@ -6,10 +6,10 @@
 /profiling
 /scripts/__pycache__
 # Compiled playtest report PDFs and raw/uncurated screenshot capture staging — regenerable from
-# docs/playtests/playtest_NNNN/report.typ and the client's own runs, not meant to be committed.
-# The curated docs/playtests/screenshots/playtest_NNNN/ subset (referenced by report.typ, LFS-
+# docs/agents/playtests/playtest_NNNN/report.typ and the client's own runs, not meant to be committed.
+# The curated docs/agents/playtests/screenshots/playtest_NNNN/ subset (referenced by report.typ, LFS-
 # tracked — see .gitattributes) is NOT covered by this and stays tracked.
-/docs/playtests/dist
-/docs/playtests/*.pdf
-/docs/bug_reports/dist
-/docs/bug_reports/*.pdf
+/docs/agents/playtests/dist
+/docs/agents/playtests/*.pdf
+/docs/agents/bug_reports/dist
+/docs/agents/bug_reports/*.pdf

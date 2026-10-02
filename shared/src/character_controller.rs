@@ -1,6 +1,6 @@
 //! The shared character **data model** — marker/config components both binaries compile against.
 //!
-//! Since the ahoy migration (see `docs/adr/0008`), the movement *simulation* is ahoy's KCC
+//! Since the ahoy migration (see `docs/agents/adr/0008`), the movement *simulation* is ahoy's KCC
 //! (`bevy_ahoy::CharacterController`, on the player bundle — aliased `AhoyCharacterController`
 //! at use sites to disambiguate from the old shared type of the same name, now deleted). What
 //! survives here is the replicated vocabulary the rest of the game speaks: `Character`/`Idle`

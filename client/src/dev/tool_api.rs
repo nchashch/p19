@@ -365,12 +365,12 @@ fn cameras_method(_params: In<Option<serde_json::Value>>, world: &mut World) -> 
     .into())
 }
 
-/// Where captures land: `<workspace>/docs/playtests/dist/screenshots/<utc>-<label>.png` —
+/// Where captures land: `<workspace>/docs/agents/playtests/dist/screenshots/<utc>-<label>.png` —
 /// persistent, NOT consumed on read, so a human can browse everything the agent saw. This is
-/// raw, uncurated staging output (gitignored — `docs/playtests/dist/` holds nothing meant to be
-/// committed), not the same thing as `docs/playtests/screenshots/playtest_NNNN/`, which is the
+/// raw, uncurated staging output (gitignored — `docs/agents/playtests/dist/` holds nothing meant to be
+/// committed), not the same thing as `docs/agents/playtests/screenshots/playtest_NNNN/`, which is the
 /// curated, Git LFS-tracked subset an agent copies in when actually filing a playtest report
-/// (see `docs/skills/playtest.md` §10) — this function has no notion of "which playtest number"
+/// (see `docs/agents/skills/playtest.md` §10) — this function has no notion of "which playtest number"
 /// a capture belongs to, since that's only decided after the fact, when a report gets written.
 /// Anchored on `CARGO_MANIFEST_DIR` (set under `cargo run`/`cargo build`, and by the QA harness
 /// that launches the client) falling back to the CWD, matching how bevy itself resolves asset
@@ -383,8 +383,8 @@ fn cameras_method(_params: In<Option<serde_json::Value>>, world: &mut World) -> 
 /// dir would cross-contaminate clients — client A's poll would return client B's capture.
 fn screenshots_dir() -> PathBuf {
     let base = std::env::var_os("CARGO_MANIFEST_DIR")
-        .map(|manifest| PathBuf::from(manifest).join("../docs/playtests/dist/screenshots"))
-        .unwrap_or_else(|| PathBuf::from("docs/playtests/dist/screenshots"));
+        .map(|manifest| PathBuf::from(manifest).join("../docs/agents/playtests/dist/screenshots"))
+        .unwrap_or_else(|| PathBuf::from("docs/agents/playtests/dist/screenshots"));
     let port = crate::config::brp_port_presync();
     if port == bevy::remote::http::DEFAULT_PORT {
         base
@@ -432,7 +432,7 @@ fn newest_screenshot() -> Option<PathBuf> {
 }
 
 /// `game/screenshot` — starts an async capture of the primary window. The PNG is written under
-/// `docs/playtests/dist/screenshots/` (encoded by [`save_cropped_to_disk`], async); poll
+/// `docs/agents/playtests/dist/screenshots/` (encoded by [`save_cropped_to_disk`], async); poll
 /// `game/screenshot/get` until it reports `ready`. Optional params: `{"label": "..."}` for the
 /// filename, `{"crop": [x, y, w, h]}` to save only that sub-rect — in the same screenshot pixel
 /// space `game/ui` dumps, so "crop to a button's rect from the dump" just works. A crop costs
@@ -637,7 +637,7 @@ struct LastServedCapture {
 /// ground truth, and the same snapshot is written
 /// once to a `.json` sidecar beside the PNG (`<capture>.json`) so the human-browsable record
 /// carries state too. The file is NOT consumed — captures persist in
-/// `docs/playtests/dist/screenshots/` for human review.
+/// `docs/agents/playtests/dist/screenshots/` for human review.
 fn screenshot_get_method(_params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
     let Some(path) = newest_screenshot() else {
         return Ok(json!({"ready": false}).into());
@@ -2031,7 +2031,7 @@ struct GameTools {
 #[derive(serde::Deserialize, schemars::JsonSchema)]
 pub struct ScreenshotParams {
     /// Optional filename label; the PNG lands as `<millistamp>-<label>.png` under
-    /// docs/playtests/dist/screenshots/.
+    /// docs/agents/playtests/dist/screenshots/.
     pub label: Option<String>,
     /// Optional `[x, y, w, h]` sub-rect to capture, in the same screenshot pixel space game/ui
     /// dumps (e.g. a button's rect). A crop costs fewer vision tokens and keeps full effective

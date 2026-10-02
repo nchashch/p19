@@ -1,7 +1,7 @@
 //! The player input protocol: a BEI context + ahoy action types, replicated via
 //! `lightyear_inputs_bei`.
 //!
-//! This is the M2 "idiomatic" flow (see `docs/adr/0005`'s follow-up plan): the **server**
+//! This is the M2 "idiomatic" flow (see `docs/agents/adr/0005`'s follow-up plan): the **server**
 //! spawns the input context + its action entities as part of the player bundle (`player()`),
 //! they replicate to the owning client (via `ActionOf<C>`'s hierarchy sender), the owning
 //! client adds local-only `Bindings` to the replicated action entities (see

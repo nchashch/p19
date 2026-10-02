@@ -2,7 +2,7 @@
 //! a real Bevy mesh primitive (`Cuboid`, `Sphere`, `Capsule3d`, ...). Author it in Blender on
 //! any object (a bare Empty works fine, it needs no mesh data of its own) via Skein's normal
 //! "add component" panel, matching its own presets/known-types list against whatever this app's
-//! `AppTypeRegistry` exposes over BRP (`docs/adr/0009-agent-tool-api-via-brp.md`) — the same
+//! `AppTypeRegistry` exposes over BRP (`docs/agents/adr/0009-agent-tool-api-via-brp.md`) — the same
 //! mechanism this project already uses for `shared::level::InGameRoot`/`assets::character::RigRoot`
 //! and every other Skein-authored marker.
 //!

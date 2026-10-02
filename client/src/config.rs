@@ -25,7 +25,7 @@ struct ClientConfig {
 /// no window at all, all cameras rendered into an offscreen texture, and (with the `dev-tools`
 /// cargo feature) the BRP + MCP tool API up on localhost. Must be decided *pre-sync* — it
 /// changes which plugins the app is built with (no winit; `ScheduleRunnerPlugin` drives frames),
-/// the same reason `is_vr_enabled_presync` is decided up front. See `docs/adr/0009`.
+/// the same reason `is_vr_enabled_presync` is decided up front. See `docs/agents/adr/0009`.
 pub fn is_mcp_mode_presync() -> bool {
     // CLI first (explicit per-invocation intent), then the config file.
     if std::env::args().any(|arg| arg == "--mcp") {

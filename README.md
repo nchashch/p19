@@ -16,21 +16,21 @@ confirmed-live bugs — a caster-resolution regression silently drops every spaw
 request, level reloading has no dedup protection, disconnected players' characters aren't
 cleaned up (blocking a clean reconnect), and more — see [`AGENTS.md`](./AGENTS.md)'s "what's
 still genuinely missing or actively broken" list for the current, specific set, and
-[`docs/adr/`](./docs/adr/) for the reasoning behind major decisions. Expect things to be broken
+[`docs/agents/adr/`](./docs/agents/adr/) for the reasoning behind major decisions. Expect things to be broken
 or half-built; this is a live development snapshot, not a demo.
 
 An agent-driven QA tool API (BRP + MCP, gated behind the `dev-tools` cargo feature) lets an AI
 coding agent actually play the game headlessly — connect, navigate menus, move, inject input,
 take screenshots — to drive real regression testing and bug-hunting through the same replicated
 pipeline a human player uses, not a separate mock. Its findings accumulate as dated reports in
-[`docs/playtests/`](./docs/playtests/index.typ) (start at that index) rather than being lost
+[`docs/agents/playtests/`](./docs/agents/playtests/index.typ) (start at that index) rather than being lost
 after each session; several real bugs in this repo were found and root-caused this way.
 
 ## Getting started
 
 Requires a Rust toolchain supporting edition 2024, and [Git LFS](https://git-lfs.com/) (`git
 lfs install`, once per machine) to pull the actual screenshot images referenced by
-`docs/playtests/` reports — the repo still clones and builds fine without it, you'd just see
+`docs/agents/playtests/` reports — the repo still clones and builds fine without it, you'd just see
 LFS pointer text instead of images for those specific files.
 
 ```sh
@@ -41,8 +41,8 @@ cargo run -p client --release   # start the game client (connects once you press
 
 To drive the client as an agent instead of a human — headless, no window, scriptable over
 HTTP — build with `--features dev-tools` and run with `--mcp`; see
-[`docs/skills/playtest.md`](./docs/skills/playtest.md) for the full playbook (launch recipe,
-tool API surface, known gotchas) and [`docs/adr/0009`](./docs/adr/0009-agent-tool-api-via-brp.md)
+[`docs/agents/skills/playtest.md`](./docs/agents/skills/playtest.md) for the full playbook (launch recipe,
+tool API surface, known gotchas) and [`docs/agents/adr/0009`](./docs/agents/adr/0009-agent-tool-api-via-brp.md)
 for the design behind it.
 
 **Assets are not tracked in git** (`client/assets/`, `server/assets/`, and `assets_src/` are
@@ -50,7 +50,7 @@ all gitignored) — there is currently no automated, documented process to provi
 a fresh clone. If you're picking this up on a new machine, you'll need to copy those
 directories over from an existing checkout by hand; there's no `cargo run` that "just works"
 from source alone yet. This is a known gap, not an oversight — worth fixing before this repo
-needs to support more than one working copy. (This doesn't apply to `docs/playtests/screenshots/`
+needs to support more than one working copy. (This doesn't apply to `docs/agents/playtests/screenshots/`
 specifically — those *are* tracked, via Git LFS, since they're small and meant as durable
 history rather than runtime content.)
 
@@ -81,15 +81,16 @@ Physics is [`avian3d`](https://github.com/Jondolf/avian). No test suite exists y
   for (and kept up to date by) AI coding agents working in this repo, but equally useful for a
   human trying to understand *why* something is built the way it is. Start here for anything
   beyond a surface-level look.
-- **[`docs/adr/`](./docs/adr/)** — Architecture Decision Records: short, dated writeups of
+- **[`docs/agents/adr/`](./docs/agents/adr/)** — Architecture Decision Records: short, dated writeups of
   specific significant decisions (and the alternatives/tradeoffs considered), kept separate
   from `AGENTS.md`'s "current state" description so the reasoning trail behind a decision
   doesn't get overwritten every time the doc is refreshed to match new code.
-- **[`docs/skills/`](./docs/skills/)** — task-specific playbooks for AI agents working in this
-  repo, e.g. [`playtest.md`](./docs/skills/playtest.md) (how to drive the game headlessly via
-  the agent tool API) — read the relevant one before attempting its task; it encodes gotchas
-  that otherwise cost the same debugging time again.
-- **[`docs/playtests/`](./docs/playtests/index.typ)** — dated reports from every agent-driven
+- **[`docs/agents/skills/`](./docs/agents/skills/)** — task-specific playbooks for AI agents working in this
+  repo, e.g. [`playtest.md`](./docs/agents/skills/playtest.md) (how to drive the game headlessly via
+  the agent tool API) and [`bugreport.md`](./docs/agents/skills/bugreport.md) (how to file bug reports) — read the
+  relevant one before attempting its task; it encodes gotchas that otherwise cost the same
+  debugging time again.
+- **[`docs/agents/playtests/`](./docs/agents/playtests/index.typ)** — dated reports from every agent-driven
   playtest session (state tours, bug reproductions, fix verifications), each with screenshots
   of what the agent actually saw. Start at the index; every report cites the exact git commit
   it was run against. Written to be a real, searchable debugging history, not a one-off log —
