@@ -1,9 +1,13 @@
 #!/bin/sh
 # Builds a release `client` binary inside the steamrt4 toolbox (the correct glibc baseline for
 # the Deck/Steam Runtime — see AGENTS.md's "Commands" section) and stages it plus its `assets/`
-# directory under `steam_deck_staging/`, ready for SteamOS Devkit Client's Title Upload:
-#   Local Folder   = steam_deck_staging/
+# directory under `target/steamdeck/release/`, ready for SteamOS Devkit Client's Title Upload:
+#   Local Folder   = <repo>/target/steamdeck/release/
 #   Start Command  = ./client
+#
+# The staging dir is build output: it lives under cargo's gitignored `target/` (a full
+# `cargo clean` removes it too) and is wiped and recreated on every run, so never keep
+# hand-placed files in it. The `release` level leaves room for a future debug staging build.
 #
 # "Clean isolated run": a plain host-side `cargo build`/`cargo run` for this same target
 # silently taints cargo's cached intermediate objects with the *host's* (newer) glibc, and a
@@ -17,7 +21,7 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
-STAGING_DIR="$REPO_ROOT/steam_deck_staging"
+STAGING_DIR="$REPO_ROOT/target/steamdeck/release"
 
 cd "$REPO_ROOT"
 
@@ -28,9 +32,9 @@ echo "==> Building client --release inside the steamrt4 toolbox"
 ./scripts/steam_deck_toolbox.sh cargo build -p client --release
 
 echo "==> Staging binary + assets at $STAGING_DIR"
+rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"
 cp target/release/client "$STAGING_DIR/client"
-rm -rf "$STAGING_DIR/assets"
 cp -r client/assets "$STAGING_DIR/assets"
 
 if command -v objdump >/dev/null 2>&1; then

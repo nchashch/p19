@@ -164,9 +164,11 @@ cargo run -p client --release     # connects when the main menu's Connect button
   inside the toolbox. Check with
   `objdump -T target/release/<bin> | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -5` (should top
   out around `GLIBC_2.39`).
-- `scripts/deploy_steam_deck.sh` cleans, builds the client in the toolbox, stages it with
-  `client/assets/` in `steam_deck_staging/`, and checks the GLIBC baseline — ready for SteamOS
-  Devkit Client's Title Upload (`Start Command` = `./client`).
+- `scripts/deploy_steam_deck.sh` cleans, builds the client in the toolbox, and stages it with a
+  copy of `client/assets/` in **`target/steamdeck/release/`** (wiped and recreated each run; a
+  full `cargo clean` deletes it too — never keep hand-placed files there), then checks the GLIBC
+  baseline. Ready for SteamOS Devkit Client's Title Upload: `Local Folder` =
+  `<repo>/target/steamdeck/release/`, `Start Command` = `./client`.
 - `../build.sh` (outside the workspace) builds in a `steamrt-sniper` podman container.
 - **CI** (`.github/workflows/ci.yml`): "Build server" (host `ubuntu-latest`, debug) and "Build
   client (steamrt4, shippable)" (release, inside `registry.gitlab.steamos.cloud/steamrt/steamrt4/sdk`,
