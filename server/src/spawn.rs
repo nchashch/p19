@@ -9,6 +9,7 @@ use noiz::{
     rng::{AnyValueFromBits, NoiseRng},
 };
 use shared::assets::level::ClientWorldAsset;
+use shared::npc_spawner::ModelOffset;
 use shared::{
     client_events::SpawnCubeRequest, cube_spawner::cube, npc_spawner::npc, player::Selectable,
 };
@@ -98,7 +99,7 @@ pub(crate) fn apply_spawn_npc(
             ClientWorldAsset {
                 asset_path: "rigs/armature/npc.glb".to_string(),
             },
-            Transform::from_translation(Vec3::new(
+            ModelOffset(Vec3::new(
                 0.0,
                 -(CAPSULE_LENGTH / 2.0 + CAPSULE_RADIUS),
                 0.0,

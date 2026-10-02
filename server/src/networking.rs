@@ -114,7 +114,7 @@ fn load_or_create_tls_identity()
         .ok_or_else(|| format!("{} contains no private key", key_path.display()))?;
     let fingerprint = hex_encode(&sha2::Sha256::digest(certs[0].as_ref()));
     let config = rustls::ServerConfig::builder_with_provider(Arc::new(
-        rustls::crypto::ring::default_provider(),
+        rustls::crypto::aws_lc_rs::default_provider(),
     ))
     .with_safe_default_protocol_versions()
     .map_err(|error| format!("tls protocol versions: {error}"))?

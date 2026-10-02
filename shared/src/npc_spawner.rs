@@ -22,6 +22,10 @@ pub struct Npc;
 #[derive(Component)]
 pub struct NpcSpawner;
 
+#[derive(Component, Serialize, Deserialize, Default, Clone, Reflect, Debug)]
+#[reflect(Component)]
+pub struct ModelOffset(pub Vec3);
+
 pub fn npc(shape: Collider, translation: Vec3) -> impl Bundle {
     (
         Npc,

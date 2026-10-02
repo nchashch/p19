@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use lightyear::prelude::*;
 use shared::client_events::SpawnNpcRequest;
 use shared::level::InGameRoot;
-use shared::npc_spawner::{Npc, NpcSpawner};
+use shared::npc_spawner::{ModelOffset, Npc, NpcSpawner};
 use shared::replication::OrderedReliable;
 
 use crate::assets::collections::CommonAssets;
@@ -21,7 +21,25 @@ impl Plugin for NpcSpawnerPlugin {
         // hard `Res<NpcUiQuad>` validation failure during the brief `AssetLoading` window before
         // that first runs. No NPC ever exists before `InGame` anyway, well after `MainMenu`, so
         // this only ever skips frames that had nothing to decorate regardless.
-        app.add_systems(Update, decorate_npcs.run_if(resource_exists::<NpcUiQuad>));
+        app.add_systems(
+            Update,
+            (
+                apply_model_offset,
+                decorate_npcs.run_if(resource_exists::<NpcUiQuad>),
+            ),
+        );
+    }
+}
+
+fn apply_model_offset(
+    query: Query<(Entity, &ModelOffset), Without<Transform>>,
+    mut commands: Commands,
+) {
+    for (entity, offset) in query {
+        let offset = offset.0;
+        commands
+            .entity(entity)
+            .insert(Transform::from_translation(offset));
     }
 }
 

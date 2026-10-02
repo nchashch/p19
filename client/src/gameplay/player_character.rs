@@ -6,9 +6,11 @@ use crate::{
     gameplay::combat::CombatPlugin,
 };
 use bevy::prelude::*;
+use bevy_ahoy::CharacterControllerState;
 use bevy_ahoy::CharacterLook;
 use bevy_ahoy::prelude::CharacterController as AhoyCharacterController;
 use lightyear::prelude::Controlled;
+use lightyear::prelude::{AppComponentExt, PredictionBuilderExt};
 use shared::cube_spawner::CubeSpawner;
 use shared::game_state::GameState;
 use shared::npc_spawner::NpcSpawner;
@@ -19,6 +21,22 @@ pub struct PlayerCharacterPlugin;
 impl Plugin for PlayerCharacterPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((CombatPlugin, PlayerControlsPlugin, PlayerCameraPlugin));
+
+        // Rollback for the KCC's decision state (bug_0004): only the four physics components
+        // were rollback-registered, so a server correction rewound `Position`/`Velocity` while
+        // ahoy's jump-buffer/coyote stopwatches and grounded-hit data kept their
+        // post-correction values → ghost jumps / swallowed buffered jumps. `local_rollback`
+        // makes lightyear maintain `PredictionHistory<CharacterControllerState>` on predicted
+        // entities (snapshot in `FixedPostUpdate`, restore on rewind) without replicating the
+        // state to anyone. Must run after `ClientPlugins` (this plugin is added later in
+        // `main.rs`'s tuple): `local_rollback` registers rollback metadata only if
+        // `PredictionRegistry` already exists, which `PredictionPlugin` creates.
+        //
+        // `AccumulatedInput` is deliberately NOT registered: it is cleared and re-filled from
+        // the replayed input stream every tick, so it re-derives correctly during rollback —
+        // snapshotting it would only store post-consumption zeros.
+        app.component::<CharacterControllerState>()
+            .local_rollback();
 
         app.add_systems(
             Update,

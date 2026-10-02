@@ -11,6 +11,7 @@ use crate::client_events::{
 use crate::combat::{Dead, Gcd, HitPoints};
 use crate::cube_spawner::Cube;
 use crate::level::{InGameRoot, Levels};
+use crate::npc_spawner::ModelOffset;
 use crate::npc_spawner::Npc;
 use crate::player::{PlayerCharacter, Selectable};
 use crate::server_events::{Attack, EntityDied, Kill};
@@ -58,7 +59,8 @@ impl Plugin for SharedReplicationPlugin {
         // client-side" intent.
         app.component::<RigidBody>().replicate();
         app.component::<LockedAxes>().replicate();
-        app.component::<Transform>().replicate();
+        app.component::<ModelOffset>().replicate();
+        // app.component::<Transform>().replicate();
         app.component::<CollisionLayers>().replicate();
         app.component::<Selectable>().replicate();
         app.component::<Npc>().replicate();

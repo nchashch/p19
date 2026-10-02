@@ -20,7 +20,7 @@
   [*Discovered by*], [opencode agent (GLM-5.3-Flash), AGENTS.md gap review; behavior consistent with the ahoy migration's design notes],
   [*Component*], [`bevy_ahoy` KCC × `lightyear` prediction/rollback (`CharacterControllerState`, `AccumulatedInput`)],
   [*Severity*], [S3 — visible input glitching for the affected player after corrections; no crash],
-  [*Status*], [*Open* — needs ahoy-side exposure of its internal-state components for rollback registration; cannot be fixed purely from this repo],
+  [*Status*], [*Fixed* in the uncommitted working tree (`client/src/gameplay/player_character.rs`; will be pinned to the commit that lands it) — verified live: the predicted player carries `PredictionHistory<CharacterControllerState>` alongside the four physics histories, movement unaffected],
   [*Related*], [AGENTS.md movement "Remaining gaps" bullet; playtest 0014 (interpolation work notes the gap adjacent to its fix)],
 )
 
@@ -70,10 +70,23 @@ accumulator.
 
 = Fix
 
-Not implementable from this repo alone. Required: ahoy exposing (a) a serializable snapshot
-of its decision-relevant internal state, and (b) either registration hooks or documentation
-of the intended lightyear integration. Then this repo registers the snapshot component for
-rollback alongside the existing physics registrations.
+The original "needs ahoy-side exposure" assessment was wrong: ahoy 0.2 already derives
+`Component + Clone` (with `Mutable` mutability) on `CharacterControllerState` — exactly the
+requirement of lightyear's built-in *local rollback* API,
+`app.component::<C>().local_rollback()` (`PredictionBuilderExt`), which is explicitly for
+"a component that is not handled by Replicon's prediction marker writes". Registered in
+`PlayerCharacterPlugin::build` (must run after `ClientPlugins` so `PredictionRegistry` exists
+— `local_rollback` silently skips its metadata registration otherwise):
+
+```rust
+app.component::<CharacterControllerState>().local_rollback();
+```
+
+`AccumulatedInput` is deliberately *not* registered: it is cleared and re-filled from the
+replayed input stream every tick, so it re-derives correctly during rollback — snapshotting
+would only store post-consumption zeros. Verified live: the predicted player carries
+`PredictionHistory<bevy_ahoy::CharacterControllerState>` (plus the four physics histories),
+and movement remains correct through the second client's join-burst corrections.
 
 = Follow-ups
 
