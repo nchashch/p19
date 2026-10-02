@@ -63,7 +63,20 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: registry.gitlab.steamos.cloud/steamrt/steamrt4/sdk:latest
+      # Mount the runner VM's root into the container: container jobs share the VM's disk, and
+      # the ~25 GB of preinstalled SDKs (Android, .NET, GHC, …) live on host paths a container
+      # step can only reach through this mount. Without reclaiming them, the release build
+      # dies with "No space left on device".
+      options: --volume /:/host
     steps:
+      - name: Reclaim runner disk (host paths via /host)
+        run: |
+          rm -rf /host/usr/local/lib/android \
+                 /host/usr/share/dotnet \
+                 /host/usr/local/.ghcup \
+                 /host/opt/ghc \
+                 /host/usr/local/share/boost
+          df -h /
       - uses: actions/checkout@v4
 
       # The SDK container runs as root; without this, every git command in later steps
@@ -87,7 +100,15 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build client (release)
-        run: cargo build -p client --release
+        # `--config` (command-line config outranks Cargo.toml profiles) disables the
+        # workspace-wide `[profile.release] debug = true`: full debuginfo across the Bevy/
+        # Avian dependency graph is the single biggest `target/` consumer and is what filled
+        # the runner's disk. CI is a shippable-binary build, not a Tracy session — the shipped
+        # artifact doesn't need symbols. `strip` additionally drops the symbol table.
+        run: >
+          cargo build -p client --release
+          --config 'profile.release.debug=false'
+          --config 'profile.release.strip="symbols"'
 
       - name: Verify GLIBC baseline
         run: |
