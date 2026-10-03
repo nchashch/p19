@@ -60,7 +60,7 @@ impl Plugin for SharedReplicationPlugin {
         app.component::<RigidBody>().replicate();
         app.component::<LockedAxes>().replicate();
         app.component::<ModelOffset>().replicate();
-        // app.component::<Transform>().replicate();
+        app.component::<Transform>().replicate();
         app.component::<CollisionLayers>().replicate();
         app.component::<Selectable>().replicate();
         app.component::<Npc>().replicate();
