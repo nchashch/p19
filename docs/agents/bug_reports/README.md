@@ -19,6 +19,8 @@ the same class of bug quick to recognize next time.
 | [bug_0004](bug_0004.md) | KCC-internal state is not rollback-registered (ghost jumps after corrections) | Fixed in `c2c4b76` |
 | [bug_0005](bug_0005.md) | Connect token embedded the client's own IP as the server address | Fixed in `89e44cc` |
 | [bug_0006](bug_0006.md) | Netcode server rejects all connect tokens (wildcard bind vs whitelist) | Fixed in `89e44cc` |
+| [bug_0007](bug_0007.md) | Dev console / pause modal doesn't lock movement: WASD/Space reach the server while typing | Fixed (uncommitted at filing) |
+| [bug_0008](bug_0008.md) | `--no-common-assets` client panics when the pause modal opens (missing icon atlas) | Open |
 
 Each report's own `Status` row is authoritative. Update this table when you file or close a bug.
 

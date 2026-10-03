@@ -19,7 +19,9 @@ use crate::ui::hud::HudVisible;
 use crate::ui::localization::localized;
 use crate::ui::nameplate::NameplatesVisible;
 use bevy::time::Stopwatch;
-use bevy_ahoy::input::{AccumulatedInput, Jump as AhoyJump, Movement as AhoyMovement, RotateCamera as AhoyRotate};
+use bevy_ahoy::input::{
+    AccumulatedInput, Jump as AhoyJump, Movement as AhoyMovement, RotateCamera as AhoyRotate,
+};
 use bevy_ahoy::prelude::CharacterController as AhoyCharacterController;
 use bevy_ahoy::{CharacterControllerState, CharacterLook};
 use bevy_enhanced_input::prelude::{Action, Actions, Bindings, TriggerState};
@@ -55,7 +57,7 @@ impl Plugin for PConsolePlugin {
                     font_path: if crate::config::is_no_common_assets_presync() {
                         None
                     } else {
-                        Some("fonts/mono/IBMPlexMono-Regular.ttf".to_string())
+                        Some("fonts/IosevkaSlabMono/IosevkaSlabMono-Regular.ttf".to_string())
                     },
                     ..default()
                 },

@@ -268,7 +268,13 @@ active).
 ```
 
 The mock **bypasses binding modifiers** (dead zones, `Scale`): values go through
-as-is, which is why rotate is radians-direct rather than mouse-pixels. Read back
+as-is, which is why rotate is radians-direct rather than mouse-pixels. Exception
+(playtest 0021 F4): while the dev console or pause modal is open,
+`gate_replicated_input_context` deactivates the whole `PlayerInputContext` via
+BEI's `ContextActivity` — which blocks inputs *and* mocks — so action-level
+mocks freeze too; close the surface first. Device-level mocks
+(`game/gamepad`/`game/keyboard`) keep flowing, but see §5b's `just_pressed`
+limitation. Read back
 effects via `game/state` — position/velocity/yaw/pitch/grounded are
 server-authoritative and reliable.
 
@@ -364,6 +370,14 @@ this is the only method here that can click an actual UI button by position
 directly via `KeyCode`'s own `serde` impl, so every one of Bevy's 160+ variants
 works, not a hand-picked subset. Level-triggered like `game/gamepad`, not
 duration-based — budget a release call, or use `{"reset":true}`.
+
+**Edge-triggered consumers are unreachable (confirmed playtest 0021 F2):** the
+mock writes land in `RemoteLast` (end of frame), and the next frame's
+`keyboard_input_system` clears `just_pressed`/`just_released` before any `Update`
+system runs — so `just_pressed`-reading consumers (e.g. chill_bevy_console's
+backtick toggle in `handle_toggle_key`) can never fire from this mock. Only
+level-triggered reads (`pressed`) work; console-open state is not drivable
+headlessly.
 
 `game/mouse` is discriminated by `input`:
 

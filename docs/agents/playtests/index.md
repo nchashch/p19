@@ -4,6 +4,17 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0021` — Console/Modal Input Lock: Replicated Context Deactivation (bug_0007)
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-03 16:00 – 16:20 UTC |
+| **Commit** | `ac6dc0a` "Restructure the workspace" + uncommitted working tree, per file: `client/src/controls/controls.rs` (the fix — `gate_replicated_input_context`), AGENTS.md, bug_0007/bug_0008; plus staged font-swap and nameplate files not under test |
+| **Agent** | opencode session, GLM-5.3-Flash |
+| **Report** | [`playtest_0021.md`](playtest_0021.md) |
+
+Fixes the owner-reported leak where typing WASD/Space in the open dev console (or with the pause modal open) moved the character: the `console_closed` convention gates only observers, while movement flows continuously through BEI's binding readers on the replicated ahoy actions. The fix deactivates the local player's `PlayerInputContext` via BEI's `ContextActivity::INACTIVE` while a UI surface owns the keyboard (bindings survive; Escape/Tab live in a separate context and keep working). Verified live through device-level input on a `--mcp` client: W moves with no surface, freezes while the modal is open, moves again after close — with the stated limit that the console-open state itself is not headlessly drivable (`game/keyboard` can't reach `just_pressed` consumers — new documented harness gap). The run also found bug_0008: a `--no-common-assets` client panics when the pause modal opens (missing icon atlas in `input_icons.rs`).
+
 ### `playtest_0020` — KCC Rollback Registration: bug_0004 Fixed via lightyear's Built-in Local Rollback API
 
 | Field | Value |

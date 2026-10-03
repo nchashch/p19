@@ -510,8 +510,12 @@ Full playbook: `docs/agents/skills/playtest.md`. Design: ADRs 0009–0012.
   `interpolated_remotes`), because the initial replication sync doesn't reliably fire per-component
   `Add` observers. Don't convert either way without testing fresh connect, reconnect and late join.
 - **Console gating**: player-input observers are registered with `add_observers_run_if!(...,
-  console_closed)`; lifecycle/spawn observers stay ungated (a gated one-shot trigger is lost
-  forever).
+  console_closed)`; the *continuous* replicated input path is frozen separately by
+  `controls.rs`'s `gate_replicated_input_context`, which deactivates the local player's
+  `PlayerInputContext` via BEI's `ContextActivity` while the dev console or pause modal is
+  open (without it, BEI's binding readers keep streaming WASD/Space to the server while the
+  player types — bug_0007). Lifecycle/spawn observers stay ungated (a gated one-shot trigger
+  is lost forever).
 - **Inputs** are `#[derive(InputAction)]` markers in `controls/actions.rs`, handled by observers
   (`On<Fire<T>>`, `On<Start<T>>`, `On<Complete<T>>`).
 - **`EntityEvent`** supports one target; for two-entity events (`Attack`), the scoped side is

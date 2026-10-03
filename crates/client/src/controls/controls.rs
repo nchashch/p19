@@ -14,7 +14,7 @@ use bevy::window::{CursorGrabMode, CursorOptions};
 use bevy_ahoy::input::{Jump as AhoyJump, Movement as AhoyMovement, RotateCamera as AhoyRotate};
 use bevy_ahoy::CharacterLook;
 use bevy_enhanced_input::prelude::{Press, *};
-use chill_bevy_console::console_closed;
+use chill_bevy_console::{ConsoleState, console_closed};
 use p19_shared::client_events::{AttackAttempt, KillAttempt};
 use p19_shared::game_state::{GameState, ModalMenuState};
 use p19_shared::inputs::{MouseLook, PlayerInputContext, StickLook};
@@ -79,6 +79,10 @@ impl Plugin for PlayerControlsPlugin {
         // `Update`, not observers — same replication-arrival reasoning as
         // `on_player_spawned`.
         app.add_systems(Update, bind_replicated_ahoy_actions);
+
+        // Freeze the replicated gameplay input while a UI surface owns the keyboard (dev
+        // console or pause modal) — see `gate_replicated_input_context`.
+        app.add_systems(Update, gate_replicated_input_context);
     }
 }
 
@@ -482,6 +486,43 @@ fn bind_replicated_ahoy_actions(
                 Negate::y(), // invert vertical (pitch) axis for the stick — matches the legacy binding
                 Bindings::spawn(Axial::right_stick()),
             ));
+        }
+    }
+}
+
+/// Freezes the **replicated** gameplay input (`PlayerInputContext` — the ahoy
+/// `Movement`/`Jump`/`RotateCamera` actions streamed to the server) while a UI surface owns
+/// the keyboard: the dev console open or the pause modal open. Without this, BEI's binding
+/// readers keep consuming the real WASD/Space/mouse state and the server's KCC keeps moving
+/// the character while the player is typing in the console.
+///
+/// Uses BEI's own `ContextActivity` mechanism: deactivating the context transitions all of
+/// its action states to zero/release (the streamed state releases any held keys server-side)
+/// while the bindings survive untouched for reactivation on close. Escape/Tab live in the
+/// separate local `PlayerControls` context, so modal/data-frame toggles keep working while
+/// this one is frozen — and the console's own toggle reads raw `KeyboardInput`, unaffected.
+///
+/// Polling `Update`, same reasoning as `bind_replicated_ahoy_actions`: the open state is a
+/// plain resource field with no component transition to observe, and a player spawned while
+/// a surface is open defaults to `ACTIVE` and is gated on the next frame. `ContextActivity`
+/// is an immutable component, so a change is remove+insert — done only when the desired
+/// state differs from the current one, i.e. exactly twice per open/close cycle.
+fn gate_replicated_input_context(
+    console: Option<Res<ConsoleState>>,
+    modal: Option<Res<State<ModalMenuState>>>,
+    contexts: Query<(Entity, &ContextActivity<PlayerInputContext>)>,
+    mut commands: Commands,
+) {
+    // The same condition the attack/kill observers are gated on in `build` — one gate
+    // semantics for both kinds of gameplay input.
+    let input_allowed = console.is_none_or(|c| !c.open)
+        && modal.as_ref().is_none_or(|m| *m.get() == ModalMenuState::Closed);
+    for (entity, activity) in &contexts {
+        if **activity != input_allowed {
+            commands
+                .entity(entity)
+                .remove::<ContextActivity<PlayerInputContext>>()
+                .insert(ContextActivity::<PlayerInputContext>::new(input_allowed));
         }
     }
 }
