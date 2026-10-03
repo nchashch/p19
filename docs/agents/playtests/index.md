@@ -4,6 +4,94 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0020` — KCC Rollback Registration: bug_0004 Fixed via lightyear's Built-in Local Rollback API
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-02 04:55 – 05:20 local |
+| **Commit** | `1f6a99f` "Add ./docs/bug_reports and ./docs/skill/bugreport.md" + uncommitted working tree, per file: `client/src/gameplay/player_character.rs` (the fix — `local_rollback` registration for `CharacterControllerState`), the ring → aws-lc-rs TLS provider switch caught during verification, bug_0004 status/root-cause correction, AGENTS.md movement-gap correction |
+| **Agent** | opencode session, GLM-5.3-Flash |
+| **Report** | [`playtest_0020.md`](playtest_0020.md) |
+
+Fixes bug_0004 by re-examining its premise: ahoy 0.2's `CharacterControllerState` already derives `Component + Clone`, exactly what lightyear 0.30's built-in `local_rollback()` requires, so the "needs ahoy-side exposure" assessment was wrong and the fix is one registration in `PlayerCharacterPlugin` (ordered after `PredictionPlugin`), with `AccumulatedInput` deliberately unregistered (it re-derives from the replayed input stream every tick). Verified on two `--no-render` clients: the predicted player carries `PredictionHistory<CharacterControllerState>` alongside the four physics histories, and movement stays sane through client B's join-burst correction window with zero panics — while stating honestly that the ghost-jump symptom itself is not deterministically observable through the harness (a scripted repro is the proposed follow-up if symptoms are ever reported). A crypto-provider mismatch caught at compile time during verification switched both binaries to `rustls::crypto::aws_lc_rs`, and the token flow was re-verified over it.
+
+### `playtest_0019` — Token Endpoint over Self-Signed HTTPS: LAN Encryption Closed
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-02 04:05 – 04:45 local |
+| **Commit** | `8c851b8` "Improve MCP quality of life - add select nearest player API" + uncommitted working tree, per file: `rustls`/`rustls-pemfile`/`rcgen`/`sha2` promoted to direct deps, `server/src/networking.rs` (TLS identity load-or-create, HTTPS :6001, `server_addr_check: true`), `client/src/lifecycle/networking.rs` (TOFU fingerprint pinning), `game/state` player `name`, docs |
+| **Agent** | opencode session, GLM-5.3-Flash |
+| **Report** | [`playtest_0019.md`](playtest_0019.md) |
+
+The connect-token endpoint now speaks HTTPS with a self-signed `rcgen` certificate (blocking `rustls`, an explicit TLS `close_notify` after the response — rustls surfaces its absence as a read error), the client pins the cert's SHA-256 fingerprint trust-on-first-use and refuses a mismatch with an explicit MITM/rotation message, and `server_addr_check` is restored to `true` because every token now embeds the requester's real IP as its server-address whitelist (supersedes the `false` posture). Verified end-to-end on a `--no-render` client: first-run cert generation + fingerprint logging, token fetch over TLS, connect → Lobby → level → play → InGame with a generated name (`Valiant Sparrow`), a tampered-fingerprint reconnect refused cleanly with zero panics, then a full-loop regression. The LAN half of the netcode posture is closed; a CA-signed backend and first-connection MITM safety are the explicitly deferred remainder.
+
+### `playtest_0018` — 'Joiner Hover' Re-Verified: Spawn-Point Stacking, Not a KCC Bug
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-02 03:15 – 03:35 local |
+| **Commit** | `8c851b8` "Improve MCP quality of life - add select nearest player API" + one uncommitted file: `AGENTS.md` (doc correction only — **no code changes this session**) |
+| **Agent** | opencode session, GLM-5.3-Flash |
+| **Report** | [`playtest_0018.md`](playtest_0018.md) |
+
+Re-verification the project owner requested of playtest 0014's F3 ("joiner hover = the joiner's KCC gets no ticks until input flows"), both directions on two `--no-render` clients: joining over an idle first player lands the joiner at exactly (0, 2.73, 0) with `grounded: true` — the precise capsule-stacking height, standing on the first player's head — and once the first player walks away (the joiner still sending nothing) the joiner falls to 0.95 normally, with no input of its own. Playtest 0014's F3 mechanism is retracted; "joiner hover" is reclassified from technical bug to shared-spawn-point design issue (AGENTS.md corrected; both reports kept as the historical record). Bonus finding: a stacked joiner is a convenient stationary, in-range combat target for the harness recipe.
+
+### `playtest_0017` — Headless Combat Harness: Full Kill-to-Despawn Loop Verified Without a Window
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-02 02:55 – 03:40 local |
+| **Commit** | `9377b41` "Fix dead player bug" + uncommitted working tree, per file: `client/src/events.rs` (new `AttackSelected`/`KillSelected` triggers), `controls.rs` (hotkey observers re-routed; shared send observers), `dev/tool_api.rs` (`game/select`, `attack`/`kill` triggers, `selected` in `game/state`), `gameplay/combat.rs` (idempotent `hide_dead`), `server/src/combat.rs` (combat caster resolution), `server/src/replay.rs`, docs |
+| **Agent** | opencode session, GLM-5.3-Flash |
+| **Report** | [`playtest_0017.md`](playtest_0017.md) |
+
+Combat was unreachable headlessly because crosshair targeting needs a real window: `game/select` (entity id / nearest / name) now injects `Selected` on `--no-render` clients and `game/trigger attack|kill` fires the same send observers the hotkeys use (hotkey observers re-routed through shared `AttackSelected`/`KillSelected` triggers, so both paths share one send implementation). The full kill-to-despawn loop verified on two `--no-render` clients: two GCD-spaced attacks drove HP 100 → 51 → 2 through the new caster-resolution path, the kill variant dropped it to 0, the corpse despawned, the victim returned to Lobby — zero panics across all three processes. Also found and fixed mid-verification: per-frame `hide_dead` command spam racing the replicated corpse despawn on a remote observer (now idempotent).
+
+### `playtest_0016` — Death-Path Panic Root-Caused and Fixed: a Missing SyncWorldPlugin, Not a Replication Bug
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-02 02:30 – 03:10 local |
+| **Commit** | `012b7c8` "Only build steamrt4 client" + uncommitted working tree, per file: `SyncWorldPlugin` added to the `--no-render` branch of `client/src/main.rs` |
+| **Agent** | opencode session, GLM-5.3-Flash |
+| **Report** | [`playtest_0016.md`](playtest_0016.md) |
+
+Fixes bug_0002 — the death-path panic of playtest 0015's F3 — by root-causing the visible `ServerMutateTicks` failure as a decoy: `--no-render` (no `RenderPlugin` → no `ExtractPlugin` → no `SyncWorldPlugin`) never gets `PendingSyncEntity`, so the corpse despawn's sync on-remove hook panicked mid-`receive_replication`, and the unwind stranded the resources that function removes-then-reinserts by design. One-line fix (`add_plugins(SyncWorldPlugin)` in the `--no-render` branch); end-to-end death loop verified with zero panics, and playtest 0015's dead-look gate is now runtime-verified. Two measurement traps recorded: a missing-resource error may implicate an earlier system that panicked inside a remove-and-reinsert scope, and `world.list_resources` is reflected-only so it can never assert a resource's absence.
+
+### `playtest_0015` — Room-Tagged Spawns and the Dead-Player Window: Two Fixes and a Newly-Exposed Death-Path Panic
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-02 02:00 – 02:50 local |
+| **Commit** | `012b7c8` "Only build steamrt4 client" + uncommitted working tree, per file: `Rooms` tags in `server/src/spawn.rs`, dead-look gate in `server/src/input.rs`, corpse-sim stop in `client/src/gameplay/combat.rs`, doc updates |
+| **Agent** | opencode session, GLM-5.3-Flash |
+| **Report** | [`playtest_0015.md`](playtest_0015.md) |
+
+Fixes bug_0003: cubes/NPCs are standalone entities the `ChildOf` room cascade never reaches, so both spawn resolvers now insert `Rooms::single(game_room)` — verified as 1 cube + 1 NPC visible to the in-game client and zero to a lobby-held client. The dead-player window closes: movement (pre-existing `RigidBody` removal), server-side look (`Without<Dead>` gate — compile-verified here, runtime-verified in playtest 0016), and the owner's local corpse sim (`hide_dead` removes `AhoyCharacterController`); dead-attacker gating is correctly deferred to the combat caster-resolution fix. Verification exposed a new pre-existing blocker — killing a player panicked the victim's `--no-render` client (bug_0002: missing `ServerMutateTicks`, the ~1 s corpse despawn racing lightyear corrections) — fixed in playtest 0016. Also documents `world.mutate_components`' reflect sub-path schema and `Dead` being invisible to BRP (unreflected).
+
+### `playtest_0014` — Remote-Entity Interpolation: Fix, Verification, and a New Joiner-Freeze Finding
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-02 01:00 – 02:10 local |
+| **Commit** | `012b7c8` "Only build steamrt4 client" + uncommitted working tree, per file: `client/src/gameplay/interpolated_remotes.rs` (the fix), `main.rs` plugin-tuple rebalance |
+| **Agent** | opencode session, GLM-5.3-Flash |
+| **Report** | [`playtest_0014.md`](playtest_0014.md) |
+
+Remote players/cubes/NPCs snapped to each replicated update; the fix is one marker — a polling system inserts lightyear's `Interpolated` on every replicated body that is neither `Predicted` nor `RigidBody::Static` — because lightyear 0.30 (interpolation a default feature; `LightyearAvianPlugin`'s `AvianReplicationMode::Position`) already registers the history buffers and Hermite rules, and 0.30 interpolates in place. Marker assignment verified per-entity with `world.list_components`. Two side findings: BRP `option` queries can match components under stale TypePath aliases (`Predicted` matched under an old path that per-entity listing showed as absent — the silently-wrong sibling of playtest 0013's silently-empty trap), and a second-joining client's player hovered at spawn height until its first input, attributed by ablation to pre-existing behavior and later reclassified as spawn-point stacking (playtest 0018's F1).
+
+### `playtest_0013` — Spawn Caster-Resolution Fix: NPC/Cube Spawning Verified End-to-End
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-01 22:30 – 23:20 local |
+| **Commit** | `9d36146` "Add CI" + uncommitted working tree, per file: caster resolution in `server/src/spawn.rs` (reusing `networking::owned_players`, made `pub(crate)`), `Reflect` on `Npc` |
+| **Agent** | opencode session, GLM-5.3-Flash |
+| **Report** | [`playtest_0013.md`](playtest_0013.md) |
+
+Fixes the spawn half of bug_0001: `apply_spawn_npc`/`apply_spawn_cube` looked the caster's `Gcd` up on the connection entity, which has carried none since the player became a separate `ControlledBy`-owned entity; both resolvers now walk the connection's owned entities via `networking::owned_players` (the RNG seed deliberately stays connection-derived, preserving replay recordings). NPCs and cubes verified spawning as full, correct bundles at the camera-forward point on fresh pairs. The detour found a second, QA-surface bug that had masked the fix: `Npc` lacked `Reflect`, so BRP `world.query` silently matched nothing even while per-entity `world.list_components` proved the spawns were succeeding (reflection heuristic recorded; avian 0.7's `Collider` TypePath trap noted). Cubes launch at ~100 u/s (observed, not chased); the same-class combat bug in `server::combat` stayed open — fixed in playtest 0017's span.
+
 ### `playtest_0012` — Desync Reproduction Attempt: Instrumented, Multi-Mode, Intermittent
 
 | Field | Value |
