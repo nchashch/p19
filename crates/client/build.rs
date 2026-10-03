@@ -7,10 +7,12 @@
 //! the `CommonAssets` optional-asset degradation pattern: no panic, no missing-file
 //! build break, the rest of the app unaffected).
 
+const FONT_PATH: &str = "../../assets/client/fonts/IosevkaSlabMono/IosevkaSlabMono-Regular.ttf";
+
 fn main() {
     // `CARGO_MANIFEST_DIR` is `<workspace>/crates/client`; assets live in `<workspace>/assets/client`.
     let font = format!(
-        "{}/../../assets/client/fonts/mono/IBMPlexMono-Regular.ttf",
+        "{}/{FONT_PATH}",
         std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR")
     );
     println!("cargo:rustc-check-cfg=cfg(has_tui_font)");

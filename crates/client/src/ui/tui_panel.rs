@@ -30,10 +30,10 @@
 use bevy::prelude::*;
 use bevy_tui_texture::prelude::*;
 use bevy_tui_texture::{Font as TerminalFont, Fonts as TerminalFonts};
+use p19_shared::game_state::GameState;
 use ratatui::layout::Alignment;
 use ratatui::style::{Color as RatatuiColor, Modifier, Style};
 use ratatui::widgets::{Block, Gauge, Paragraph};
-use p19_shared::game_state::GameState;
 use std::sync::Arc;
 
 pub struct TuiPanelPlugin;
@@ -71,23 +71,23 @@ const FONT_SIZE_PX: u32 = 16;
 /// panel degrades to not spawning (below) — ratatui rasterizes glyphs from real TTF bytes
 /// itself, so there is no "Bevy default font" fallback path into `TuiFontSource`.
 #[cfg(has_tui_font)]
-static IBM_PLEX_MONO_REGULAR: &[u8] =
-    include_bytes!("../../../../assets/client/fonts/mono/IBMPlexMono-Regular.ttf");
+static FONT_MONO_REGULAR: &[u8] =
+    include_bytes!("../../../../assets/client/fonts/IosevkaSlabMono/IosevkaSlabMono-Regular.ttf");
 #[cfg(not(has_tui_font))]
-static IBM_PLEX_MONO_REGULAR: &[u8] = &[];
+static FONT_MONO_REGULAR: &[u8] = &[];
 
 fn spawn_main_menu_tui_panel(mut commands: Commands) {
     // No embedded font (asset-less CI checkout) → skip the panel entirely. Nothing else in
     // the app reads it; the empty `&[]` above exists only so this file compiles.
-    if IBM_PLEX_MONO_REGULAR.is_empty() {
+    if FONT_MONO_REGULAR.is_empty() {
         warn_once!(
-            "TUI panel skipped: assets/client/fonts/mono/IBMPlexMono-Regular.ttf not found \
+            "TUI panel skipped: font not found \
              (asset-less checkout); the menu renders without it"
         );
         return;
     }
-    let font = TerminalFont::new(IBM_PLEX_MONO_REGULAR)
-        .expect("embedded fonts/mono/IBMPlexMono-Regular.ttf must parse as a valid TTF");
+    let font =
+        TerminalFont::new(FONT_MONO_REGULAR).expect("embedded font must parse as a valid TTF");
     let fonts = Arc::new(TerminalFonts::new(font, FONT_SIZE_PX));
 
     commands.spawn((
@@ -111,7 +111,10 @@ fn spawn_main_menu_tui_panel(mut commands: Commands) {
 /// image: an elapsed-time readout and a gauge oscillating off it. `Query<&mut Tui, ...>` tolerates
 /// the request not having materialized yet (`TuiRequest` → `Tui` takes one frame) — same "just try
 /// again next frame" idiom the crate's own examples use.
-fn render_main_menu_tui_panel(mut panels: Query<&mut Tui, With<MainMenuTuiPanel>>, time: Res<Time>) {
+fn render_main_menu_tui_panel(
+    mut panels: Query<&mut Tui, With<MainMenuTuiPanel>>,
+    time: Res<Time>,
+) {
     let Ok(mut term) = panels.single_mut() else {
         return;
     };
@@ -125,20 +128,23 @@ fn render_main_menu_tui_panel(mut panels: Query<&mut Tui, With<MainMenuTuiPanel>
         let inner = outer.inner(frame.area());
         frame.render_widget(outer, frame.area());
 
-        let rows =
-            ratatui::layout::Layout::vertical([
-                ratatui::layout::Constraint::Length(3),
-                ratatui::layout::Constraint::Length(1),
-                ratatui::layout::Constraint::Min(1),
-            ])
-            .split(inner);
+        let rows = ratatui::layout::Layout::vertical([
+            ratatui::layout::Constraint::Length(3),
+            ratatui::layout::Constraint::Length(1),
+            ratatui::layout::Constraint::Min(1),
+        ])
+        .split(inner);
 
         frame.render_widget(
             Paragraph::new(format!(
                 "rendering on a Bevy UI Node\nas a GPU texture, live\nt = {elapsed:>6.1}s",
             ))
             .alignment(Alignment::Center)
-            .style(Style::default().fg(RatatuiColor::White).add_modifier(Modifier::BOLD)),
+            .style(
+                Style::default()
+                    .fg(RatatuiColor::White)
+                    .add_modifier(Modifier::BOLD),
+            ),
             rows[0],
         );
 

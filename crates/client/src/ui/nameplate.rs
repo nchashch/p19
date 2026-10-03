@@ -2,14 +2,20 @@ use bevy::color::palettes::css::{DARK_SLATE_GRAY, GREEN};
 use bevy::prelude::*;
 use p19_shared::combat::HitPoints;
 use p19_shared::game_state::GameState;
+use std::collections::HashSet;
 
 pub struct NameplatePlugin;
 
 impl Plugin for NameplatePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(NameplatesVisible(false));
-        app.add_systems(Update, track_nameplates);
-        app.add_observer(spawn_nameplates);
+        app.add_systems(
+            Update,
+            (
+                spawn_nameplates.run_if(in_state(GameState::InGame)),
+                track_nameplates,
+            ),
+        );
     }
 }
 
@@ -33,13 +39,26 @@ struct HealthFill;
 const FADE_START_DISTANCE: f32 = 15.0;
 const FADE_END_DISTANCE: f32 = 30.0;
 
-fn spawn_nameplates(add: On<Add, HitPoints>, mut commands: Commands, names: Query<&Name>) {
-    let target = add.entity;
-    // HitPoints and Name are always spawned together in the same bundle across the codebase,
-    // but fall back gracefully rather than panicking if that's ever not the case.
-    let Ok(name) = names.get(target) else {
-        return;
-    };
+/// Polling (not an `On<Add, HitPoints>` observer): player characters' `HitPoints` arrive via
+/// lightyear's initial replication sync, which doesn't reliably fire per-component `Add`
+/// observers (see the repo conventions). Gated to `GameState::InGame` so plates never spawn for
+/// lobby entities; the per-plate `DespawnOnExit(GameState::InGame)` cleans up on leaving.
+fn spawn_nameplates(
+    mut commands: Commands,
+    names: Query<&Name>,
+    targets: Query<Entity, Added<HitPoints>>,
+    nameplates: Query<&Nameplate>,
+) {
+    let existing: HashSet<Entity> = nameplates.iter().map(|plate| plate.target).collect();
+    for target in &targets {
+        // HitPoints and Name are always spawned together in the same bundle across the codebase,
+        // but fall back gracefully rather than panicking if that's ever not the case.
+        let Ok(name) = names.get(target) else {
+            continue;
+        };
+        if existing.contains(&target) {
+            continue;
+        }
     commands
         .spawn((
             Nameplate {
@@ -54,6 +73,10 @@ fn spawn_nameplates(add: On<Add, HitPoints>, mut commands: Commands, names: Quer
                 ..default()
             },
             Pickable::IGNORE,
+            // Spawn hidden — `track_nameplates` only reaches `Hidden` (via `NameplatesVisible`,
+            // fade distance, or screen projection) one frame later, and an `Inherited` plate
+            // would flash at the layout origin in that frame.
+            Visibility::Hidden,
             DespawnOnExit(GameState::InGame),
         ))
         .with_children(|parent| {
@@ -81,6 +104,7 @@ fn spawn_nameplates(add: On<Add, HitPoints>, mut commands: Commands, names: Quer
                     ));
                 });
         });
+    }
 }
 
 fn track_nameplates(
