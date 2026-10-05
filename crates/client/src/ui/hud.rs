@@ -34,7 +34,6 @@ impl Plugin for HudPlugin {
             (setup_gcd_overlay_material, setup_crosshair_gcd_material),
         );
         app.add_observer(on_crosshair_built)
-            .add_observer(on_crosshair_restyled)
             .add_observer(on_hotbar_built);
         app.add_systems(
             Update,
@@ -176,9 +175,6 @@ fn template_context(values: &Value) -> TemplateContext {
 #[derive(Component)]
 struct Crosshair;
 
-/// Radius that makes the 8px `.crosshair-dot` round (CSS has no `border-radius`).
-const CROSSHAIR_DOT_RADIUS: f32 = 4.0;
-
 /// The plain dot shown while the GCD is ready — hidden in favor of [`CrosshairGcdRing`] while it
 /// runs. See `update_crosshair_gcd`.
 #[derive(Component)]
@@ -189,21 +185,18 @@ struct CrosshairDot;
 #[derive(Component)]
 struct CrosshairGcdRing;
 
+/// Attaches the ring's material on every (re)build. Unpickability and the dot's roundness are
+/// CSS (`.crosshair`, `.crosshair-dot`).
 fn on_crosshair_built(
     built: On<HtmlUiBuilt>,
     crosshairs: Query<(), With<Crosshair>>,
     elements: HtmlElements,
-    children: Query<&Children>,
     handle: Res<CrosshairGcdMaterialHandle>,
-    mut nodes: Query<&mut Node>,
     mut commands: Commands,
 ) {
     let root = built.entity;
     if !crosshairs.contains(root) {
         return;
-    }
-    for entity in children.iter_descendants(root) {
-        commands.entity(entity).insert(Pickable::IGNORE);
     }
     if let Some(ring) = elements.by_id(root, "crosshair-ring") {
         commands.entity(ring).insert((
@@ -214,28 +207,6 @@ fn on_crosshair_built(
     }
     if let Some(dot) = elements.by_id(root, "crosshair-dot") {
         commands.entity(dot).insert(CrosshairDot);
-        round_crosshair_dot(dot, &mut nodes);
-    }
-}
-
-/// A restyle replaces the dot's `Node` (dropping its radius); every attached component stays.
-fn on_crosshair_restyled(
-    restyled: On<HtmlUiRestyled>,
-    crosshairs: Query<(), With<Crosshair>>,
-    elements: HtmlElements,
-    mut nodes: Query<&mut Node>,
-) {
-    if !crosshairs.contains(restyled.entity) {
-        return;
-    }
-    if let Some(dot) = elements.by_id(restyled.entity, "crosshair-dot") {
-        round_crosshair_dot(dot, &mut nodes);
-    }
-}
-
-fn round_crosshair_dot(dot: Entity, nodes: &mut Query<&mut Node>) {
-    if let Ok(mut node) = nodes.get_mut(dot) {
-        node.border_radius = BorderRadius::all(px(CROSSHAIR_DOT_RADIUS));
     }
 }
 
@@ -257,9 +228,7 @@ fn on_hotbar_built(
         return;
     }
     for overlay in elements.by_class(built.entity, "hotbar-gcd") {
-        commands
-            .entity(overlay)
-            .insert((MaterialNode(handle.0.clone()), Pickable::IGNORE));
+        commands.entity(overlay).insert(MaterialNode(handle.0.clone()));
     }
 }
 

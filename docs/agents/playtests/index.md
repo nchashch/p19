@@ -4,6 +4,28 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0024` — bevy_markup CSS Positioning/Borders/Pointer-Events: Client Workarounds Removed
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-05 14:42 – 14:43 UTC |
+| **Commit** | `0da1fcb` "Use bevy_markup for UI" + uncommitted client UI changes (and the uncommitted bevy_markup CSS support on top of `f99c6ec`) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0024.md`](playtest_0024.md) |
+
+Verifies the client after replacing code-side `Pickable::IGNORE` loops, the crosshair dot's code-set radius and fake 2px frames with bevy_markup's new `pointer-events`, `border-radius` and `border-color`: TUI panel, tooltip and crosshair subtrees are unpickable while menus still click, the dot renders round, the TUI frame is a real border, and the pause menu stays stable.
+
+### `playtest_0023` — bevy_markup bug_0018 Fix: Icons Directly on Built Elements
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-05 06:57 – 06:59 UTC |
+| **Commit** | `0da1fcb` "Use bevy_markup for UI" + uncommitted `modal_menu.rs` icon change (and the uncommitted bevy_markup path-dependency fix) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0023.md`](playtest_0023.md) |
+
+Verifies bevy_markup's bug_0018 fix (a `CssFrame` marker so an app `ImageNode` on a built element is no longer a shape change) with prototype_19's nested-`HtmlUi` icon workaround removed: the pause menu's 61 elements stay stable for 0.5 s with 14 icon `ImageNode`s attached directly, and all 11 tip labels show in `game/ui`.
+
 ### `playtest_0022` — bevy_markup UI Migration: Every Surface Driven Through Mouse, Gamepad and Enter
 
 | Field | Value |

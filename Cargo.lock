@@ -1731,7 +1731,6 @@ dependencies = [
 [[package]]
 name = "bevy_markup"
 version = "0.2.0"
-source = "git+https://github.com/nchashch/bevy_markup#5113f7c0349b7577fe4e1ded4a1c26bcf117e666"
 dependencies = [
  "bevy",
  "bevy_fluent",

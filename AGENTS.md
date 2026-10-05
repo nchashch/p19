@@ -194,14 +194,15 @@ cargo run -p p19-client --release     # connects when the main menu's Connect bu
 - The root `Cargo.toml` centralizes versions in `[workspace.dependencies]`; members use
   `dep.workspace = true`. A member cannot override `default-features` on an inherited dependency,
   so `server`/`shared` declare `bevy` directly with `default-features = false` (headless).
-- **No sibling path dependencies.** Crates needing local patches are pinned git branches on the
-  owner's forks; check the fork's source (`~/.cargo/git/checkouts/<crate>-*/`) when behavior
-  differs from upstream docs:
-  - `bevy_markup` (`main`, the owner's own crate — HTML/Tera + CSS + Fluent → Bevy UI): every
-    client UI surface (see "UI (bevy_markup)"). It requires bevy `^0.19.1`; `Cargo.lock` pins
-    0.19.1. Its README asks apps to patch `fluent-syntax` to its fork
-    (`nchashch/fluent-rs`, `fix/fuzzing-bugs-0.11`: a panic on a broken unicode escape and a
-    stack overflow on deeply nested expressions), done in the root `[patch.crates-io]`.
+- **Sibling path dependency (one, temporary):** `bevy_markup` (the owner's own crate — HTML/Tera
+  + CSS + Fluent → Bevy UI; every client UI surface, see "UI (bevy_markup)") is
+  `path = "../../PROTOTYPE_23/bevy_markup/"` while its fixes are developed alongside this repo;
+  a fresh clone without that checkout won't build. It requires bevy `^0.19.1` (`Cargo.lock`
+  pins 0.19.1). Its README asks apps to patch `fluent-syntax` to its fork (`nchashch/fluent-rs`,
+  `fix/fuzzing-bugs-0.11`: a panic on a broken unicode escape and a stack overflow on deeply
+  nested expressions), done in the root `[patch.crates-io]`.
+- Other crates needing local patches are pinned git branches on the owner's forks; check the
+  fork's source (`~/.cargo/git/checkouts/<crate>-*/`) when behavior differs from upstream docs:
   - `bevy_mod_outline` (`fix/skinned-motion-outline`): stencil/flood-init passes inherit the
     view's `motion_vector_prepass` flag (otherwise skinned meshes + TAA crash in wgpu validation).
   - `gltf` (`feat/khr_texture_basisu`, via `[patch.crates-io]`): adds `KHR_texture_basisu`.
@@ -394,15 +395,15 @@ bevy_markup rules that bite (the crate's own `AGENTS.md`, in its checkout under
   restyle in place (`HtmlUiRestyled`). Never parent other entities under an `HtmlUi` root (the
   menu/lobby `WorldAssetRoot` backgrounds are separate entities). Per-frame values (crosshair GCD,
   nameplate position/fade/fill, the TUI gauge) mutate built entities instead of re-rendering.
-- Restyle-in-place compares each built node's shape, **including `ImageNode` presence**; an app
-  `ImageNode` inserted on a built element turns every restyle (any `:hover`, and the
-  `PseudoState` insert after each build) into a rebuild — a rebuild loop. Put app images on a
-  child that is itself an (empty) `HtmlUi` (`modal_menu.rs`'s icons, `icon.html`), which the shape
-  check skips. `MaterialNode`s, `Outline` and other non-`ImageNode` components are safe.
-- The CSS subset has no positioning, `z-index`, `overflow`, `border-color`, `border-radius` or
-  combinators: anything placed on screen is its own root whose `Node` and `GlobalZIndex` the
-  spawning code sets (pause menu 100/101, selector popup 900, tooltips 1000). No `border-image`
-  either (its image would never load under `--no-render`, so the UI would never build).
+- App components on built elements (an atlas `ImageNode` for an icon, a `MaterialNode`)
+  survive restyles; only a rebuild drops them, so attach them on `HtmlUiBuilt`.
+- CSS handles element-level `position`/insets, `z-index` (sibling order only), `border-radius`,
+  `border-color` and `pointer-events: none` (inherited — put it on a surface's outer element to
+  make the whole subtree unpickable: crosshair, nameplates, TUI panel, tooltips). None of them
+  apply to the `html` rule, i.e. the `HtmlUi` root itself: each root's screen placement (`Node`),
+  cross-root stacking (`GlobalZIndex`: pause menu 100/101, selector popup 900, tooltips 1000) and
+  `Pickable` stay with the spawning code. No `overflow` or combinators. No `border-image` (its
+  image would never load under `--no-render`, so the UI would never build).
 - `button` isn't a container: buttons are `<div class="button" id="…" data-on-click="…">` with a
   `<p data-l10n-id="…">English fallback</p>` label. Give every clickable a stable `id`.
 

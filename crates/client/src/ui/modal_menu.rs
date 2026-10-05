@@ -26,7 +26,6 @@ impl Plugin for ModalMenuPlugin {
         embedded_asset!(app, "html/pause_menu.html");
         embedded_asset!(app, "html/controls_tips.html");
         embedded_asset!(app, "html/wrist_game.html");
-        embedded_asset!(app, "html/icon.html");
         app.add_systems(
             OnEnter(ModalMenuState::Open),
             (spawn_modal_menu, spawn_modal_menu_controls),
@@ -259,17 +258,13 @@ fn refresh_controls_tips(
     }
 }
 
-/// Installs the atlas image in each `controls-tip-icon` element (class `icon-<name>`) after every
-/// (re)build — bevy_markup has no `<img>`. The image goes on a child that is itself an (empty)
-/// `HtmlUi`, not on the element: bevy_markup's restyle-in-place compares each built node's shape
-/// (`ImageNode` presence included) and rebuilds on a mismatch, while nested `HtmlUi` children
-/// are exempt. An `ImageNode` on the element itself made every restyle (any `:hover` change, and
-/// the `PseudoState` insert right after each build) rebuild the tips — every frame.
+/// Installs the atlas `ImageNode` on each `controls-tip-icon` element (class `icon-<name>`)
+/// after every (re)build — bevy_markup has no `<img>`. Restyles keep it (app state; bevy_markup
+/// bug_0018).
 fn attach_controls_tip_icons(
     built: On<HtmlUiBuilt>,
     elements: HtmlElements,
     atlases: Option<Res<InputIconAtlases>>,
-    asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
     let Some(atlases) = atlases else {
@@ -284,16 +279,7 @@ fn attach_controls_tip_icons(
             continue;
         };
         if let Some(image) = atlases.image_node(name) {
-            commands.entity(entity).with_child((
-                template(&asset_server, "icon.html"),
-                image,
-                Node {
-                    width: percent(100),
-                    height: percent(100),
-                    ..default()
-                },
-                Pickable::IGNORE,
-            ));
+            commands.entity(entity).insert(image);
         }
     }
 }

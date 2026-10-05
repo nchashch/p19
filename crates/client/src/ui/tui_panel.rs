@@ -63,16 +63,12 @@ fn on_tui_panel_built(
     built: On<HtmlUiBuilt>,
     panels: Query<(), With<MainMenuTuiPanel>>,
     elements: HtmlElements,
-    children: Query<&Children>,
     time: Res<Time>,
     mut nodes: Query<&mut Node>,
     mut commands: Commands,
 ) {
     if !panels.contains(built.entity) {
         return;
-    }
-    for entity in children.iter_descendants(built.entity) {
-        commands.entity(entity).insert(Pickable::IGNORE);
     }
     if let Some(fill) = elements.by_id(built.entity, "tui-gauge-fill") {
         commands.entity(fill).insert(TuiGaugeFill);

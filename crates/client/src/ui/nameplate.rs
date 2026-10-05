@@ -123,9 +123,6 @@ fn on_nameplate_built(
     let Ok(nameplate) = nameplates.get(built.entity) else {
         return;
     };
-    for entity in children.iter_descendants(built.entity) {
-        commands.entity(entity).insert(Pickable::IGNORE);
-    }
     if let Some(fill) = elements.by_id(built.entity, "nameplate-fill") {
         commands.entity(fill).insert(HealthFill);
         if let Ok((mut node, ..)) = nodes.get_mut(fill) {
