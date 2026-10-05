@@ -559,9 +559,9 @@ output, not the global compositor space, unless that output happens to sit at
 - (Pre-bevy_markup, playtest-era note.) On a cold-started windowed client,
   `InputFocus` started at `None` even though feathers' `AutoFocus` was on the
   main menu's "Connect" button, so arrow/D-pad navigation had nothing to move
-  from until one real click. Focus is now set by `ui::markup`'s `repair_focus`
-  (the `autofocus`-classed element) with no window dependency; not re-verified
-  on a real window since the migration.
+  from until one real click. Focus is now set by bevy_markup's focus repair
+  (the `autofocus` attribute) with no window dependency; not re-verified on a
+  real window since the migration.
 - `game/mouse`'s `move_to`/`button` (the click-injection path) require the
   `OffscreenRenderTarget` resource that only exists in `--mcp` mode — in a
   real window it errors cleanly (`move_to`) or silently skips the

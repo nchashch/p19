@@ -962,7 +962,12 @@ fn ui_dump_snapshot(world: &mut World) -> serde_json::Value {
         if angle.abs() > 0.01 {
             continue;
         }
-        let clickable = signals.is_some_and(crate::ui::markup::is_clickable);
+        let clickable = signals.is_some_and(|signals| {
+            signals
+                .0
+                .iter()
+                .any(|binding| binding.trigger == bevy_markup::prelude::SignalTrigger::Click)
+        });
         let pseudo = pseudo.copied().unwrap_or_default();
         let interaction = if pseudo.active {
             Some("Pressed".to_owned())

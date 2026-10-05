@@ -1,7 +1,7 @@
 use crate::controls::controls::return_to_main_menu;
 use crate::controls::input_device::InputDeviceState;
 use crate::ui::input_icons::{InputIcon, InputIconAtlases};
-use crate::ui::markup::{UiNavModal, menu_controls, template};
+use crate::ui::markup::{menu_controls, template};
 use crate::ui::quad_panel::quad_panel;
 use bevy::asset::embedded_asset;
 use bevy::prelude::*;
@@ -75,7 +75,7 @@ fn spawn_modal_menu(
 ) {
     commands.spawn((
         template(&asset_server, "pause_menu.html"),
-        UiNavModal,
+        HtmlModal,
         Node {
             position_type: PositionType::Absolute,
             width: percent(100),
@@ -335,6 +335,8 @@ fn spawn_vr_in_game_wrist_panel(
         IN_GAME_WRIST_PANEL_TEXTURE_HEIGHT,
         (
             template(&asset_server, "wrist_game.html"),
+            // Laser-pointer driven, like the main-menu wrist panel.
+            HtmlNoFocus,
             Node {
                 width: percent(100),
                 height: percent(100),

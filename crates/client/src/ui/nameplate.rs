@@ -42,7 +42,6 @@ pub struct NameplatesVisible(pub bool);
 struct Nameplate {
     target: Entity,
     offset: Vec3,
-    name: String,
     alpha: f32,
     health_percent: f32,
 }
@@ -88,7 +87,6 @@ fn spawn_nameplates(
             Nameplate {
                 target,
                 offset: Vec3::new(0.0, 1.5, 0.0),
-                name: name.to_string(),
                 alpha: 1.0,
                 health_percent: 100.0,
             },
@@ -258,10 +256,8 @@ fn track_nameplates(
             continue;
         }
 
-        if let Ok(name) = names.get(nameplate.target)
-            && nameplate.name != name.as_str()
-        {
-            nameplate.name = name.to_string();
+        // Rebuilds only when the name actually changed (identical renders are skipped).
+        if let Ok(name) = names.get(nameplate.target) {
             context.insert("name", name.as_str());
         }
 

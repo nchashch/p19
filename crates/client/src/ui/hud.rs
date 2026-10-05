@@ -82,11 +82,9 @@ fn update_hud_visibility(
 #[derive(Resource)]
 pub struct DataFrameVisible(pub bool);
 
-/// The data frame's root and the values it was last rendered with — see `update_data_frame`.
+/// The data frame's root — see `update_data_frame`.
 #[derive(Component)]
-struct DataFrame {
-    values: Value,
-}
+struct DataFrame;
 
 /// Unconditional for the same reason as `update_hud_visibility`.
 fn update_data_frame_visibility(
@@ -114,7 +112,7 @@ pub fn spawn_in_game_scene(mut commands: Commands, asset_server: Res<AssetServer
     commands.spawn((
         markup::template(&asset_server, "data_frame.html"),
         template_context(&values),
-        DataFrame { values },
+        DataFrame,
         Node {
             position_type: PositionType::Absolute,
             top: px(0),
@@ -158,17 +156,6 @@ pub fn spawn_in_game_scene(mut commands: Commands, asset_server: Res<AssetServer
             DespawnOnExit(GameState::InGame),
         ));
     }
-}
-
-/// A `TemplateContext` holding every key of the JSON object `values`.
-fn template_context(values: &Value) -> TemplateContext {
-    let mut context = TemplateContext::new();
-    if let Value::Object(map) = values {
-        for (key, value) in map {
-            context.insert(key.clone(), value);
-        }
-    }
-    context
 }
 
 /// Marks the crosshair root.
@@ -344,8 +331,8 @@ fn update_crosshair_gcd(
 }
 
 /// The data frame's template variables: one Fluent args map per line (`*_args`), `hovered`/
-/// `selected` `null` when there's nothing to show. Floats are pre-formatted as displayed, so
-/// comparing two of these tells whether the panel would look different.
+/// `selected` `null` when there's nothing to show. Floats are pre-formatted as displayed, so an
+/// unchanged panel renders identical HTML and bevy_markup skips the rebuild.
 fn data_frame_values(hp: (i32, i32), grounded: bool, hovered: Value, selected: Value) -> Value {
     json!({
         "hp_args": { "hp": hp.0, "max_hp": hp.1 },
@@ -359,13 +346,13 @@ fn data_frame_values(hp: (i32, i32), grounded: bool, hovered: Value, selected: V
     })
 }
 
-/// Re-renders the data frame while it's shown and its displayed values changed — never while
-/// hidden, never for an identical frame.
+/// Writes the data frame's values while it's shown (never while hidden). bevy_markup rebuilds
+/// only when the rendered panel actually differs.
 fn update_data_frame(
     hud_visible: Res<HudVisible>,
     data_frame_visible: Res<DataFrameVisible>,
     local_player: Res<LocalPlayer>,
-    mut frames: Query<(&mut DataFrame, &mut TemplateContext)>,
+    mut frames: Query<&mut TemplateContext, With<DataFrame>>,
     hovered: Res<Hovered>,
     selected: Res<Selected>,
     player: Query<(
@@ -428,10 +415,14 @@ fn update_data_frame(
         hovered,
         selected,
     );
-    for (mut frame, mut context) in &mut frames {
-        if frame.values != values {
-            *context = template_context(&values);
-            frame.values = values.clone();
-        }
+    for mut context in &mut frames {
+        *context = template_context(&values);
     }
+}
+
+/// A `TemplateContext` holding every key of the JSON object `values`.
+fn template_context(values: &Value) -> TemplateContext {
+    bevy_markup::tera::Context::from_serialize(values)
+        .expect("data frame values are a JSON object")
+        .into()
 }

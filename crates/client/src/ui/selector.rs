@@ -16,15 +16,15 @@
 //! 3. Read [`SelectorPicked`] messages for your key; `value` is the picked
 //!    [`SelectorOption::value`].
 //!
-//! The popup is its own `HtmlUi` root (`selector.html`) with [`UiNavModal`], so directional
+//! The popup is its own `HtmlUi` root (`selector.html`) with [`HtmlModal`], so directional
 //! navigation stays inside it while it's open. Visible rows are re-rendered whenever the window
-//! pages; their element ids are per visible slot (`slot-0`..`slot-4`), so `markup`'s focus repair
+//! pages; their element ids are per visible slot (`slot-0`..`slot-4`), so bevy_markup's focus restore
 //! keeps focus on the same slot across the re-render. Opening resumes at the last picked entry
 //! (it becomes the top row, clamped to the end of the list) and focuses it; picking closes the
 //! popup and returns focus to the toggle. With no options, the popup shows a placeholder and
 //! isn't modal (so gamepad navigation can still reach the toggle to close it).
 
-use crate::ui::markup::{self, UiNavModal, UiNavigateEdge};
+use crate::ui::markup;
 use bevy::{
     asset::embedded_asset,
     input_focus::{FocusCause, InputFocus, InputFocusVisible},
@@ -281,7 +281,7 @@ fn handle_selector_signals(
                 ));
                 popup.observe(focus_built_popup).observe(scroll_popup);
                 if !selector.options.is_empty() {
-                    popup.insert(UiNavModal);
+                    popup.insert(HtmlModal);
                 }
                 if let Some(camera) = camera {
                     popup.insert(UiTargetCamera(camera));
@@ -330,7 +330,7 @@ fn refresh_open_popups(
         Entity,
         &mut SelectorPopup,
         &mut TemplateContext,
-        Has<UiNavModal>,
+        Has<HtmlModal>,
     )>,
     mut commands: Commands,
 ) {
@@ -352,11 +352,11 @@ fn refresh_open_popups(
             let resume = selector.selected.unwrap_or(0);
             popup.window_start = resume.min(max_window_start(len));
             popup.focus_slot = Some(resume - popup.window_start);
-            commands.entity(entity).insert(UiNavModal);
+            commands.entity(entity).insert(HtmlModal);
         } else {
             popup.window_start = popup.window_start.min(max_window_start(len));
             if len == 0 && modal {
-                commands.entity(entity).remove::<UiNavModal>();
+                commands.entity(entity).remove::<HtmlModal>();
             }
         }
         *context = popup_context(&selector, popup.window_start);
@@ -397,12 +397,11 @@ fn page_popup(
 /// Gamepad/keyboard: navigating up from the top row or down from the bottom row pages the
 /// window by one entry, focus staying on that row.
 fn page_on_navigate_edge(
-    edge: On<UiNavigateEdge>,
+    edge: On<FocusEdge>,
     parents: Query<&ChildOf>,
     elements: Query<&HtmlElement>,
     selectors: Query<&Selector>,
     mut popups: Query<(&mut SelectorPopup, &mut TemplateContext)>,
-    mut focus_visible: ResMut<InputFocusVisible>,
 ) {
     let Some(slot) = elements.get(edge.entity).ok().and_then(slot_of) else {
         return;
@@ -420,13 +419,12 @@ fn page_on_navigate_edge(
         return;
     };
     let start = popup.window_start;
-    let window_start = match edge.octant {
+    let window_start = match edge.direction {
         CompassOctant::North if start > 0 => start - 1,
         CompassOctant::South if start < max_window_start(selector.options.len()) => start + 1,
         _ => return,
     };
     page_popup(&mut popup, &mut context, selector, window_start, slot);
-    focus_visible.0 = true;
 }
 
 /// Mouse wheel over the popup (picking events bubble to the root): one entry per notch, focus

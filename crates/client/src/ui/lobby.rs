@@ -12,7 +12,7 @@ use p19_shared::replication::OrderedReliable;
 use crate::{
     assets::collections::CommonAssets,
     events::Disconnect,
-    ui::markup::{self, UiNav},
+    ui::markup,
     ui::selector::{Selector, SelectorOption, SelectorPicked},
 };
 
@@ -53,7 +53,6 @@ pub fn spawn_lobby_ui(
         },
         // A full-screen layout wrapper: only the panel inside should catch the pointer.
         Pickable::IGNORE,
-        UiNav,
         DespawnOnExit(GameState::Lobby),
     ));
     // `Levels` may already be replicated, or arrive later (`sync_level_options`).

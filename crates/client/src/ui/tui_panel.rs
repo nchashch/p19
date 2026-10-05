@@ -1,7 +1,7 @@
 //! A terminal-styled demo panel in the main menu's top-right corner (`html/tui_panel.html`):
 //! a title, an elapsed-time readout and a gauge oscillating off it, proving the UI renders live.
-//! The gauge fill is a per-frame `Node.width` update on the built element; the readout re-renders
-//! only when its displayed whole second changes. Non-interactive: no `data-on-click` hooks, and
+//! The gauge fill is a per-frame `Node.width` update on the built element; the readout's seconds
+//! are written every frame and rebuild only when the displayed second changes. Non-interactive: no `data-on-click` hooks, and
 //! the whole panel ignores picking.
 
 use crate::ui::markup;
@@ -24,11 +24,9 @@ impl Plugin for TuiPanelPlugin {
     }
 }
 
-/// The panel's root and the elapsed whole seconds it was last rendered with.
+/// The panel's root.
 #[derive(Component)]
-struct MainMenuTuiPanel {
-    seconds: u32,
-}
+struct MainMenuTuiPanel;
 
 /// The gauge's fill element.
 #[derive(Component)]
@@ -41,11 +39,10 @@ fn spawn_main_menu_tui_panel(
     asset_server: Res<AssetServer>,
     time: Res<Time>,
 ) {
-    let seconds = time.elapsed_secs() as u32;
     commands.spawn((
-        MainMenuTuiPanel { seconds },
+        MainMenuTuiPanel,
         markup::template(&asset_server, "tui_panel.html"),
-        TemplateContext::new().with("seconds", &seconds),
+        TemplateContext::new().with("seconds", &(time.elapsed_secs() as u32)),
         Node {
             position_type: PositionType::Absolute,
             top: px(PANEL_MARGIN),
@@ -83,21 +80,18 @@ fn gauge_width(elapsed: f32) -> Val {
     percent((elapsed.sin() + 1.0) / 2.0 * 100.0)
 }
 
-/// Sets the gauge every frame and re-renders the readout when its whole second ticks over.
+/// Sets the gauge every frame and writes the readout's whole seconds (bevy_markup rebuilds only
+/// when the rendered text changes, once a second).
 fn update_main_menu_tui_panel(
     time: Res<Time>,
-    mut panels: Query<(&mut MainMenuTuiPanel, &mut TemplateContext)>,
+    mut panels: Query<&mut TemplateContext, With<MainMenuTuiPanel>>,
     mut fills: Query<&mut Node, With<TuiGaugeFill>>,
 ) {
     let elapsed = time.elapsed_secs();
     for mut fill in &mut fills {
         fill.width = gauge_width(elapsed);
     }
-    let seconds = elapsed as u32;
-    for (mut panel, mut context) in &mut panels {
-        if panel.seconds != seconds {
-            panel.seconds = seconds;
-            context.insert("seconds", &seconds);
-        }
+    for mut context in &mut panels {
+        context.insert("seconds", &(elapsed as u32));
     }
 }

@@ -11,58 +11,46 @@
 //!   `font-family: serif`); `ActiveLocale` follows bevy_fluent's `Locale` resource (the language
 //!   picker writes `Locale`), loading `locales/<id>/main.ftl.yml`.
 //! - **Interaction.** Pointer clicks on `data-on-click` elements arrive as `ElementSignal`
-//!   messages (bevy_markup). Gamepad South / Enter ([`UiConfirm`]) emits the *same* message for the
-//!   focused element, so every surface handles one input path: a `MessageReader<ElementSignal>`
-//!   matching on `name`. Directional navigation (`MenuControls`: d-pad, arrows, left stick, with
-//!   press-and-hold auto-repeat) moves `InputFocus` between the `data-on-click` elements of
-//!   [`UiNav`] roots; a [`UiNavModal`] root confines it. Focus survives rebuilds (restored by
-//!   element `id`), falls back to the root's `autofocus`-classed element, and is drawn as an
-//!   `Outline` while `InputFocusVisible`.
+//!   messages (bevy_markup), and so does gamepad South / Enter ([`UiConfirm`] → bevy_markup's
+//!   `HtmlFocus::activate` on the focused element), so every surface handles one input path: a
+//!   `MessageReader<ElementSignal>` matching on `name`. Focus itself is bevy_markup's (browser
+//!   style: `data-on-click` elements are focusable, the `autofocus` attribute takes the initial
+//!   focus, focus survives rebuilds by `id`, `HtmlModal` roots confine it, `HtmlNoFocus` roots
+//!   never take it, `:focus-visible` + `outline` in `theme.css` draw the ring). This module only
+//!   binds the input: `MenuControls` (d-pad, arrows, left stick, South/Enter) drives
+//!   `HtmlFocus::navigate`, with press-and-hold auto-repeat.
 //! - **Tooltips.** `data-on-enter="tooltip" data-on-leave="tooltip"` plus a `data-with` carrying
 //!   `"tooltip"` (a Fluent key) and optional `"tooltip_args"`/`"tooltip_above"` shows a tooltip
 //!   beside the element while the pointer is over it.
 //!
-//! bevy_markup's CSS subset has no positioning, `z-index`, `overflow` or `border-color`:
-//! anything that must sit at a screen position is its own `HtmlUi` root whose `Node`
-//! (`position_type`, `left`/`top`, …) and `GlobalZIndex` the spawning code sets.
+//! bevy_markup's CSS doesn't reach the `HtmlUi` root itself: each root's screen placement
+//! (`Node`), cross-root stacking (`GlobalZIndex`) and `Pickable` are set by the spawning code.
 
 use crate::add_observers_run_if;
 use crate::assets::collections::CommonAssets;
 use crate::controls::actions::{UiConfirm, UiNavigate};
 use bevy::asset::embedded_asset;
 use bevy::{
-    input_focus::{
-        FocusCause, InputFocus, InputFocusVisible,
-        directional_navigation::DirectionalNavigationPlugin,
-    },
     math::CompassOctant,
     platform::collections::HashMap,
     prelude::*,
-    ui::{
-        ComputedUiTargetCamera, UiGlobalTransform,
-        auto_directional_navigation::{AutoDirectionalNavigation, AutoDirectionalNavigator},
-    },
+    ui::{ComputedUiTargetCamera, UiGlobalTransform},
 };
 use bevy_enhanced_input::prelude::{Press, *};
 use bevy_fluent::prelude::Locale;
 use bevy_markup::prelude::*;
 use chill_bevy_console::console_closed;
 use serde_json::Value;
-use std::borrow::Cow;
 
 pub struct MarkupPlugin;
 
 impl Plugin for MarkupPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(BevyMarkupPlugin);
-        if !app.is_plugin_added::<DirectionalNavigationPlugin>() {
-            app.add_plugins(DirectionalNavigationPlugin);
-        }
         embedded_asset!(app, "html/theme.css");
         embedded_asset!(app, "html/tooltip.html");
         app.add_input_context::<MenuControls>()
             .init_resource::<UiNavigateHold>()
-            .init_resource::<FocusMemory>()
             .init_resource::<LocaleBundles>()
             .add_systems(Startup, load_default_stylesheet)
             .add_systems(
@@ -71,17 +59,8 @@ impl Plugin for MarkupPlugin {
                     register_ui_fonts.run_if(resource_added::<CommonAssets>),
                     sync_active_locale,
                     repeat_ui_navigate_while_held.run_if(console_closed),
-                    focus_on_pointer_click,
                     show_tooltips,
-                    remember_focus,
                 ),
-            )
-            .add_systems(
-                PostUpdate,
-                (sync_navigation, repair_focus, update_focus_ring)
-                    .chain()
-                    .after(HtmlUiSystems::Build)
-                    .before(bevy::ui::UiSystems::Prepare),
             );
         add_observers_run_if!(app, console_closed, on_ui_navigate, on_ui_confirm);
         // Ungated: a release while the console is open must still clear the held direction, or
@@ -149,204 +128,6 @@ fn sync_active_locale(
     }
 }
 
-/// Opt-in on an `HtmlUi` root: its `data-on-click` elements take part in gamepad/keyboard
-/// directional navigation and focus.
-#[derive(Component, Clone, Copy, Default)]
-pub struct UiNav;
-
-/// An `HtmlUi` root that confines directional navigation to itself while it exists and is
-/// visible (popups, the pause menu). With several, the highest `GlobalZIndex` wins.
-#[derive(Component, Clone, Copy, Default)]
-#[require(UiNav)]
-pub struct UiNavModal;
-
-/// Fired on the focused element when directional navigation finds no neighbour in `octant` —
-/// lets a paginated list (the selector popup) page instead of stopping at its edge.
-#[derive(EntityEvent, Clone, Copy, Debug)]
-pub struct UiNavigateEdge {
-    pub entity: Entity,
-    pub octant: CompassOctant,
-}
-
-/// Whether `signals` declares a `data-on-click` hook.
-pub fn is_clickable(signals: &ElementSignals) -> bool {
-    signals
-        .0
-        .iter()
-        .any(|binding| binding.trigger == SignalTrigger::Click)
-}
-
-/// The `HtmlUi` root `entity` belongs to (itself included).
-fn html_root(
-    entity: Entity,
-    parents: &Query<&ChildOf>,
-    roots: &Query<(), With<HtmlUi>>,
-) -> Option<Entity> {
-    std::iter::once(entity)
-        .chain(parents.iter_ancestors(entity))
-        .find(|&ancestor| roots.contains(ancestor))
-}
-
-/// Gives exactly the clickable elements of the active navigation scope
-/// `AutoDirectionalNavigation`: every visible [`UiNav`] root, or only the top [`UiNavModal`]
-/// while one is visible.
-fn sync_navigation(
-    nav_roots: Query<
-        (
-            Entity,
-            &InheritedVisibility,
-            Has<UiNavModal>,
-            Option<&GlobalZIndex>,
-        ),
-        (With<UiNav>, With<HtmlUi>),
-    >,
-    elements: Query<(Entity, &ElementSignals, Has<AutoDirectionalNavigation>)>,
-    parents: Query<&ChildOf>,
-    roots: Query<(), With<HtmlUi>>,
-    mut commands: Commands,
-) {
-    let modal = nav_roots
-        .iter()
-        .filter(|(_, visible, modal, _)| *modal && visible.get())
-        .max_by_key(|(_, _, _, z)| z.map_or(0, |z| z.0))
-        .map(|(entity, ..)| entity);
-    for (entity, signals, navigable) in &elements {
-        let wanted = is_clickable(signals)
-            && html_root(entity, &parents, &roots).is_some_and(|root| match modal {
-                Some(modal) => root == modal,
-                None => nav_roots
-                    .get(root)
-                    .is_ok_and(|(_, visible, ..)| visible.get()),
-            });
-        if wanted && !navigable {
-            commands
-                .entity(entity)
-                .insert(AutoDirectionalNavigation::default());
-        } else if !wanted && navigable {
-            commands
-                .entity(entity)
-                .remove::<AutoDirectionalNavigation>();
-        }
-    }
-}
-
-/// The last valid focus target: its `HtmlUi` root and element `id`, so a rebuild of that root
-/// (which replaces every child entity) can put focus back on the same element.
-#[derive(Resource, Default)]
-struct FocusMemory {
-    root: Option<Entity>,
-    id: Option<String>,
-}
-
-fn remember_focus(
-    focus: Res<InputFocus>,
-    elements: Query<&HtmlElement, With<AutoDirectionalNavigation>>,
-    parents: Query<&ChildOf>,
-    roots: Query<(), With<HtmlUi>>,
-    mut memory: ResMut<FocusMemory>,
-) {
-    let Some(entity) = focus.get() else {
-        return;
-    };
-    let Ok(element) = elements.get(entity) else {
-        return;
-    };
-    memory.root = html_root(entity, &parents, &roots);
-    memory.id = element.id.clone();
-}
-
-/// Keeps `InputFocus` on a navigable element. When it points at nothing navigable (despawned
-/// by a rebuild, outside a just-opened modal, never set): the remembered element in the same
-/// root by `id`, else the first `autofocus`-classed element in scope, else the first navigable
-/// element. With nothing navigable at all (in-game), focus is cleared.
-fn repair_focus(
-    mut focus: ResMut<InputFocus>,
-    memory: Res<FocusMemory>,
-    navigable: Query<(Entity, &HtmlElement), With<AutoDirectionalNavigation>>,
-    parents: Query<&ChildOf>,
-    roots: Query<(), With<HtmlUi>>,
-) {
-    if focus.get().is_some_and(|entity| navigable.contains(entity)) {
-        return;
-    }
-    let remembered = memory.id.as_deref().and_then(|id| {
-        navigable.iter().find_map(|(entity, element)| {
-            (element.id.as_deref() == Some(id)
-                && html_root(entity, &parents, &roots) == memory.root)
-                .then_some(entity)
-        })
-    });
-    let target = remembered
-        .or_else(|| {
-            navigable
-                .iter()
-                .find_map(|(entity, element)| element.has_class("autofocus").then_some(entity))
-        })
-        .or_else(|| navigable.iter().map(|(entity, _)| entity).min());
-    match target {
-        Some(entity) => focus.set(entity, FocusCause::Navigated),
-        None => {
-            if focus.get().is_some() {
-                focus.clear();
-            }
-        }
-    }
-}
-
-/// Pointer clicks move focus to the clicked element (so gamepad navigation continues from
-/// there) and hide the focus ring, like a browser.
-fn focus_on_pointer_click(
-    mut signals: MessageReader<ElementSignal>,
-    navigable: Query<(), With<AutoDirectionalNavigation>>,
-    mut focus: ResMut<InputFocus>,
-    mut focus_visible: ResMut<InputFocusVisible>,
-) {
-    for signal in signals.read() {
-        if signal.trigger == SignalTrigger::Click
-            && signal.position.is_some()
-            && navigable.contains(signal.target)
-        {
-            focus.set(signal.target, FocusCause::Pressed);
-            focus_visible.0 = false;
-        }
-    }
-}
-
-const FOCUS_RING_COLOR: Color = Color::srgb(0.98, 0.78, 0.30);
-
-/// Marks the element currently drawing the focus ring.
-#[derive(Component)]
-struct FocusRing;
-
-fn update_focus_ring(
-    focus: Res<InputFocus>,
-    focus_visible: Res<InputFocusVisible>,
-    ringed: Query<Entity, With<FocusRing>>,
-    navigable: Query<(), With<AutoDirectionalNavigation>>,
-    mut commands: Commands,
-) {
-    let wanted = focus
-        .get()
-        .filter(|&entity| focus_visible.0 && navigable.contains(entity));
-    for entity in &ringed {
-        if Some(entity) != wanted {
-            commands.entity(entity).remove::<(FocusRing, Outline)>();
-        }
-    }
-    if let Some(entity) = wanted
-        && !ringed.contains(entity)
-    {
-        commands.entity(entity).insert((
-            FocusRing,
-            Outline {
-                width: Val::Px(2.0),
-                offset: Val::Px(2.0),
-                color: FOCUS_RING_COLOR,
-            },
-        ));
-    }
-}
-
 /// The `bevy_enhanced_input` context for gamepad/keyboard UI navigation. Spawn
 /// [`menu_controls`] scoped to whatever UI state needs navigation (main menu, lobby, pause menu);
 /// only one should be alive at a time.
@@ -403,34 +184,16 @@ struct UiNavigateHold {
     next_repeat: f32,
 }
 
-/// One navigation step: moves focus, or reports the dead end as [`UiNavigateEdge`]. Sets
-/// `InputFocusVisible` — directional navigation is what shows the ring.
-fn navigate_step(
-    octant: CompassOctant,
-    navigator: &mut AutoDirectionalNavigator,
-    focus_visible: &mut InputFocusVisible,
-    commands: &mut Commands,
-) {
-    focus_visible.0 = true;
-    if navigator.navigate(octant).is_err()
-        && let Some(entity) = navigator.input_focus()
-    {
-        commands.trigger(UiNavigateEdge { entity, octant });
-    }
-}
-
 fn on_ui_navigate(
     navigate: On<Start<UiNavigate>>,
-    mut navigator: AutoDirectionalNavigator,
-    mut focus_visible: ResMut<InputFocusVisible>,
+    mut focus: HtmlFocus,
     mut hold: ResMut<UiNavigateHold>,
-    mut commands: Commands,
 ) {
     let Ok(direction) = Dir2::new(navigate.value) else {
         return;
     };
     let octant = CompassOctant::from(direction);
-    navigate_step(octant, &mut navigator, &mut focus_visible, &mut commands);
+    focus.navigate(octant);
     hold.direction = Some(octant);
     hold.next_repeat = UI_NAVIGATE_HOLD_DELAY;
 }
@@ -442,9 +205,7 @@ fn on_ui_navigate_complete(_complete: On<Complete<UiNavigate>>, mut hold: ResMut
 fn repeat_ui_navigate_while_held(
     time: Res<Time>,
     mut hold: ResMut<UiNavigateHold>,
-    mut navigator: AutoDirectionalNavigator,
-    mut focus_visible: ResMut<InputFocusVisible>,
-    mut commands: Commands,
+    mut focus: HtmlFocus,
 ) {
     let Some(octant) = hold.direction else {
         return;
@@ -453,38 +214,14 @@ fn repeat_ui_navigate_while_held(
     if hold.next_repeat > 0.0 {
         return;
     }
-    navigate_step(octant, &mut navigator, &mut focus_visible, &mut commands);
+    focus.navigate(octant);
     hold.next_repeat = UI_NAVIGATE_REPEAT_INTERVAL;
 }
 
-/// Gamepad South / Enter: emits the focused element's `data-on-click` signal, exactly what a
-/// pointer click on it emits (minus `position`).
-fn on_ui_confirm(
-    _confirm: On<Start<UiConfirm>>,
-    focus: Res<InputFocus>,
-    elements: Query<(&ElementSignals, Option<&HtmlElement>), With<AutoDirectionalNavigation>>,
-    mut writer: MessageWriter<ElementSignal>,
-) {
-    let Some(target) = focus.get() else {
-        return;
-    };
-    let Ok((signals, element)) = elements.get(target) else {
-        return;
-    };
-    for binding in signals
-        .0
-        .iter()
-        .filter(|binding| binding.trigger == SignalTrigger::Click)
-    {
-        writer.write(ElementSignal {
-            name: Cow::Owned(binding.name.clone()),
-            trigger: SignalTrigger::Click,
-            target,
-            element: element.cloned().unwrap_or_default(),
-            payload: binding.payload.clone(),
-            position: None,
-        });
-    }
+/// Gamepad South / Enter: activates the focused element — the same `ElementSignal` a pointer
+/// click on it emits (minus `position`).
+fn on_ui_confirm(_confirm: On<Start<UiConfirm>>, mut focus: HtmlFocus) {
+    focus.activate();
 }
 
 /// Signal name of the tooltip hooks (`data-on-enter` / `data-on-leave`).

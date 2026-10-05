@@ -41,6 +41,12 @@ h2 {
   justify-content: center;
 }
 
+/* The focus ring: shown for gamepad/keyboard focus only (`:focus-visible`). */
+.button:focus-visible {
+  outline: 2px solid #fac74d;
+  outline-offset: 2px;
+}
+
 .button:hover {
   background-color: #474b57;
 }

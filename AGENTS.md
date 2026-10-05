@@ -346,15 +346,15 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
     message for the focused element. Surfaces handle buttons in one `MessageReader<ElementSignal>`
     system, matching namespaced names (`main-menu.connect`, `lobby.play`, `pause.resume`,
     `selector.toggle`/`selector.pick`, `wrist-game.main-menu`, …) and `data-with` payloads.
-  - **Navigation/focus.** `MenuControls` (`markup::menu_controls()`, spawned per UI state: main
-    menu, lobby, pause menu) drives `UiNavigate` (d-pad, arrows, left stick; auto-repeat after
-    0.4 s, then every 0.08 s). The clickable elements of `UiNav` roots get
-    `AutoDirectionalNavigation` automatically (`sync_navigation`); a visible `UiNavModal` root
-    (selector popup, pause menu) confines navigation. `repair_focus` keeps `InputFocus` on a
-    navigable element: same `id` in the same root after a rebuild, else the `autofocus`-classed
-    element, else the first. A dead-end move fires `UiNavigateEdge` (the selector pages on it).
-    The focus ring is an `Outline` drawn while `InputFocusVisible` (set by directional input,
-    cleared by pointer clicks, which also move focus).
+  - **Navigation/focus** is bevy_markup's (its `focus` module, browser-style): `data-on-click`
+    elements are focusable, the `autofocus` attribute takes the initial focus, focus survives
+    rebuilds by element `id`, an `HtmlModal` root (selector popup, pause menu) confines it, an
+    `HtmlNoFocus` root (VR wrist panels) never takes it, and `.button:focus-visible { outline }`
+    in `theme.css` is the focus ring (directional input shows it, a pointer press hides it and
+    moves focus). This module only binds input: `MenuControls` (`markup::menu_controls()`,
+    spawned per UI state: main menu, lobby, pause menu) → `HtmlFocus::navigate` (d-pad, arrows,
+    left stick; auto-repeat after 0.4 s, then every 0.08 s) and `HtmlFocus::activate` (South /
+    Enter). A dead-end move fires bevy_markup's `FocusEdge` (the selector pages on it).
   - **Tooltips.** `data-on-enter="tooltip" data-on-leave="tooltip"` + `data-with`
     `{"tooltip": key, "tooltip_args": {...}, "tooltip_above": bool}` → a `tooltip.html` root beside
     the element, on the element's UI camera.
@@ -363,18 +363,18 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
   (`wrist = true`) is the VR main-menu wrist panel. Registers `HudPlugin` and `SelectorPlugin`.
 - **`ui/selector.rs`** — generic popup (ADR 0001's behavior): a `Selector { key, options }`
   entity per picker; a toggle element (`data-on-click="selector.toggle"`, `data-with`
-  `{"selector": key}`) opens a `selector.html` root (`UiNavModal`) right of it, 5 visible rows
+  `{"selector": key}`) opens a `selector.html` root (`HtmlModal`) right of it, 5 visible rows
   (ids `slot-0..4`) over a paginated window, a discrete scrollbar, wheel and edge paging, resume at
   the last pick; picks arrive as `SelectorPicked { selector, value }` messages.
 - **`ui/lobby.rs`** — `lobby.html`: Play (`InGameRequest`), Level selector (options from the
   replicated `Levels`, re-seeded on change; labels are Fluent keys; a pick sends
   `LoadLevelRequest`), Main Menu (`Disconnect` + `MainMenu`).
-- **`ui/modal_menu.rs`** — pause menu (`pause_menu.html`, `UiNavModal`, Main Menu above Resume,
+- **`ui/modal_menu.rs`** — pause menu (`pause_menu.html`, `HtmlModal`, Main Menu above Resume,
   Resume auto-focused), the controls tips (`controls_tips.html`, keyboard/mouse vs Steam Deck rows
   by `InputDeviceState`) and the VR in-game wrist panel (`wrist_game.html`).
 - **`ui/hud.rs`** — crosshair (dot, or the `CrosshairGcdMaterial` ring while the GCD runs), data
-  frame (Tab/Select via `DataFrameVisible`, re-rendered only when shown values change), hotbar
-  (`HOTBAR_ENABLED = false`); `HudVisible` (console `hud`) hides them. Reads ahoy's
+  frame (Tab/Select via `DataFrameVisible`; its context is written every frame while shown),
+  hotbar (`HOTBAR_ENABLED = false`); `HudVisible` (console `hud`) hides them. Reads ahoy's
   `CharacterControllerState::grounded`.
 - **`ui/nameplate.rs`** — one screen-space `nameplate.html` root per `HitPoints` entity, moved and
   faded per frame; hidden by default (`NameplatesVisible`, console `nameplates`).
@@ -391,7 +391,9 @@ bevy_markup rules that bite (the crate's own `AGENTS.md`, in its checkout under
 `~/.cargo/git/checkouts/bevy_markup-*/`, documents the full CSS subset and pipeline):
 
 - An `HtmlUi` root's children belong to the pipeline: a `TemplateContext`/locale/template change
-  despawns and rebuilds them (`HtmlUiBuilt` — re-attach components there); style-only changes
+  that alters the rendered HTML despawns and rebuilds them (`HtmlUiBuilt` — re-attach components
+  there); an identical render does nothing, so write contexts unconditionally (no app-side
+  diffing of last-written values); style-only changes
   restyle in place (`HtmlUiRestyled`). Never parent other entities under an `HtmlUi` root (the
   menu/lobby `WorldAssetRoot` backgrounds are separate entities). Per-frame values (crosshair GCD,
   nameplate position/fade/fill, the TUI gauge) mutate built entities instead of re-rendering.

@@ -5,7 +5,7 @@
 use crate::assets::collections::CommonAssets;
 use crate::events::Connect;
 use crate::ui::hud::HudPlugin;
-use crate::ui::markup::{self, UiNav, menu_controls};
+use crate::ui::markup::{self, menu_controls};
 use crate::ui::quad_panel::quad_panel;
 use crate::ui::selector::{self, Selector, SelectorOption, SelectorPicked};
 use bevy::{asset::embedded_asset, prelude::*};
@@ -86,7 +86,6 @@ pub fn spawn_main_menu(
         },
         // A full-screen layout wrapper: only the panel inside should catch the pointer.
         Pickable::IGNORE,
-        UiNav,
         DespawnOnExit(GameState::MainMenu),
     ));
     let current = locale.requested.to_string();
@@ -150,7 +149,7 @@ const WRIST_PANEL_TEXTURE_SIZE: u32 = 420;
 struct VrMainMenuWristPanel;
 
 /// The main menu on a `quad_panel` attached to the left controller's grip, for VR players
-/// without a desktop mouse (laser-pointer driven, so no `UiNav`). The offset/rotation is an
+/// without a desktop mouse (laser-pointer driven, so `HtmlNoFocus`). The offset/rotation is an
 /// unverified guess at "back of the wrist, angled toward the face".
 ///
 /// Polls every frame in `MainMenu` + `VR` instead of running on `OnEnter(MainMenu)`: that fires
@@ -184,6 +183,7 @@ fn spawn_vr_main_menu_wrist_panel(
         (
             markup::template(&asset_server, "main_menu.html"),
             TemplateContext::new().with("wrist", &true),
+            HtmlNoFocus,
             Node {
                 width: percent(100),
                 height: percent(100),

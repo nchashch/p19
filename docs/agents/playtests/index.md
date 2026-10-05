@@ -4,6 +4,28 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0026` — bevy_markup Skips Identical Renders: Client Value Diffing Removed
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-05 16:22 – 16:30 UTC |
+| **Commit** | `0da1fcb` "Use bevy_markup for UI" + uncommitted client UI changes (and the uncommitted bevy_markup identical-render skip on top of `f81acce`) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0026.md`](playtest_0026.md) |
+
+Verifies the client after bevy_markup stopped rebuilding on identical renders and the client stopped diffing its own template values (data frame, nameplate name, TUI seconds): written every frame, the TUI panel still rebuilds once a second and the data frame only on a displayed change (idle and moving-without-target: 0 rebuilds; a jump flipping `Grounded` rebuilds). Observed, not investigated: spawned cubes end up ~1000 units away, so selecting one is cleared at once.
+
+### `playtest_0025` — Focus and Navigation Moved into bevy_markup
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-05 15:14 – 15:40 UTC |
+| **Commit** | `0da1fcb` "Use bevy_markup for UI" + uncommitted client UI changes (and uncommitted bevy_markup focus module + astral-tl switch on top of `decd505`) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0025.md`](playtest_0025.md) |
+
+Verifies the client after moving focus, directional navigation, restore-by-id, modal scoping and the focus ring into bevy_markup (browser-style `autofocus`/`tabindex`/`:focus-visible`/`outline`), with the client keeping only its input bindings: menu, selector edge paging, pointer-hides-ring, lobby, pause modal, Enter/South activation all match playtest 0022. Found an upstream tl 0.7.8 parser bug (a value-less attribute eats the next attribute's first character), fixed by switching bevy_markup to astral-tl (its bug_0019).
+
 ### `playtest_0024` — bevy_markup CSS Positioning/Borders/Pointer-Events: Client Workarounds Removed
 
 | Field | Value |
