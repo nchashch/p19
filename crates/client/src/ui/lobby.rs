@@ -44,15 +44,6 @@ pub fn spawn_lobby_ui(
     ));
     commands.spawn((
         markup::template(&asset_server, "lobby.html"),
-        Node {
-            width: percent(100),
-            height: percent(100),
-            align_items: AlignItems::End,
-            justify_content: JustifyContent::Start,
-            ..default()
-        },
-        // A full-screen layout wrapper: only the panel inside should catch the pointer.
-        Pickable::IGNORE,
         DespawnOnExit(GameState::Lobby),
     ));
     // `Levels` may already be replicated, or arrive later (`sync_level_options`).

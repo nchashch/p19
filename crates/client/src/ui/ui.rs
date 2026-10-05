@@ -77,15 +77,6 @@ pub fn spawn_main_menu(
     commands.spawn((
         markup::template(&asset_server, "main_menu.html"),
         TemplateContext::new().with("wrist", &false),
-        Node {
-            width: percent(100),
-            height: percent(100),
-            align_items: AlignItems::End,
-            justify_content: JustifyContent::Start,
-            ..default()
-        },
-        // A full-screen layout wrapper: only the panel inside should catch the pointer.
-        Pickable::IGNORE,
         DespawnOnExit(GameState::MainMenu),
     ));
     let current = locale.requested.to_string();
@@ -184,11 +175,6 @@ fn spawn_vr_main_menu_wrist_panel(
             markup::template(&asset_server, "main_menu.html"),
             TemplateContext::new().with("wrist", &true),
             HtmlNoFocus,
-            Node {
-                width: percent(100),
-                height: percent(100),
-                ..default()
-            },
         ),
     );
     commands.spawn((

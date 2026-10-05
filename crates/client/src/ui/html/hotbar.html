@@ -1,11 +1,12 @@
 {# Ability letters and hotkeys stand in for icons until an icon/inventory asset system exists. #}
+<html class="hotbar-root">
 <div class="hotbar">
   <div class="hotbar-slot" id="hotbar-attack" data-on-enter="tooltip" data-on-leave="tooltip"
        data-with='{"tooltip": "hud-attack-tooltip", "tooltip_args": {"damage": {{ damage }}, "range": {{ attack_range }}}, "tooltip_above": true}'>
     <div class="hotbar-slot-face">
       <p class="hotbar-ability">A</p>
       <p class="hotbar-hotkey">f</p>
-      <div class="hotbar-gcd"></div>
+      <div class="hotbar-gcd" is="gcd-overlay"></div>
     </div>
   </div>
   <div class="hotbar-slot" id="hotbar-kill" data-on-enter="tooltip" data-on-leave="tooltip"
@@ -13,7 +14,7 @@
     <div class="hotbar-slot-face">
       <p class="hotbar-ability">K</p>
       <p class="hotbar-hotkey">t</p>
-      <div class="hotbar-gcd"></div>
+      <div class="hotbar-gcd" is="gcd-overlay"></div>
     </div>
   </div>
   <div class="hotbar-slot" id="hotbar-spawn-npc" data-on-enter="tooltip" data-on-leave="tooltip"
@@ -21,7 +22,7 @@
     <div class="hotbar-slot-face">
       <p class="hotbar-ability">N</p>
       <p class="hotbar-hotkey">r</p>
-      <div class="hotbar-gcd"></div>
+      <div class="hotbar-gcd" is="gcd-overlay"></div>
     </div>
   </div>
   <div class="hotbar-slot" id="hotbar-spawn-cube" data-on-enter="tooltip" data-on-leave="tooltip"
@@ -29,27 +30,28 @@
     <div class="hotbar-slot-face">
       <p class="hotbar-ability">C</p>
       <p class="hotbar-hotkey">e</p>
-      <div class="hotbar-gcd"></div>
+      <div class="hotbar-gcd" is="gcd-overlay"></div>
     </div>
   </div>
   <div class="hotbar-slot" id="hotbar-empty-0">
     <div class="hotbar-slot-face">
-      <div class="hotbar-gcd"></div>
+      <div class="hotbar-gcd" is="gcd-overlay"></div>
     </div>
   </div>
   <div class="hotbar-slot" id="hotbar-empty-1">
     <div class="hotbar-slot-face">
-      <div class="hotbar-gcd"></div>
+      <div class="hotbar-gcd" is="gcd-overlay"></div>
     </div>
   </div>
   <div class="hotbar-slot" id="hotbar-empty-2">
     <div class="hotbar-slot-face">
-      <div class="hotbar-gcd"></div>
+      <div class="hotbar-gcd" is="gcd-overlay"></div>
     </div>
   </div>
   <div class="hotbar-slot" id="hotbar-empty-3">
     <div class="hotbar-slot-face">
-      <div class="hotbar-gcd"></div>
+      <div class="hotbar-gcd" is="gcd-overlay"></div>
     </div>
   </div>
 </div>
+</html>

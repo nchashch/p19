@@ -4,6 +4,50 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0030` — In-Place UI Updates, `style` Attributes and `opacity`
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-05 22:31 – 22:34 UTC |
+| **Commit** | `0da1fcb` "Use bevy_markup for UI" + uncommitted client UI changes (and the uncommitted bevy_markup in-place reconciliation, `style` attribute and `opacity` on top of `3c73cba`) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0030.md`](playtest_0030.md) |
+
+Verifies the client after bevy_markup started updating UIs in place and the nameplate fade/health and TUI gauge moved into templated `style` attributes: language switches, clock/gauge ticks, popup paging and nameplate fades keep every element entity (20/20, 124/124), focus stays on the same row entity across edge paging, the selected row autofocuses via the template, and a 51%-HP NPC's plate shows a 51% bar while fading 1.0 → 0.18 → hidden. No `HtmlUiBuilt`/`HtmlUiRestyled` observers remain in the client.
+
+### `playtest_0029` — Tooltips and Selector Popups Anchored by bevy_markup's `HtmlAnchor`
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-05 22:02 – 22:03 UTC |
+| **Commit** | `0da1fcb` "Use bevy_markup for UI" + uncommitted client UI changes (and the uncommitted bevy_markup `HtmlAnchor` on top of `ebfbf22`) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0029.md`](playtest_0029.md) |
+
+Verifies the client after its tooltip and selector popup stopped computing element rects, viewport clamps and UI cameras and use `HtmlAnchor` instead: positions are identical to playtest 0028 (348/340, 348/394, above-placement `bottom 414`), the popup width is CSS, the tooltip follows the hovered element, and an open popup is despawned with its toggle when the menu goes.
+
+### `playtest_0028` — UI Roots Styled by CSS (`<html class>`), Spawn-Site Placement Removed
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-05 21:37 – 21:41 UTC |
+| **Commit** | `0da1fcb` "Use bevy_markup for UI" + uncommitted client UI changes (and the uncommitted bevy_markup root rule + bug_0021 fix on top of `d033fe1`) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0028.md`](playtest_0028.md) |
+
+Verifies the client after every template got an `<html class="<surface>-root">` and `theme.css` took over each root's placement, size, stacking (`z-index` 100/101/900/1000) and pickability from the spawn code, which now sets only computed positions: menus, popup, tooltips, HUD, nameplates and pause menu lay out, stack and click as before. Found and fixed bevy_markup bug_0021 (a same-frame UI despawn panicked `update_pseudo_states`; hover-then-click Connect crashed the client).
+
+### `playtest_0027` — bevy_markup Custom Elements Replace the Client's Build Hooks
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-05 20:55 – 21:00 UTC |
+| **Commit** | `0da1fcb` "Use bevy_markup for UI" + uncommitted client UI changes (and the uncommitted bevy_markup `is="…"` custom elements on top of `9721039`) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0027.md`](playtest_0027.md) |
+
+Verifies the client after its five per-rebuild `HtmlUiBuilt` hooks (crosshair ring/dot, hotbar GCD overlay, controls-tip glyphs, nameplate fill, TUI gauge) became `is="…"` elements with `define_html_element` systems: all attach on build (GCD ring/dot swap, 14/14 glyphs, animated gauge), and a forced nameplate rebuild comes back at the damaged NPC's 51% (set by the definition, not CSS). `NameplatesVisible` is now reflected (BRP can show nameplates; playtest 0022 F6 partly resolved). The selector's focus hook stays (wheel paging).
+
 ### `playtest_0026` — bevy_markup Skips Identical Renders: Client Value Diffing Removed
 
 | Field | Value |

@@ -1,10 +1,11 @@
+<html class="selector-root">
 <div class="selector-popup">
   <div class="selector-rows">
     {% if empty %}
     <p class="selector-empty" data-l10n-id="selector-empty">Nothing to choose yet</p>
     {% endif %}
     {% for row in rows %}
-    <div class="button selector-row" id="slot-{{ row.slot }}" data-on-click="selector.pick" data-with='{"index": {{ row.index }} }'>
+    <div class="button selector-row" id="slot-{{ row.slot }}"{% if row.autofocus %} autofocus{% endif %} data-on-click="selector.pick" data-with='{"index": {{ row.index }} }'>
       {% if row.localized %}
       <p data-l10n-id="{{ row.label }}">{{ row.label }}</p>
       {% else %}
@@ -19,3 +20,4 @@
     {% endfor %}
   </div>
 </div>
+</html>

@@ -26,6 +26,7 @@ impl Plugin for ModalMenuPlugin {
         embedded_asset!(app, "html/pause_menu.html");
         embedded_asset!(app, "html/controls_tips.html");
         embedded_asset!(app, "html/wrist_game.html");
+        app.define_html_element("input-icon", input_icon);
         app.add_systems(
             OnEnter(ModalMenuState::Open),
             (spawn_modal_menu, spawn_modal_menu_controls),
@@ -47,9 +48,6 @@ impl Plugin for ModalMenuPlugin {
         );
     }
 }
-
-/// Above the HUD; the controls tips sit one above the dimmed pause root.
-const PAUSE_MENU_Z: i32 = 100;
 
 fn close_modal_menu(mut next_state: ResMut<NextState<ModalMenuState>>) {
     next_state.set(ModalMenuState::Closed);
@@ -76,34 +74,14 @@ fn spawn_modal_menu(
     commands.spawn((
         template(&asset_server, "pause_menu.html"),
         HtmlModal,
-        Node {
-            position_type: PositionType::Absolute,
-            width: percent(100),
-            height: percent(100),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
-        GlobalZIndex(PAUSE_MENU_Z),
         DespawnOnExit(ModalMenuState::Open),
     ));
-    commands
-        .spawn((
-            ControlsTips,
-            template(&asset_server, "controls_tips.html"),
-            controls_tips_context(*input_device.get(), atlases.as_deref()),
-            Node {
-                position_type: PositionType::Absolute,
-                left: px(0),
-                top: px(0),
-                ..default()
-            },
-            GlobalZIndex(PAUSE_MENU_Z + 1),
-            Pickable::IGNORE,
-            DespawnOnExit(ModalMenuState::Open),
-        ))
-        .observe(attach_controls_tip_icons);
+    commands.spawn((
+        ControlsTips,
+        template(&asset_server, "controls_tips.html"),
+        controls_tips_context(*input_device.get(), atlases.as_deref()),
+        DespawnOnExit(ModalMenuState::Open),
+    ));
 }
 
 /// Every button of this module's surfaces. "Resume" closes the modal and hands control back to
@@ -258,29 +236,15 @@ fn refresh_controls_tips(
     }
 }
 
-/// Installs the atlas `ImageNode` on each `controls-tip-icon` element (class `icon-<name>`)
-/// after every (re)build — bevy_markup has no `<img>`. Restyles keep it (app state; bevy_markup
-/// bug_0018).
-fn attach_controls_tip_icons(
-    built: On<HtmlUiBuilt>,
-    elements: HtmlElements,
+/// `<div is="input-icon" data-icon="<name>">`: the glyph's atlas `ImageNode` (bevy_markup has
+/// no `<img>`). Restyles keep it.
+fn input_icon(
+    icon: In<ElementConnected>,
     atlases: Option<Res<InputIconAtlases>>,
     mut commands: Commands,
 ) {
-    let Some(atlases) = atlases else {
-        return;
-    };
-    for (entity, element) in elements.iter(built.entity) {
-        let Some(name) = element
-            .classes
-            .iter()
-            .find_map(|class| class.strip_prefix("icon-"))
-        else {
-            continue;
-        };
-        if let Some(image) = atlases.image_node(name) {
-            commands.entity(entity).insert(image);
-        }
+    if let Some(image) = icon.data("icon").and_then(|name| atlases?.image_node(name)) {
+        commands.entity(icon.entity).insert(image);
     }
 }
 
@@ -337,13 +301,6 @@ fn spawn_vr_in_game_wrist_panel(
             template(&asset_server, "wrist_game.html"),
             // Laser-pointer driven, like the main-menu wrist panel.
             HtmlNoFocus,
-            Node {
-                width: percent(100),
-                height: percent(100),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
         ),
     );
     commands.spawn((

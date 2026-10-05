@@ -1,10 +1,12 @@
 /*
  * The one stylesheet (`DefaultStylesheet`) for every client `HtmlUi`; see `ui/markup.rs`.
- * bevy_markup's CSS subset: type/.class/#id compound selectors (+ :hover/:active), no
- * combinators or `overflow`. `position`/insets, `z-index` (sibling order), `border-radius`,
- * `border-color` and `pointer-events` work on elements, but not on the `html` rule: each
- * `HtmlUi` root's own `Node`, `GlobalZIndex` and `Pickable` are set by the spawning code.
- * Each surface keeps its rules in its own section below.
+ * bevy_markup's CSS subset: type/.class/#id compound selectors (+ :hover/:active/:focus), no
+ * combinators or `overflow`. Each template's `<html class="…-root">` styles the `HtmlUi`
+ * entity itself (placement, size, stacking, pickability: the "Roots" section); values the code
+ * computes (nameplate positions; tooltip and popup positions via bevy_markup's `HtmlAnchor`)
+ * stay on the `Node`, since CSS leaves undeclared fields alone. `pointer-events` is inherited: a root set
+ * to `none` re-enables its interactive panels with `auto`. Each surface keeps its other rules
+ * in its own section below.
  */
 
 /* === Shared === */
@@ -72,12 +74,106 @@ h2 {
   padding: 6px 10px;
   max-width: 320px;
   font-size: 18px;
+}
+
+/* === Roots ===
+ * Root-level UIs stack by `z-index` (Bevy's `ZIndex` among roots; default 0): pause menu
+ * 100/101, selector popup 900, tooltips 1000. The agent-cursor overlay (`GlobalZIndex::MAX`)
+ * stays above all of them. */
+
+/* Main menu and lobby: a full-screen layout wrapper; only the panel catches the pointer. */
+.screen-root {
+  width: 100%;
+  height: 100%;
+  align-items: end;
+  justify-content: start;
+  pointer-events: none;
+}
+
+/* Fills a render-to-texture camera's target (VR wrist panels, NPC sign). */
+.texture-root {
+  width: 100%;
+  height: 100%;
+}
+
+.wrist-game-root {
+  align-items: center;
+  justify-content: center;
+}
+
+.pause-root {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.6);
+  z-index: 100;
+}
+
+.controls-tips-root {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  z-index: 101;
+  pointer-events: none;
+}
+
+/* Placed beside its element by `HtmlAnchor` (`ui/markup.rs`). */
+.tooltip-root {
+  position: absolute;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+/* Placed beside its toggle by `HtmlAnchor` (`ui/selector.rs`). */
+.selector-root {
+  position: absolute;
+  width: 280px;
+  flex-direction: column;
+  z-index: 900;
+}
+
+.crosshair-root {
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.data-frame-root {
+  position: absolute;
+  top: 0px;
+  right: 0px;
+}
+
+.hotbar-root {
+  position: absolute;
+  left: 0px;
+  right: 0px;
+  bottom: 20px;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.tui-root {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  pointer-events: none;
+}
+
+/* Moved to its target's screen position every frame by `ui/nameplate.rs` (left/top). */
+.nameplate-root {
+  position: absolute;
   pointer-events: none;
 }
 
 /* === Main menu === */
 
 .main-menu-panel {
+  pointer-events: auto;
   width: 400px;
   height: 400px;
   margin: 50px;
@@ -131,6 +227,7 @@ h2 {
 /* === Lobby === */
 
 .lobby-panel {
+  pointer-events: auto;
   width: 400px;
   height: 400px;
   margin: 50px;
@@ -184,7 +281,6 @@ h2 {
   grid-template-rows: 22px;
   align-items: center;
   justify-items: center;
-  pointer-events: none;
 }
 
 .crosshair-ring {
@@ -219,7 +315,9 @@ h2 {
   gap: 4px;
 }
 
+/* The root ignores the pointer; slots take it back for their tooltips. */
 .hotbar-slot {
+  pointer-events: auto;
   border-width: 2px;
   border-color: whitesmoke;
 }
@@ -267,7 +365,6 @@ h2 {
 .nameplate {
   align-items: center;
   gap: 2px;
-  pointer-events: none;
 }
 
 .nameplate-name {
@@ -281,8 +378,8 @@ h2 {
   background-color: darkslategray;
 }
 
+/* Width from the template (`style="width: …%"`). */
 .nameplate-fill {
-  width: 100%;
   height: 100%;
   background-color: green;
 }
@@ -336,7 +433,6 @@ h2 {
   border-color: #5fd7ff;
   font-family: monospace;
   font-size: 16px;
-  pointer-events: none;
 }
 
 .tui-screen {
@@ -363,8 +459,8 @@ h2 {
   background-color: #2a1f2e;
 }
 
+/* Width from the template (`style="width: …%"`). */
 .tui-gauge-fill {
-  width: 50%;
   height: 100%;
   background-color: magenta;
 }

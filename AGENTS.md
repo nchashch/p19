@@ -356,55 +356,73 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
     left stick; auto-repeat after 0.4 s, then every 0.08 s) and `HtmlFocus::activate` (South /
     Enter). A dead-end move fires bevy_markup's `FocusEdge` (the selector pages on it).
   - **Tooltips.** `data-on-enter="tooltip" data-on-leave="tooltip"` + `data-with`
-    `{"tooltip": key, "tooltip_args": {...}, "tooltip_above": bool}` → a `tooltip.html` root beside
-    the element, on the element's UI camera.
+    `{"tooltip": key, "tooltip_args": {...}, "tooltip_above": bool}` → a `tooltip.html` root
+    anchored beside (or above) the element with bevy_markup's `HtmlAnchor` (follows it, stays in
+    the viewport, renders on its UI camera, despawned with it).
 - **`ui/ui.rs`** — main menu (`main_menu.html`): Connect, Options (stub selector), Credits
   (stub), Quit, Language (`en-US`/`ru-RU`/`ja-JP`, labels in their own script). The same template
   (`wrist = true`) is the VR main-menu wrist panel. Registers `HudPlugin` and `SelectorPlugin`.
 - **`ui/selector.rs`** — generic popup (ADR 0001's behavior): a `Selector { key, options }`
   entity per picker; a toggle element (`data-on-click="selector.toggle"`, `data-with`
-  `{"selector": key}`) opens a `selector.html` root (`HtmlModal`) right of it, 5 visible rows
-  (ids `slot-0..4`) over a paginated window, a discrete scrollbar, wheel and edge paging, resume at
-  the last pick; picks arrive as `SelectorPicked { selector, value }` messages.
+  `{"selector": key}`) opens a `selector.html` root (`HtmlModal`) anchored right of it
+  (`HtmlAnchor`; closes with the toggle), 5 visible rows
+  (ids `slot-0..4`, updated in place when paging, so focus stays on its row) over a paginated
+  window, a discrete scrollbar, wheel and edge paging, resume at the last pick (its row is
+  `autofocus`); picks arrive as `SelectorPicked { selector, value }` messages.
 - **`ui/lobby.rs`** — `lobby.html`: Play (`InGameRequest`), Level selector (options from the
   replicated `Levels`, re-seeded on change; labels are Fluent keys; a pick sends
   `LoadLevelRequest`), Main Menu (`Disconnect` + `MainMenu`).
 - **`ui/modal_menu.rs`** — pause menu (`pause_menu.html`, `HtmlModal`, Main Menu above Resume,
   Resume auto-focused), the controls tips (`controls_tips.html`, keyboard/mouse vs Steam Deck rows
-  by `InputDeviceState`) and the VR in-game wrist panel (`wrist_game.html`).
-- **`ui/hud.rs`** — crosshair (dot, or the `CrosshairGcdMaterial` ring while the GCD runs), data
+  by `InputDeviceState`; glyphs are `is="input-icon" data-icon="<name>"`) and the VR in-game
+  wrist panel (`wrist_game.html`).
+- **`ui/hud.rs`** — crosshair (dot, or the `CrosshairGcdMaterial` ring while the GCD runs;
+  `is="crosshair-dot"`/`"crosshair-gcd-ring"`; hotbar cells `is="gcd-overlay"`), data
   frame (Tab/Select via `DataFrameVisible`; its context is written every frame while shown),
   hotbar (`HOTBAR_ENABLED = false`); `HudVisible` (console `hud`) hides them. Reads ahoy's
   `CharacterControllerState::grounded`.
-- **`ui/nameplate.rs`** — one screen-space `nameplate.html` root per `HitPoints` entity, moved and
-  faded per frame; hidden by default (`NameplatesVisible`, console `nameplates`).
+- **`ui/nameplate.rs`** — one screen-space `nameplate.html` root per `HitPoints` entity, moved
+  per frame (`Node.left`/`top`); name, health (`style="width: …%"`) and distance fade (root
+  `style="opacity: …"`) are template values written every frame while shown (rounded to 1%);
+  hidden by default (`NameplatesVisible`, console `nameplates`; reflected, so BRP
+  `world.insert_resources` toggles it too).
 - **`ui/npc_ui_quad.rs`** — one `npc_sign.html` root rendered into a shared texture shown on every
   NPC's billboard quad (`NpcUiQuad`/`NpcUiQuadMesh`, used by `gameplay/npc_spawner.rs`).
 - **`ui/quad_panel.rs`** — `quad_panel(.., content: impl Bundle)`: an interactive UI root on a
   render-to-texture 3D quad, picked by the desktop crosshair ray or VR lasers (VR wrist panels).
-- **`ui/tui_panel.rs`** — terminal-styled demo panel (`tui_panel.html`) top-right of the main menu.
+- **`ui/tui_panel.rs`** — terminal-styled demo panel (`tui_panel.html`) top-right of the main menu;
+  elapsed seconds and the gauge (`style="width: …%"`) are template values written every frame.
 - **`ui/input_icons.rs`** — Kenney keyboard/mouse and Steam Deck glyph atlases
   (`InputIconAtlases::image_node(name)`, `None` when a pack is absent).
 - **`ui/localization.rs`** — the `Locale` resource and the console's `Localization`.
 
-bevy_markup rules that bite (the crate's own `AGENTS.md`, in its checkout under
-`~/.cargo/git/checkouts/bevy_markup-*/`, documents the full CSS subset and pipeline):
+bevy_markup rules that bite (the crate's own `AGENTS.md`, in `../../PROTOTYPE_23/bevy_markup/`,
+documents the full CSS subset and pipeline):
 
-- An `HtmlUi` root's children belong to the pipeline: a `TemplateContext`/locale/template change
-  that alters the rendered HTML despawns and rebuilds them (`HtmlUiBuilt` — re-attach components
-  there); an identical render does nothing, so write contexts unconditionally (no app-side
-  diffing of last-written values); style-only changes
+- An `HtmlUi` root's children belong to the pipeline. A `TemplateContext`/locale/template change
+  that alters the rendered HTML updates them in place (`HtmlUiBuilt`): elements still in the
+  document — matched by unique `id`, else by position — keep their entities, hover/focus and
+  app components; only appearing/disappearing ones are spawned/despawned. An identical render does
+  nothing, so write contexts unconditionally, even every frame (no app-side diffing); give
+  repeated or optional elements stable `id`s. Per-frame visuals are template values in a
+  `style="…"` attribute (`width`, `opacity`, …), rounded to what's visible. Style-only changes
   restyle in place (`HtmlUiRestyled`). Never parent other entities under an `HtmlUi` root (the
-  menu/lobby `WorldAssetRoot` backgrounds are separate entities). Per-frame values (crosshair GCD,
-  nameplate position/fade/fill, the TUI gauge) mutate built entities instead of re-rendering.
-- App components on built elements (an atlas `ImageNode` for an icon, a `MaterialNode`)
-  survive restyles; only a rebuild drops them, so attach them on `HtmlUiBuilt`.
-- CSS handles element-level `position`/insets, `z-index` (sibling order only), `border-radius`,
-  `border-color` and `pointer-events: none` (inherited — put it on a surface's outer element to
-  make the whole subtree unpickable: crosshair, nameplates, TUI panel, tooltips). None of them
-  apply to the `html` rule, i.e. the `HtmlUi` root itself: each root's screen placement (`Node`),
-  cross-root stacking (`GlobalZIndex`: pause menu 100/101, selector popup 900, tooltips 1000) and
-  `Pickable` stay with the spawning code. No `overflow` or combinators. No `border-image` (its
+  menu/lobby `WorldAssetRoot` backgrounds are separate entities). Material uniforms (crosshair
+  GCD ring) and the nameplates' screen position stay component updates.
+- App components on built elements (an atlas `ImageNode` for an icon, a `MaterialNode`, a
+  marker a per-frame system queries) are declared in the template: `<div is="<name>" data-…>`
+  runs the system registered with `app.define_html_element("<name>", system)`
+  (`In<ElementConnected>`: entity, UI root, `data-*` dataset) on every spawn of that element,
+  before `HtmlUiBuilt`, once per element entity (in-place updates and restyles keep it and what
+  it attached; a changed `is`/dataset spawns a new element). No lookups by `id`.
+- CSS handles `position`/insets, `z-index`, `border-radius`, `border-color` and
+  `pointer-events: none` (inherited; re-enable with `auto`) on elements *and* on each `HtmlUi`
+  root: every template is wrapped in `<html class="<surface>-root">`, and `theme.css`'s "Roots"
+  section places, sizes, stacks and (un)picks the roots — `z-index` there is Bevy's `ZIndex`
+  among roots (pause menu 100/101, selector popup 900, tooltips 1000; the agent cursor's
+  `GlobalZIndex::MAX` stays on top). Spawning code sets only what it computes (nameplate
+  `left`/`top`); overlays beside an element use `HtmlAnchor`. CSS leaves undeclared `Node` fields and
+  components alone and gives back anything it stops declaring. No `overflow` or combinators. No `border-image` (its
   image would never load under `--no-render`, so the UI would never build).
 - `button` isn't a container: buttons are `<div class="button" id="…" data-on-click="…">` with a
   `<p data-l10n-id="…">English fallback</p>` label. Give every clickable a stable `id`.

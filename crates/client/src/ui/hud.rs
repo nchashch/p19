@@ -33,8 +33,14 @@ impl Plugin for HudPlugin {
             Startup,
             (setup_gcd_overlay_material, setup_crosshair_gcd_material),
         );
-        app.add_observer(on_crosshair_built)
-            .add_observer(on_hotbar_built);
+        app.define_html_element("crosshair-gcd-ring", crosshair_gcd_ring)
+            .define_html_element(
+                "crosshair-dot",
+                |dot: In<ElementConnected>, mut commands: Commands| {
+                    commands.entity(dot.entity).insert(CrosshairDot);
+                },
+            )
+            .define_html_element("gcd-overlay", gcd_overlay);
         app.add_systems(
             Update,
             (
@@ -113,54 +119,25 @@ pub fn spawn_in_game_scene(mut commands: Commands, asset_server: Res<AssetServer
         markup::template(&asset_server, "data_frame.html"),
         template_context(&values),
         DataFrame,
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(0),
-            right: px(0),
-            ..default()
-        },
         Visibility::Hidden,
         DespawnOnExit(GameState::InGame),
     ));
     commands.spawn((
         HudElement,
-        Crosshair,
         markup::template(&asset_server, "crosshair.html"),
-        Node {
-            width: percent(100),
-            height: percent(100),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            ..default()
-        },
-        Pickable::IGNORE,
         DespawnOnExit(GameState::InGame),
     ));
     if HOTBAR_ENABLED {
         commands.spawn((
             HudElement,
-            Hotbar,
             markup::template(&asset_server, "hotbar.html"),
             TemplateContext::new()
                 .with("damage", &DAMAGE)
                 .with("attack_range", &ATTACK_RANGE),
-            Node {
-                position_type: PositionType::Absolute,
-                left: px(0),
-                right: px(0),
-                bottom: px(HOTBAR_BOTTOM_PADDING),
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            Pickable::IGNORE,
             DespawnOnExit(GameState::InGame),
         ));
     }
 }
-
-/// Marks the crosshair root.
-#[derive(Component)]
-struct Crosshair;
 
 /// The plain dot shown while the GCD is ready — hidden in favor of [`CrosshairGcdRing`] while it
 /// runs. See `update_crosshair_gcd`.
@@ -172,51 +149,29 @@ struct CrosshairDot;
 #[derive(Component)]
 struct CrosshairGcdRing;
 
-/// Attaches the ring's material on every (re)build. Unpickability and the dot's roundness are
-/// CSS (`.crosshair`, `.crosshair-dot`).
-fn on_crosshair_built(
-    built: On<HtmlUiBuilt>,
-    crosshairs: Query<(), With<Crosshair>>,
-    elements: HtmlElements,
+/// `<div is="crosshair-gcd-ring">`: the ring's material, hidden until the GCD runs.
+/// Unpickability and the dot's roundness are CSS (`.crosshair`, `.crosshair-dot`).
+fn crosshair_gcd_ring(
+    ring: In<ElementConnected>,
     handle: Res<CrosshairGcdMaterialHandle>,
     mut commands: Commands,
 ) {
-    let root = built.entity;
-    if !crosshairs.contains(root) {
-        return;
-    }
-    if let Some(ring) = elements.by_id(root, "crosshair-ring") {
-        commands.entity(ring).insert((
-            CrosshairGcdRing,
-            MaterialNode(handle.0.clone()),
-            Visibility::Hidden,
-        ));
-    }
-    if let Some(dot) = elements.by_id(root, "crosshair-dot") {
-        commands.entity(dot).insert(CrosshairDot);
-    }
+    commands.entity(ring.entity).insert((
+        CrosshairGcdRing,
+        MaterialNode(handle.0.clone()),
+        Visibility::Hidden,
+    ));
 }
 
-/// Marks the hotbar root.
-#[derive(Component)]
-struct Hotbar;
-
-const HOTBAR_BOTTOM_PADDING: f32 = 20.0;
-
-/// Attaches the shared GCD sweep to every slot's `.hotbar-gcd` overlay cell.
-fn on_hotbar_built(
-    built: On<HtmlUiBuilt>,
-    hotbars: Query<(), With<Hotbar>>,
-    elements: HtmlElements,
+/// `<div is="gcd-overlay">`: a hotbar slot's share of the global GCD sweep.
+fn gcd_overlay(
+    overlay: In<ElementConnected>,
     handle: Res<GcdOverlayMaterialHandle>,
     mut commands: Commands,
 ) {
-    if !hotbars.contains(built.entity) {
-        return;
-    }
-    for overlay in elements.by_class(built.entity, "hotbar-gcd") {
-        commands.entity(overlay).insert(MaterialNode(handle.0.clone()));
-    }
+    commands
+        .entity(overlay.entity)
+        .insert(MaterialNode(handle.0.clone()));
 }
 
 /// Radial cooldown-sweep overlay material for hotbar slots — see `assets/shaders/gcd_overlay.wgsl`.

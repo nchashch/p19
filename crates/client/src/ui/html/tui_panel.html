@@ -1,10 +1,12 @@
+<html class="tui-root">
 <div class="tui-panel">
   <div class="tui-screen">
     <p class="tui-title" data-l10n-id="tui-panel-title">bevy_markup</p>
     <p class="tui-text" data-l10n-id="tui-panel-body">Rendered from HTML + CSS, live</p>
     <p class="tui-text" data-l10n-id="tui-panel-elapsed" data-l10n-args='{"seconds": {{ seconds }}}'>t = {{ seconds }}s</p>
     <div class="tui-gauge">
-      <div class="tui-gauge-fill" id="tui-gauge-fill"></div>
+      <div class="tui-gauge-fill" style="width: {{ gauge }}%"></div>
     </div>
   </div>
 </div>
+</html>

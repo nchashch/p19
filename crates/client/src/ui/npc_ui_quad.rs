@@ -151,11 +151,6 @@ fn setup_npc_ui_quad(
     // The sign (`html/npc_sign.html`) fills the whole texture.
     commands.spawn((
         markup::template(&asset_server, "npc_sign.html"),
-        Node {
-            width: percent(100),
-            height: percent(100),
-            ..default()
-        },
         UiTargetCamera(texture_camera),
     ));
 

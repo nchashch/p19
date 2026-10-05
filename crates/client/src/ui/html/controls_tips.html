@@ -1,8 +1,10 @@
+<html class="controls-tips-root">
 <div class="panel controls-tips">
   {% for row in rows %}
   <div class="controls-tip">
-    {% for icon in row.icons %}<div class="controls-tip-icon icon-{{ icon }}"></div>{% endfor %}
+    {% for icon in row.icons %}<div class="controls-tip-icon" is="input-icon" data-icon="{{ icon }}"></div>{% endfor %}
     <p class="controls-tip-label" data-l10n-id="{{ row.key }}">{{ row.label }}</p>
   </div>
   {% endfor %}
 </div>
+</html>

@@ -23,19 +23,15 @@
 //!   `"tooltip"` (a Fluent key) and optional `"tooltip_args"`/`"tooltip_above"` shows a tooltip
 //!   beside the element while the pointer is over it.
 //!
-//! bevy_markup's CSS doesn't reach the `HtmlUi` root itself: each root's screen placement
-//! (`Node`), cross-root stacking (`GlobalZIndex`) and `Pickable` are set by the spawning code.
+//! Each template's `<html class="…-root">` places, stacks and (un)picks its `HtmlUi` root from
+//! `theme.css` ("Roots"); overlays (tooltips, selector popups) are placed beside their element by
+//! bevy_markup's `HtmlAnchor`.
 
 use crate::add_observers_run_if;
 use crate::assets::collections::CommonAssets;
 use crate::controls::actions::{UiConfirm, UiNavigate};
 use bevy::asset::embedded_asset;
-use bevy::{
-    math::CompassOctant,
-    platform::collections::HashMap,
-    prelude::*,
-    ui::{ComputedUiTargetCamera, UiGlobalTransform},
-};
+use bevy::{math::CompassOctant, platform::collections::HashMap, prelude::*};
 use bevy_enhanced_input::prelude::{Press, *};
 use bevy_fluent::prelude::Locale;
 use bevy_markup::prelude::*;
@@ -234,19 +230,14 @@ struct Tooltip {
 }
 
 const TOOLTIP_GAP: f32 = 8.0;
-const TOOLTIP_Z: i32 = 1000;
 
-/// Spawns a tooltip root beside the hovered element on `tooltip` enter, despawns it on leave.
-/// Rendered on the element's own UI camera (quad panels render to textures).
+/// Spawns a tooltip root anchored beside (or `tooltip_above`) the hovered element on `tooltip`
+/// enter, despawns it on leave. bevy_markup's `HtmlAnchor` places it, renders it on the
+/// element's UI camera (quad panels render to textures) and despawns it with the element;
+/// `.tooltip-root` makes it absolute, topmost and unpickable.
 fn show_tooltips(
     mut signals: MessageReader<ElementSignal>,
     tooltips: Query<(Entity, &Tooltip)>,
-    elements: Query<(
-        &ComputedNode,
-        &UiGlobalTransform,
-        Option<&ComputedUiTargetCamera>,
-    )>,
-    cameras: Query<&Camera>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
@@ -259,71 +250,38 @@ fn show_tooltips(
                 let Some(key) = signal.payload.get("tooltip").and_then(Value::as_str) else {
                     continue;
                 };
-                let Ok((node, transform, target)) = elements.get(signal.target) else {
-                    continue;
-                };
-                let camera = target.and_then(ComputedUiTargetCamera::get);
-                // Physical px → UI px (window scale × `UiScale`), the space `Node` offsets use.
-                let scale = node.inverse_scale_factor;
-                let size = node.size() * scale;
-                let top_left = transform.translation * scale - size / 2.0;
                 let above = signal
                     .payload
                     .get("tooltip_above")
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
-                let viewport_height = camera
-                    .and_then(|camera| cameras.get(camera).ok())
-                    .and_then(Camera::physical_viewport_size)
-                    .map_or(0.0, |size| size.y as f32 * scale);
-                let position = if above {
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: px(top_left.x),
-                        bottom: px(viewport_height - top_left.y + TOOLTIP_GAP),
-                        ..default()
-                    }
+                let placement = if above {
+                    AnchorPlacement::Above
                 } else {
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: px(top_left.x + size.x + TOOLTIP_GAP),
-                        top: px(top_left.y),
-                        ..default()
-                    }
+                    AnchorPlacement::Right
                 };
                 let args = signal
                     .payload
                     .get("tooltip_args")
                     .cloned()
                     .unwrap_or(Value::Object(Default::default()));
-                let mut root = commands.spawn((
+                commands.spawn((
                     Tooltip {
                         element: signal.target,
                     },
                     template(&asset_server, "tooltip.html"),
                     TemplateContext::new().with("key", key).with("args", &args),
-                    position,
-                    GlobalZIndex(TOOLTIP_Z),
-                    Pickable::IGNORE,
+                    HtmlAnchor::new(signal.target, placement).with_gap(TOOLTIP_GAP),
                 ));
-                if let Some(camera) = camera {
-                    root.insert(UiTargetCamera(camera));
-                }
             }
             SignalTrigger::Leave => {
                 for (entity, tooltip) in &tooltips {
                     if tooltip.element == signal.target {
-                        commands.entity(entity).despawn();
+                        commands.entity(entity).try_despawn();
                     }
                 }
             }
             _ => {}
-        }
-    }
-    // A tooltip whose element was despawned without a leave (its root despawned) goes too.
-    for (entity, tooltip) in &tooltips {
-        if elements.get(tooltip.element).is_err() {
-            commands.entity(entity).despawn();
         }
     }
 }

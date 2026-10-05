@@ -18,9 +18,10 @@
 //!
 //! The popup is its own `HtmlUi` root (`selector.html`) with [`HtmlModal`], so directional
 //! navigation stays inside it while it's open. Visible rows are re-rendered whenever the window
-//! pages; their element ids are per visible slot (`slot-0`..`slot-4`), so bevy_markup's focus restore
-//! keeps focus on the same slot across the re-render. Opening resumes at the last picked entry
-//! (it becomes the top row, clamped to the end of the list) and focuses it; picking closes the
+//! pages; their element ids are per visible slot (`slot-0`..`slot-4`), so bevy_markup updates the
+//! same row entities in place and focus stays on its slot. Opening resumes at the last picked
+//! entry (it becomes the top row, clamped to the end of the list; its row is `autofocus`); picking
+//! closes the
 //! popup and returns focus to the toggle. With no options, the popup shows a placeholder and
 //! isn't modal (so gamepad navigation can still reach the toggle to close it).
 
@@ -30,7 +31,6 @@ use bevy::{
     input_focus::{FocusCause, InputFocus, InputFocusVisible},
     math::CompassOctant,
     prelude::*,
-    ui::{ComputedUiTargetCamera, UiGlobalTransform},
 };
 use bevy_markup::prelude::*;
 use serde_json::{Value, json};
@@ -44,12 +44,8 @@ pub const TOGGLE_SIGNAL: &str = "selector.toggle";
 /// `data-on-click` name of a popup row (`selector.html`); `data-with` carries the option index.
 const PICK_SIGNAL: &str = "selector.pick";
 
-/// Popup root width in UI px (also used to keep the popup inside its viewport).
-const POPUP_WIDTH: f32 = 280.0;
 /// Horizontal gap between the toggle element and the popup.
 const POPUP_GAP: f32 = 8.0;
-/// Above every menu surface, below tooltips (`markup`'s `TOOLTIP_Z`).
-const POPUP_Z: i32 = 900;
 
 pub struct SelectorPlugin;
 
@@ -154,8 +150,6 @@ struct SelectorPopup {
     toggle: Entity,
     /// Index of the option shown in the top row.
     window_start: usize,
-    /// Visible slot to focus once the popup (re)builds.
-    focus_slot: Option<usize>,
 }
 
 fn max_window_start(len: usize) -> usize {
@@ -170,9 +164,11 @@ fn slot_of(element: &HtmlElement) -> Option<usize> {
     element.id.as_deref()?.strip_prefix("slot-")?.parse().ok()
 }
 
-/// `selector.html`'s variables: the visible rows and one scrollbar cell per option (`true`
-/// inside the window — the thumb).
+/// `selector.html`'s variables: the visible rows (the selected option's row `autofocus`, so a
+/// popup opening — or becoming modal when its options arrive — focuses it) and one scrollbar cell
+/// per option (`true` inside the window — the thumb).
 fn popup_context(selector: &Selector, window_start: usize) -> TemplateContext {
+    let selected = selector.selected.unwrap_or(0);
     let window = window_start..window_start + SELECTOR_VISIBLE_ROWS;
     let rows: Vec<Value> = selector
         .options
@@ -186,7 +182,13 @@ fn popup_context(selector: &Selector, window_start: usize) -> TemplateContext {
                 SelectorLabel::Literal(text) => (text, false),
                 SelectorLabel::Fluent(key) => (key, true),
             };
-            json!({ "slot": slot, "index": index, "label": label, "localized": localized })
+            json!({
+                "slot": slot,
+                "index": index,
+                "label": label,
+                "localized": localized,
+                "autofocus": index == selected,
+            })
         })
         .collect();
     let scrollbar: Vec<bool> = (0..selector.options.len())
@@ -204,12 +206,6 @@ fn handle_selector_signals(
     mut signals: MessageReader<ElementSignal>,
     mut selectors: Query<(Entity, &mut Selector)>,
     popups: Query<(Entity, &SelectorPopup)>,
-    elements: Query<(
-        &ComputedNode,
-        &UiGlobalTransform,
-        Option<&ComputedUiTargetCamera>,
-    )>,
-    cameras: Query<&Camera>,
     parents: Query<&ChildOf>,
     asset_server: Res<AssetServer>,
     mut focus: ResMut<InputFocus>,
@@ -243,21 +239,6 @@ fn handle_selector_signals(
                     focus.set(signal.target, FocusCause::Navigated);
                     continue;
                 }
-                let Ok((node, transform, target)) = elements.get(signal.target) else {
-                    continue;
-                };
-                let camera = target.and_then(ComputedUiTargetCamera::get);
-                // Physical px → UI px, the space `Node` offsets use (as `markup`'s tooltips).
-                let scale = node.inverse_scale_factor;
-                let size = node.size() * scale;
-                let top_left = transform.translation * scale - size / 2.0;
-                let mut left = top_left.x + size.x + POPUP_GAP;
-                if let Some(viewport) = camera
-                    .and_then(|camera| cameras.get(camera).ok())
-                    .and_then(Camera::physical_viewport_size)
-                {
-                    left = left.min(viewport.x as f32 * scale - POPUP_WIDTH).max(0.0);
-                }
                 let resume = selector.selected.unwrap_or(0);
                 let window_start = resume.min(max_window_start(selector.options.len()));
                 let mut popup = commands.spawn((
@@ -265,26 +246,16 @@ fn handle_selector_signals(
                         selector: selector_entity,
                         toggle: signal.target,
                         window_start,
-                        focus_slot: Some(resume - window_start),
                     },
                     markup::template(&asset_server, "selector.html"),
                     popup_context(selector, window_start),
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: px(left),
-                        top: px(top_left.y),
-                        width: px(POPUP_WIDTH),
-                        flex_direction: FlexDirection::Column,
-                        ..default()
-                    },
-                    GlobalZIndex(POPUP_Z),
+                    // Beside the toggle, kept in the viewport, on its UI camera, despawned
+                    // with it; absolute, sized and stacked by CSS (`.selector-root`).
+                    HtmlAnchor::new(signal.target, AnchorPlacement::Right).with_gap(POPUP_GAP),
                 ));
-                popup.observe(focus_built_popup).observe(scroll_popup);
+                popup.observe(scroll_popup);
                 if !selector.options.is_empty() {
                     popup.insert(HtmlModal);
-                }
-                if let Some(camera) = camera {
-                    popup.insert(UiTargetCamera(camera));
                 }
             }
             PICK_SIGNAL => {
@@ -321,11 +292,10 @@ fn handle_selector_signals(
     }
 }
 
-/// Keeps open popups consistent: closes one whose selector or toggle element is gone (state
-/// exit, owner rebuild) and re-renders one whose options changed.
+/// Keeps open popups consistent: closes one whose selector is gone (state exit) and re-renders
+/// one whose options changed. (A popup whose toggle element is gone goes with it: `HtmlAnchor`.)
 fn refresh_open_popups(
     selectors: Query<Ref<Selector>>,
-    toggles: Query<(), With<HtmlElement>>,
     mut popups: Query<(
         Entity,
         &mut SelectorPopup,
@@ -339,19 +309,15 @@ fn refresh_open_popups(
             commands.entity(entity).try_despawn();
             continue;
         };
-        if !toggles.contains(popup.toggle) {
-            commands.entity(entity).try_despawn();
-            continue;
-        }
         if !selector.is_changed() {
             continue;
         }
         let len = selector.options.len();
         if len > 0 && !modal {
-            // Options arrived while open: become modal, focusing the resume entry.
+            // Options arrived while open: become modal, which moves focus to the `autofocus`
+            // (selected) row.
             let resume = selector.selected.unwrap_or(0);
             popup.window_start = resume.min(max_window_start(len));
-            popup.focus_slot = Some(resume - popup.window_start);
             commands.entity(entity).insert(HtmlModal);
         } else {
             popup.window_start = popup.window_start.min(max_window_start(len));
@@ -363,39 +329,8 @@ fn refresh_open_popups(
     }
 }
 
-/// Focuses the slot the popup asked for once its rows exist.
-fn focus_built_popup(
-    built: On<HtmlUiBuilt>,
-    mut popups: Query<&mut SelectorPopup>,
-    elements: HtmlElements,
-    mut focus: ResMut<InputFocus>,
-) {
-    let Ok(mut popup) = popups.get_mut(built.entity) else {
-        return;
-    };
-    let Some(slot) = popup.focus_slot.take() else {
-        return;
-    };
-    if let Some(row) = elements.by_id(built.entity, &slot_id(slot)) {
-        focus.set(row, FocusCause::Navigated);
-    }
-}
-
-/// Moves `popup`'s window to `window_start` and focuses `slot` after the re-render.
-fn page_popup(
-    popup: &mut SelectorPopup,
-    context: &mut TemplateContext,
-    selector: &Selector,
-    window_start: usize,
-    slot: usize,
-) {
-    popup.window_start = window_start;
-    popup.focus_slot = Some(slot);
-    *context = popup_context(selector, window_start);
-}
-
 /// Gamepad/keyboard: navigating up from the top row or down from the bottom row pages the
-/// window by one entry, focus staying on that row.
+/// window by one entry. The rows update in place, so focus stays on that row.
 fn page_on_navigate_edge(
     edge: On<FocusEdge>,
     parents: Query<&ChildOf>,
@@ -403,9 +338,9 @@ fn page_on_navigate_edge(
     selectors: Query<&Selector>,
     mut popups: Query<(&mut SelectorPopup, &mut TemplateContext)>,
 ) {
-    let Some(slot) = elements.get(edge.entity).ok().and_then(slot_of) else {
+    if elements.get(edge.entity).ok().and_then(slot_of).is_none() {
         return;
-    };
+    }
     let Some(root) = parents
         .iter_ancestors(edge.entity)
         .find(|&ancestor| popups.contains(ancestor))
@@ -424,7 +359,8 @@ fn page_on_navigate_edge(
         CompassOctant::South if start < max_window_start(selector.options.len()) => start + 1,
         _ => return,
     };
-    page_popup(&mut popup, &mut context, selector, window_start, slot);
+    popup.window_start = window_start;
+    *context = popup_context(selector, window_start);
 }
 
 /// Mouse wheel over the popup (picking events bubble to the root): one entry per notch, focus
@@ -433,6 +369,8 @@ fn scroll_popup(
     scroll: On<Pointer<Scroll>>,
     selectors: Query<&Selector>,
     mut popups: Query<(&mut SelectorPopup, &mut TemplateContext)>,
+    elements: HtmlElements,
+    mut focus: ResMut<InputFocus>,
     mut focus_visible: ResMut<InputFocusVisible>,
 ) {
     let Ok((mut popup, mut context)) = popups.get_mut(scroll.entity) else {
@@ -450,6 +388,11 @@ fn scroll_popup(
     } else {
         return;
     };
-    page_popup(&mut popup, &mut context, selector, window_start, slot);
+    popup.window_start = window_start;
+    *context = popup_context(selector, window_start);
+    // The rows update in place: the edge row's entity stays.
+    if let Some(row) = elements.by_id(scroll.entity, &slot_id(slot)) {
+        focus.set(row, FocusCause::Navigated);
+    }
     focus_visible.0 = true;
 }
