@@ -172,11 +172,30 @@ impl From<quick_xml::events::attributes::AttrError> for SparrowAtlasError {
 }
 
 /// Both atlases, finalized once by `finalize_input_icon_atlases` from `CommonAssets`'s sheet
-/// images + parsed manifests.
+/// images + parsed manifests. A pack omitted from `CommonAssets` (playtest asset sets,
+/// `--no-common-assets`) is `None`: every lookup into it misses, so control tips render their
+/// labels without icons.
 #[derive(Resource)]
 pub struct InputIconAtlases {
-    keyboard_mouse: IconAtlas,
-    steam_deck: IconAtlas,
+    keyboard_mouse: Option<IconAtlas>,
+    steam_deck: Option<IconAtlas>,
+}
+
+impl InputIconAtlases {
+    /// The `ImageNode` for the icon named `name` (an [`InputIcon::name`]), if a loaded pack has
+    /// it. Icon names are unique across both packs (`keyboard_*`/`mouse_*` vs `steamdeck_*`).
+    pub fn image_node(&self, name: &str) -> Option<ImageNode> {
+        self.packs().find_map(|atlas| atlas.image_node(name))
+    }
+
+    /// Whether a loaded pack has the icon named `name`.
+    pub fn contains(&self, name: &str) -> bool {
+        self.packs().any(|atlas| atlas.indices.contains_key(name))
+    }
+
+    fn packs(&self) -> impl Iterator<Item = &IconAtlas> {
+        [&self.keyboard_mouse, &self.steam_deck].into_iter().flatten()
+    }
 }
 
 /// One atlas: the sheet image + a `TextureAtlasLayout` built from its manifest's rects, plus each
@@ -188,29 +207,15 @@ struct IconAtlas {
 }
 
 impl IconAtlas {
-    fn get(&self, name: &str) -> Option<usize> {
-        self.indices.get(name).copied()
-    }
-
-    /// Fallback for the playtest-assets/`--no-common-assets` mode (an atlas pair omitted from
-    /// `CommonAssets`): the default image handle + an empty layout with no icon rects. Every
-    /// `get` misses (`None`), so icon quads degrade to absent while text labels still render.
-    fn empty(layouts: &mut Assets<TextureAtlasLayout>) -> Self {
-        Self {
-            image: Handle::default(),
-            layout: layouts.add(TextureAtlasLayout::new_empty(UVec2::ZERO)),
-            indices: HashMap::default(),
-        }
-    }
-
-    fn image_node(&self, index: usize) -> ImageNode {
-        ImageNode::from_atlas_image(
+    fn image_node(&self, name: &str) -> Option<ImageNode> {
+        let index = *self.indices.get(name)?;
+        Some(ImageNode::from_atlas_image(
             self.image.clone(),
             TextureAtlas {
                 layout: self.layout.clone(),
                 index,
             },
-        )
+        ))
     }
 }
 
@@ -253,6 +258,28 @@ fn finalize_icon_atlas(
     }
 }
 
+/// One pack's atlas, or `None` (with a warning) when `CommonAssets` omits its sheet or manifest.
+/// When both are present, `CommonAssets` guarantees they're already loaded by the time
+/// `GameState::MainMenu` is entered (`GameState::AssetLoading` blocks on the collection) — hence
+/// the `expect`s on the resolved assets.
+fn finalize_pack(
+    pack: &str,
+    image: Option<Handle<Image>>,
+    manifest: Option<&Handle<SparrowAtlasManifest>>,
+    images: &Assets<Image>,
+    manifests: &Assets<SparrowAtlasManifest>,
+    layouts: &mut Assets<TextureAtlasLayout>,
+) -> Option<IconAtlas> {
+    let (Some(image), Some(manifest)) = (image, manifest) else {
+        warn!("{pack} input-icon atlas omitted from CommonAssets — control tips render without icons");
+        return None;
+    };
+    let manifest = manifests
+        .get(manifest)
+        .expect("CommonAssets guarantees the atlas manifest is already loaded");
+    Some(finalize_icon_atlas(image, manifest, images, layouts))
+}
+
 fn finalize_input_icon_atlases(
     mut commands: Commands,
     common_assets: Res<CommonAssets>,
@@ -260,88 +287,62 @@ fn finalize_input_icon_atlases(
     manifests: Res<Assets<SparrowAtlasManifest>>,
     mut layouts: ResMut<Assets<TextureAtlasLayout>>,
 ) {
-    // Both fields of each pair are `Option` for the playtest-assets/`--no-common-assets` mode: a
-    // manifest that omits the atlas keys gets `None` here, degrading to an empty fallback
-    // `IconAtlas` (icon lookups all miss → tips render without icons; labels still render).
-    // In the normal mode both keys are present and `CommonAssets` guarantees they're already
-    // loaded by the time `GameState::MainMenu` is entered (that's the whole point of
-    // `GameState::AssetLoading` blocking on the collection) — hence the `expect`s on the
-    // resolved assets stay valid there.
-    let keyboard_mouse = match (
+    let keyboard_mouse = finalize_pack(
+        "keyboard/mouse",
         common_assets.keyboard_mouse_atlas_image.clone(),
-        common_assets.keyboard_mouse_atlas_manifest.clone(),
-    ) {
-        (Some(image), Some(manifest)) => finalize_icon_atlas(
-            image,
-            manifests
-                .get(&manifest)
-                .expect("keyboard/mouse atlas manifest should already be loaded"),
-            &images,
-            &mut layouts,
-        ),
-        _ => {
-            warn!("keyboard/mouse input-icon atlas omitted from CommonAssets — control tips render without icons");
-            IconAtlas::empty(&mut layouts)
-        }
-    };
-    let steam_deck = match (
+        common_assets.keyboard_mouse_atlas_manifest.as_ref(),
+        &images,
+        &manifests,
+        &mut layouts,
+    );
+    let steam_deck = finalize_pack(
+        "Steam Deck",
         common_assets.steam_deck_atlas_image.clone(),
-        common_assets.steam_deck_atlas_manifest.clone(),
-    ) {
-        (Some(image), Some(manifest)) => finalize_icon_atlas(
-            image,
-            manifests
-                .get(&manifest)
-                .expect("Steam Deck atlas manifest should already be loaded"),
-            &images,
-            &mut layouts,
-        ),
-        _ => {
-            warn!("Steam Deck input-icon atlas omitted from CommonAssets — control tips render without icons");
-            IconAtlas::empty(&mut layouts)
-        }
-    };
+        common_assets.steam_deck_atlas_manifest.as_ref(),
+        &images,
+        &manifests,
+        &mut layouts,
+    );
     commands.insert_resource(InputIconAtlases {
         keyboard_mouse,
         steam_deck,
     });
 }
 
-/// Which pack an `Icon` came from — a plain `Copy` enum (no `Handle`s, no template machinery)
-/// deliberately, so it (and `Icon`, which pairs it with a plain `usize` index) can pass through
-/// `bsn!` scene-building as ordinary component data — see `modal_menu.rs`'s `PendingIcon` for why
-/// that matters (an already-built `ImageNode`/`TextureAtlas` value can't).
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-pub enum IconPack {
-    #[default]
-    KeyboardMouse,
-    SteamDeck,
+/// An input to show an icon for. [`InputIcon::name`] is the icon's name in its pack (the
+/// templates carry names; `InputIconAtlases::image_node` resolves them).
+#[derive(Clone, Copy, Debug)]
+pub enum InputIcon {
+    Key(KeyCode),
+    Mouse(MouseButton),
+    /// Mouse motion (always-on look/aim), not tied to a button.
+    MouseMove,
+    Gamepad(GamepadButton),
+    /// Steam Deck left stick (move), not tied to a button press.
+    LeftStick,
+    /// Steam Deck right stick (look), not tied to a button press.
+    RightStick,
 }
 
-/// A resolved icon: which pack it's from, plus its index into that pack's atlas layout. Call
-/// `resolve` (with the same `InputIconAtlases`) to turn this into an actual `ImageNode`.
-#[derive(Clone, Copy, Default)]
-pub struct Icon {
-    pub pack: IconPack,
-    pub index: usize,
-}
-
-impl Icon {
-    pub fn resolve(self, atlases: &InputIconAtlases) -> ImageNode {
-        let atlas = match self.pack {
-            IconPack::KeyboardMouse => &atlases.keyboard_mouse,
-            IconPack::SteamDeck => &atlases.steam_deck,
-        };
-        atlas.image_node(self.index)
+impl InputIcon {
+    /// The icon's name in its pack, or `None` for inputs the packs don't cover — callers decide
+    /// their own fallback (skip the icon, …) rather than this substituting something that isn't
+    /// actually the input.
+    pub fn name(self) -> Option<&'static str> {
+        match self {
+            Self::Key(key) => key_code_icon(key),
+            Self::Mouse(button) => mouse_button_icon(button),
+            Self::MouseMove => Some("mouse_move"),
+            Self::Gamepad(button) => gamepad_button_icon(button),
+            Self::LeftStick => Some("steamdeck_stick_l"),
+            Self::RightStick => Some("steamdeck_stick_r"),
+        }
     }
 }
 
-/// Looks up the icon for `key`, if this pack has one. `None` for keys the pack doesn't cover (most
-/// notably: no numpad, media, or `Super`/Windows-key icons in this set) — callers decide their own
-/// fallback (skip the icon, fall back to text, etc.) rather than this silently substituting
-/// something that isn't actually `key`.
-pub fn key_code_icon(atlases: &InputIconAtlases, key: KeyCode) -> Option<Icon> {
-    let name = match key {
+/// Keyboard/mouse pack name for `key`. No numpad, media, or `Super`/Windows-key icons in this set.
+fn key_code_icon(key: KeyCode) -> Option<&'static str> {
+    Some(match key {
         KeyCode::KeyA => "keyboard_a",
         KeyCode::KeyB => "keyboard_b",
         KeyCode::KeyC => "keyboard_c",
@@ -428,51 +429,25 @@ pub fn key_code_icon(atlases: &InputIconAtlases, key: KeyCode) -> Option<Icon> {
         KeyCode::Backquote => "keyboard_tilde",
 
         _ => return None,
-    };
-    Some(Icon {
-        pack: IconPack::KeyboardMouse,
-        index: atlases.keyboard_mouse.get(name)?,
     })
 }
 
-/// Looks up the icon for a mouse button. Not a `KeyCode`, so it's a separate function/match rather
-/// than another arm above — see the module doc comment. `MouseButton::Middle` has no icon in this
-/// pack (checked directly — `mouse_middle.png` doesn't exist alongside `mouse_left.png`/
-/// `mouse_right.png`), so it falls through to `None` like any other uncovered key.
-pub fn mouse_button_icon(atlases: &InputIconAtlases, button: MouseButton) -> Option<Icon> {
-    let name = match button {
-        MouseButton::Left => "mouse_left",
-        MouseButton::Right => "mouse_right",
-        _ => return None,
-    };
-    Some(Icon {
-        pack: IconPack::KeyboardMouse,
-        index: atlases.keyboard_mouse.get(name)?,
-    })
-}
-
-/// The mouse-motion icon (not tied to any `MouseButton` press) — used for always-on look/aim
-/// controls. Exposed as its own function rather than folded into `mouse_button_icon` since there's
-/// only ever one of these, unlike buttons.
-pub fn mouse_move_icon(atlases: &InputIconAtlases) -> Icon {
-    Icon {
-        pack: IconPack::KeyboardMouse,
-        index: atlases
-            .keyboard_mouse
-            .get("mouse_move")
-            .expect("mouse_move.png is always present in the keyboard/mouse pack"),
+/// Keyboard/mouse pack name for a mouse button. `MouseButton::Middle` has no icon in this pack
+/// (`mouse_middle.png` doesn't exist alongside `mouse_left.png`/`mouse_right.png`).
+fn mouse_button_icon(button: MouseButton) -> Option<&'static str> {
+    match button {
+        MouseButton::Left => Some("mouse_left"),
+        MouseButton::Right => Some("mouse_right"),
+        _ => None,
     }
 }
 
-/// Looks up the icon for a gamepad button, using Steam Deck's own button icons — this project's
-/// primary handheld/gamepad target (see the project's own vision notes) — rather than a
-/// generic/Xbox/PlayStation set. `bevy`'s `GamepadButton` names describe an Xbox-style layout
-/// (`South`/`East`/`North`/`West`), which the Steam Deck's face buttons also use physically
-/// (A/B/X/Y), so the mapping is direct. Only the variants `controls.rs`'s `player_controls()`
-/// actually binds are covered — `None` for the rest, same "let the caller decide" contract as
-/// `key_code_icon`.
-pub fn gamepad_button_icon(atlases: &InputIconAtlases, button: GamepadButton) -> Option<Icon> {
-    let name = match button {
+/// Steam Deck pack name for a gamepad button — this project's primary handheld/gamepad target,
+/// rather than a generic/Xbox/PlayStation set. `bevy`'s `GamepadButton` names describe an
+/// Xbox-style layout (`South`/`East`/`North`/`West`), which the Steam Deck's face buttons also use
+/// physically (A/B/X/Y), so the mapping is direct.
+fn gamepad_button_icon(button: GamepadButton) -> Option<&'static str> {
+    Some(match button {
         GamepadButton::South => "steamdeck_button_a",
         GamepadButton::East => "steamdeck_button_b",
         GamepadButton::North => "steamdeck_button_y",
@@ -494,30 +469,5 @@ pub fn gamepad_button_icon(atlases: &InputIconAtlases, button: GamepadButton) ->
         GamepadButton::DPadRight => "steamdeck_dpad_right",
 
         _ => return None,
-    };
-    Some(Icon {
-        pack: IconPack::SteamDeck,
-        index: atlases.steam_deck.get(name)?,
     })
-}
-
-/// The left-stick "move" and right-stick "look" icons (not tied to any `GamepadButton` press) —
-/// same idea as `mouse_move_icon`.
-pub fn gamepad_move_stick_icon(atlases: &InputIconAtlases) -> Icon {
-    Icon {
-        pack: IconPack::SteamDeck,
-        index: atlases
-            .steam_deck
-            .get("steamdeck_stick_l")
-            .expect("steamdeck_stick_l.png is always present in the Steam Deck pack"),
-    }
-}
-pub fn gamepad_look_stick_icon(atlases: &InputIconAtlases) -> Icon {
-    Icon {
-        pack: IconPack::SteamDeck,
-        index: atlases
-            .steam_deck
-            .get("steamdeck_stick_r")
-            .expect("steamdeck_stick_r.png is always present in the Steam Deck pack"),
-    }
 }

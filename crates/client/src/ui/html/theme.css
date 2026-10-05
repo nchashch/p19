@@ -1,0 +1,357 @@
+/*
+ * The one stylesheet (`DefaultStylesheet`) for every client `HtmlUi`; see `ui/markup.rs`.
+ * bevy_markup's CSS subset: type/.class/#id compound selectors (+ :hover/:active), no
+ * combinators, no positioning/z-index/overflow/border-color. Screen placement is the spawning
+ * code's `Node` on the `HtmlUi` root. Each surface keeps its rules in its own section below.
+ */
+
+/* === Shared === */
+
+html {
+  color: #e8e6e3;
+  font-family: serif;
+  font-size: 20px;
+}
+
+h1 {
+  color: #f2c46d;
+  font-size: 40px;
+  font-weight: bold;
+}
+
+h2 {
+  color: #f2c46d;
+  font-size: 26px;
+  font-weight: bold;
+}
+
+.panel {
+  background-color: rgba(18, 20, 26, 0.9);
+  padding: 16px;
+  gap: 8px;
+}
+
+.button {
+  background-color: #33363f;
+  padding: 10px 20px;
+  min-width: 240px;
+  align-items: center;
+  justify-content: center;
+}
+
+.button:hover {
+  background-color: #474b57;
+}
+
+.button:active {
+  background-color: #24262d;
+}
+
+.button.primary {
+  background-color: #2c5fb8;
+}
+
+.button.primary:hover {
+  background-color: #3b72d4;
+}
+
+.button.primary:active {
+  background-color: #234c94;
+}
+
+.tooltip {
+  background-color: rgba(10, 12, 16, 0.95);
+  padding: 6px 10px;
+  max-width: 320px;
+  font-size: 18px;
+}
+
+/* === Main menu === */
+
+.main-menu-panel {
+  width: 400px;
+  height: 400px;
+  margin: 50px;
+  padding: 10px;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+/* === Selector popup === */
+
+.selector-popup {
+  flex-direction: row;
+  gap: 6px;
+  padding: 6px;
+  background-color: rgba(18, 20, 26, 0.95);
+}
+
+.selector-rows {
+  flex-grow: 1;
+  gap: 4px;
+}
+
+.selector-row {
+  min-width: 0px;
+  padding: 8px 12px;
+}
+
+.selector-empty {
+  color: #9a9890;
+  font-style: italic;
+  padding: 8px 12px;
+}
+
+.selector-track {
+  width: 4px;
+  gap: 0px;
+  background-color: #2a2c33;
+}
+
+.selector-cell {
+  flex-grow: 1;
+  flex-basis: 0px;
+}
+
+.selector-thumb {
+  flex-grow: 1;
+  flex-basis: 0px;
+  background-color: #8a8d99;
+}
+
+/* === Lobby === */
+
+.lobby-panel {
+  width: 400px;
+  height: 400px;
+  margin: 50px;
+  padding: 10px;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+/* === Pause menu === */
+
+.pause-menu {
+  gap: 20px;
+  align-items: center;
+}
+
+.pause-menu-button {
+  box-sizing: border-box;
+  width: 320px;
+  height: 120px;
+  font-size: 30px;
+}
+
+/* === Controls tips === */
+
+.controls-tips {
+  width: 300px;
+}
+
+.controls-tip {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.controls-tip-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.controls-tip-label {
+  color: white;
+  font-size: 16px;
+}
+
+/* === HUD === */
+
+/* The dot and the GCD ring share one grid cell, so the ring overlays the dot. */
+.crosshair {
+  display: grid;
+  grid-template-columns: 22px;
+  grid-template-rows: 22px;
+  align-items: center;
+  justify-items: center;
+}
+
+.crosshair-ring {
+  grid-row: 1;
+  grid-column: 1;
+  width: 22px;
+  height: 22px;
+}
+
+.crosshair-dot {
+  grid-row: 1;
+  grid-column: 1;
+  width: 8px;
+  height: 8px;
+  background-color: white;
+}
+
+.data-frame {
+  width: 400px;
+  height: 400px;
+  gap: 0px;
+  font-size: 20px;
+}
+
+.data-frame-group {
+  margin-top: 20px;
+}
+
+.hotbar {
+  flex-direction: row;
+  gap: 4px;
+}
+
+/* The slot's background is its 2px frame; the face inside is the slot proper. */
+.hotbar-slot {
+  background-color: whitesmoke;
+  padding: 2px;
+}
+
+/* Letters and the GCD sweep share one grid cell; the sweep (last) draws on top. */
+.hotbar-slot-face {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+  width: 60px;
+  height: 60px;
+  align-items: center;
+  justify-items: center;
+  background-color: darkslategray;
+}
+
+.hotbar-ability {
+  grid-row: 1;
+  grid-column: 1;
+  color: white;
+  font-size: 28px;
+}
+
+.hotbar-hotkey {
+  grid-row: 1;
+  grid-column: 1;
+  align-self: end;
+  justify-self: end;
+  margin-right: 3px;
+  margin-bottom: 1px;
+  color: whitesmoke;
+  font-size: 14px;
+}
+
+.hotbar-gcd {
+  grid-row: 1;
+  grid-column: 1;
+  width: 100%;
+  height: 100%;
+}
+
+/* === Nameplates === */
+
+.nameplate {
+  align-items: center;
+  gap: 2px;
+}
+
+.nameplate-name {
+  color: white;
+  font-size: 18px;
+}
+
+.nameplate-bar {
+  width: 60px;
+  height: 6px;
+  background-color: darkslategray;
+}
+
+.nameplate-fill {
+  width: 100%;
+  height: 100%;
+  background-color: green;
+}
+
+/* === NPC sign === */
+
+.npc-sign {
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  background-color: darkslategray;
+}
+
+.npc-sign-label {
+  color: whitesmoke;
+  font-size: 64px;
+}
+
+/* === VR wrist panels === */
+
+.wrist-game-panel {
+  box-sizing: border-box;
+  width: 300px;
+  height: 120px;
+  align-items: center;
+  justify-content: center;
+}
+
+.wrist-game-button {
+  box-sizing: border-box;
+  width: 240px;
+  height: 70px;
+  min-width: 0px;
+}
+
+.wrist-main-panel {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+/* === TUI panel === */
+
+/* A terminal-styled box: the outer background is a 2px light-cyan frame. */
+.tui-panel {
+  background-color: #5fd7ff;
+  padding: 2px;
+  font-family: monospace;
+  font-size: 16px;
+}
+
+.tui-screen {
+  width: 400px;
+  background-color: #0b0e14;
+  padding: 8px 12px;
+  gap: 6px;
+  align-items: center;
+}
+
+.tui-title {
+  color: #5fd7ff;
+}
+
+.tui-text {
+  color: white;
+  font-weight: bold;
+}
+
+.tui-gauge {
+  width: 100%;
+  height: 16px;
+  margin-top: 8px;
+  background-color: #2a1f2e;
+}
+
+.tui-gauge-fill {
+  width: 50%;
+  height: 100%;
+  background-color: magenta;
+}

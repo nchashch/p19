@@ -303,7 +303,8 @@ This is the only method here that can drive UI at all.
 {"input":"button","button":"DPadUp","pressed":true}
 {"input":"button","button":"DPadUp","pressed":false}
 
-# confirm whatever's focused (South is UiConfirm's binding)
+# confirm whatever's focused (South and Enter are UiConfirm's bindings; both
+# emit the focused element's data-on-click signal, same as a mouse click)
 {"input":"button","button":"South","pressed":true}
 {"input":"button","button":"South","pressed":false}
 
@@ -315,6 +316,15 @@ This is the only method here that can drive UI at all.
 # between unrelated test scenarios
 {"input":"reset"}
 ```
+
+**Seeing focus**: the focused element draws an `Outline` (the focus ring) while
+`InputFocusVisible` is set — directional input sets it, a mouse click clears it.
+`world.query` for `bevy_markup::html::HtmlElement` with
+`"filter":{"with":["bevy_ui::ui_node::Outline"]}` returns the focused element's
+`id` (`connect`, `pause-resume`, `slot-0`, …). Every clickable element has a
+stable `id`; focus survives the element's rebuild (e.g. a selector popup paging)
+by that id. Wheel/edge paging inside a selector popup re-renders its 5 rows
+(`slot-0`..`slot-4`) — re-read `game/ui` after each step.
 
 **The one trap that will cost you real debugging time if you don't know it
 going in**: `bevy_enhanced_input`'s gamepad-button reader calls `Gamepad::get`,
@@ -341,7 +351,7 @@ Standard button names (19, matches `GamepadButton`, `Other(u8)` not exposed):
 `RightStickY`, `RightZ`.
 
 Known limitation: this doesn't flip `InputDeviceState` to `Gamepad` (the
-control-tip icons in the modal/HUD stay keyboard-styled even while driving
+control-tip icons in the pause menu stay keyboard-styled even while driving
 input this way) — that state tracks real input *events*
 (`GamepadButtonChangedEvent` etc.), and this mock writes persistent component
 state directly rather than emitting events. Cosmetic only; every actual
@@ -392,8 +402,8 @@ headlessly.
 # ButtonInput<MouseButton> (for mouse-bound gameplay actions) AND fires a
 # bevy_picking PointerInput on the pointer bevy_picking's own
 # spawn_mouse_pointer already spawns at Startup (headless or not) — so it
-# actually activates whatever UI node is under the cursor, through the real
-# hit-testing/Interaction/Activate pipeline, not a shortcut
+# actually clicks whatever UI node is under the cursor, through the real
+# hit-testing → bevy_markup `data-on-click` signal pipeline, not a shortcut
 {"input":"button","button":"Left","pressed":true}
 {"input":"button","button":"Left","pressed":false}
 
@@ -408,12 +418,11 @@ headlessly.
 {"input":"reset"}
 ```
 
-**Verified live, not just by inspection**: clicking "Connect" on the main menu
-at its actual screenshot pixel coordinates transitioned the client into
-`Lobby` through the real `bevy_ui`/`bevy_picking` pipeline (confirmed via
-`game/state`), and clicking "Options" opened/closed its real `selector` popup
-(confirmed via the `p19_client::ui::selector` log lines it emits). This is the
-first method in this API that reaches UI by *position* rather than by
+**Verified live, not just by inspection** (playtest 0022, bevy_markup UI):
+clicking "Connect" at its `game/ui` rect transitioned the client into `Lobby`;
+clicking "Language" opened its selector popup and clicking `日本語` switched
+every label to Japanese; hovering a button shows its tooltip as a `game/ui` text
+row. This is the method that reaches UI by *position* rather than by
 navigating focus and confirming.
 
 **The gotcha that cost real debugging time, same shape as `game/gamepad`'s
@@ -431,25 +440,12 @@ their own schedule, same as a real winit event would. `game/mouse`'s own
 implementation already does this correctly; don't "fix" it back to a direct
 resource write on a future refactor.
 
-**A hard ceiling, not a bug — literal keyboard Enter can never activate a
-`FeathersButton` (main menu, lobby, any `selector.rs` popup/row) through this
-harness.** `bevy_input_focus::dispatch_focused_input` (the system that turns a
-raw `KeyboardInput` event into the `FocusedInput<KeyboardInput>` a focused
-widget's native key handler reacts to) requires a `PrimaryWindow` entity to
-exist — confirmed via `world.query` for `bevy_window::window::PrimaryWindow`
-returning `[]` in `--mcp` mode — and silently no-ops its entire body otherwise,
-no error. `--mcp` mode never creates one (`WindowPlugin { primary_window:
-None }`), so this is unfixable from `game/keyboard`'s side; not believed to
-affect a real windowed client. **Use `game/mouse` or `game/gamepad`'s South
-button to test any `FeathersButton`'s click/confirm path instead** — both
-verified to work fine headlessly (mouse via `bevy_picking`'s own pipeline,
-gamepad via `ui.rs`'s `on_ui_confirm` direct-trigger bridge). Literal Enter
-*does* still work headlessly on the *old* hand-rolled `widgets::button()`
-surfaces (the HUD, the pause modal) — those go through a different,
-window-independent activation path (`on_ui_confirm_enter`'s `LegacyActivate`
-trigger) — so don't conflate "Enter doesn't work" there with this limitation;
-if Enter fails on a `widgets::button()`-based surface, that's a real bug, not
-this ceiling.
+**Enter works headlessly now.** Before the bevy_markup migration (ADR 0015),
+literal Enter could not activate a feathers button under `--mcp`
+(`bevy_input_focus::dispatch_focused_input` needs a `PrimaryWindow`). Every
+button is now confirmed by `MenuControls`' own `UiConfirm` action (bound to
+gamepad South *and* Enter), which needs no window: `game/keyboard` Enter or
+`game/gamepad` South both work on every surface (playtest 0022).
 
 ## 5c. Real desktop-window testing (no `--mcp`) — xdotool/ydotool/wtype quirks
 
@@ -459,9 +455,8 @@ need the *other* thing — a real windowed client (`target/debug/p19-client`, no
 `--mcp` flag, still needs `--features dev-tools` built in) driven by genuine
 synthetic OS input (a real uinput/Wayland device, indistinguishable from actual
 hardware to the app) — e.g. to close the loop on something `--mcp` can't test
-(the `dispatch_focused_input`/`PrimaryWindow` ceiling above is the standing
-example: literal Enter on a `FeathersButton` needs a real `PrimaryWindow` to
-work, so the only way to *prove* it works is a real window). BRP/MCP still
+(the console's backtick toggle, an edge-triggered `just_pressed` consumer — see
+§5b — is the standing example). BRP/MCP still
 work identically in this mode — `game/state`, `game/screenshot`
 (falls back to `Screenshot::primary_window()` when `OffscreenRenderTarget`
 doesn't exist), `game/keyboard`/`game/gamepad`, `world.query`/
@@ -561,18 +556,12 @@ output, not the global compositor space, unless that output happens to sit at
 `(0,0)`).
 
 **Real-window-only quirks confirmed distinct from `--mcp`'s**:
-- On a cold-started windowed client, `InputFocus` (`world.get_resources` on
-  `bevy_input_focus::InputFocus`) started at `None` even though `AutoFocus` is
-  present on the main menu's "Connect" button (`world.query` for
-  `bevy_input_focus::autofocus::AutoFocus` found it) — unlike `--mcp` mode,
-  where `AutoFocus` reliably grants focus immediately. `game/keyboard`
-  arrow-key navigation and `game/gamepad` D-pad navigation both had nothing to
-  move *from* until a real click happened once; after that, focus tracking
-  behaved normally. Not root-caused (a window-focus-timing race between the
-  compositor actually granting the new window focus and the UI scene spawning
-  is the leading guess); if a mock-input script targets a windowed client
-  immediately after launch and nothing seems to respond, try one real click
-  first, or don't assume `--mcp`'s "focus already works" baseline transfers.
+- (Pre-bevy_markup, playtest-era note.) On a cold-started windowed client,
+  `InputFocus` started at `None` even though feathers' `AutoFocus` was on the
+  main menu's "Connect" button, so arrow/D-pad navigation had nothing to move
+  from until one real click. Focus is now set by `ui::markup`'s `repair_focus`
+  (the `autofocus`-classed element) with no window dependency; not re-verified
+  on a real window since the migration.
 - `game/mouse`'s `move_to`/`button` (the click-injection path) require the
   `OffscreenRenderTarget` resource that only exists in `--mcp` mode — in a
   real window it errors cleanly (`move_to`) or silently skips the

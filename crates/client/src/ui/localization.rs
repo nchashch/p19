@@ -5,19 +5,20 @@ use fluent::FluentArgs;
 use fluent_content::{Content, Request};
 use unic_langid::langid;
 
-/// Loads `.ftl` locale assets under `assets/locales/` and exposes localized strings to the rest of
-/// the client via the `LocalizedText` marker component, reactively (`sync_localized_text`) rather
-/// than as a one-shot lookup at spawn time — the main menu's scene spawns on `OnEnter(MainMenu)`,
-/// which runs on the very first frame, before the locale folder has had a chance to finish loading,
-/// and a future runtime locale switch needs the same "re-apply everything" pass regardless.
+/// The language selection (`Locale`, written by the main menu's language picker) and the
+/// `Localization` the dev console formats its output with (`localized`). UI text doesn't go
+/// through here: `HtmlUi`s resolve `data-l10n-id` against `ActiveLocale` (`ui::markup`), which
+/// follows `Locale`.
 pub struct LocalizationPlugin;
 
 impl Plugin for LocalizationPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Locale::new(langid!("en-US")).with_default(langid!("en-US")));
-        app.add_plugins(FluentPlugin);
+        if !app.is_plugin_added::<FluentPlugin>() {
+            app.add_plugins(FluentPlugin);
+        }
         app.add_systems(Startup, load_locales);
-        app.add_systems(Update, (build_localization, sync_localized_text));
+        app.add_systems(Update, build_localization);
     }
 }
 
@@ -29,7 +30,7 @@ fn load_locales(mut commands: Commands, asset_server: Res<AssetServer>) {
 }
 
 /// Rebuilds `Localization` once the locale folder first finishes loading, and again every time
-/// `Locale.requested` changes afterward (e.g. `ui.rs`'s `select_language`) — this used to remove
+/// `Locale.requested` changes afterward (the main menu's language picker) — this used to remove
 /// `LocaleFolder` after the first build, a one-shot design that left a runtime locale switch
 /// mutating `Locale` with nothing ever reading it again. `built` (not `locale.is_changed()` alone)
 /// is what gates the *first* build: this system runs every frame from `Startup` on, so by the time
@@ -59,37 +60,11 @@ fn build_localization(
     *built = true;
 }
 
-/// Marks a `Text` entity to have its content set from `key`'s message in the current `Localization`
-/// — both once localization first becomes available and again on every later change (e.g. a locale
-/// switch). `key` doubles as the placeholder shown for the one or two frames before localization is
-/// ready, since asset loading is never instant even for these tiny `.ftl` files.
-#[derive(Component, Clone, Copy, Default)]
-pub struct LocalizedText(pub &'static str);
-
 /// Looks up `key`'s message in `localization`, formatted with `args` — falling back to the raw key
 /// itself (rather than panicking or showing nothing) if a key is ever missing from the `.ftl` files.
-/// Shared by every call site that needs an interpolated (not just static) localized string — see
-/// `hud.rs`'s `update_data_frame` and `widgets.rs`'s `show_tooltip`.
+/// Used by the dev console's command output (`dev::console`).
 pub fn localized(localization: &Localization, key: &'static str, args: &FluentArgs) -> String {
     localization
         .content(Request::new(key).args(args))
         .unwrap_or_else(|| key.to_string())
-}
-
-fn sync_localized_text(
-    localization: Option<Res<Localization>>,
-    mut texts: Query<(&LocalizedText, &mut Text)>,
-    added: Query<(), Added<LocalizedText>>,
-) {
-    let Some(localization) = localization else {
-        return;
-    };
-    if !localization.is_changed() && added.is_empty() {
-        return;
-    }
-    for (localized, mut text) in &mut texts {
-        if let Some(content) = localization.content(localized.0) {
-            text.0 = content;
-        }
-    }
 }

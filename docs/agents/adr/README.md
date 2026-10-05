@@ -30,6 +30,7 @@ Each record uses the same shape: **Context** (the problem, forces, constraints),
 | [0012](./0012-no-render-agent-client-mode.md) | A `--no-render` agent-client mode: the headless host without wgpu/Vulkan | Accepted |
 | [0013](./0013-server-determinism-and-session-replay.md) | Server-side determinism hardening and session recording/replay for post-release debugging | Accepted |
 | [0014](./0014-multiplayer-hardening-netcode-tokens-and-portable-builds.md) | Multiplayer hardening, per-client netcode tokens over TLS, and portable CI builds | Accepted |
+| [0015](./0015-client-ui-on-bevy-markup.md) | Client UI on bevy_markup (HTML templates + CSS + Fluent) | Accepted |
 
 New records should be added to this index in the same PR/commit that adds the file. From 0014
 onward, records follow [`docs/agents/skills/adr.md`](../skills/adr.md) (header table, author

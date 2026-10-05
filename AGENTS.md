@@ -91,18 +91,15 @@ Current, confirmed gaps. Don't assume these work.
   `tracking_utils.rs`, so controller grip poses likely never track (both stay at identity). Not
   re-verified on a headset. VR locomotion mocks the replicated actions with `ActionMock` each frame,
   which overrides keyboard input while in VR.
-- **Headless (`--mcp`) cannot activate `FeathersButton`s with literal Enter**:
-  `bevy_input_focus::dispatch_focused_input` requires a `PrimaryWindow`, which `--mcp` never
-  creates. Mouse clicks (`game/mouse`) and gamepad South work headlessly; windowed clients are
-  unaffected.
 - **Netcode posture is dev-grade**: TOFU-pinned self-signed TLS for the token endpoint; production
   needs a CA-signed certificate on a real backend.
 - **Dead or unused code**: `GameState::Loading`/`Paused` (never entered), `lifecycle/loading.rs`'s
   `clear_effects` (never called), `crates/client/src/assets/level.rs` and `crates/shared/src/server_state.rs`
-  (empty; the latter isn't even declared), `PreloadCollection` (never loaded), `crates/client/src/ui/framework.rs`
-  (unwired 9-slice button demo), `Character` registered for replication twice, the
-  `vleue_navigator` workspace dependency (no member uses it). The main menu's Options rows and
-  Credits button are stubs that log "not implemented yet".
+  (empty; the latter isn't even declared), `PreloadCollection` (never loaded), `Character`
+  registered for replication twice, the `vleue_navigator` workspace dependency and the client's
+  `bevy_simple_text_input` dependency (nothing uses either). The main menu's Options rows and
+  Credits button are stubs that log "not implemented yet"; the HUD hotbar is built but not
+  spawned (`hud.rs`'s `HOTBAR_ENABLED = false`).
 - **Doc/code mismatches to distrust**: `p19_shared::assets::level::Level`'s doc comment claims
   `model`/`skybox` are dependency-tracked handles — the loader just converts them to plain
   `AssetPath`s. `crates/shared/src/server_events.rs` uses stale replicon terminology.
@@ -121,8 +118,8 @@ across hardware, since this is multiplayer.
   different source directories or mip-stripped variants.
 - `PreloadCollection` is intended for proximity-based loading under the VRAM budget but is unused.
   There is no `PreloadBeacon` component (it appears only in a `TODO` comment).
-- Steam Deck button glyphs (`input_icons.rs`, `hud.rs`'s `controls_tips`) and gamepad-first UI
-  navigation (`ui.rs`'s `MenuControls`) are already in place.
+- Steam Deck button glyphs (`input_icons.rs`, the pause menu's controls tips in `modal_menu.rs`)
+  and gamepad-first UI navigation (`ui/markup.rs`'s `MenuControls`) are already in place.
 
 ## Character authoring pipeline (design, mostly unimplemented)
 
@@ -200,9 +197,11 @@ cargo run -p p19-client --release     # connects when the main menu's Connect bu
 - **No sibling path dependencies.** Crates needing local patches are pinned git branches on the
   owner's forks; check the fork's source (`~/.cargo/git/checkouts/<crate>-*/`) when behavior
   differs from upstream docs:
-  - `bevy_tui_texture` (`fix/fonts`): drops upstream's `.ttf` `AssetLoader`, which crashes
-    `bevy_asset_loader`'s dynamic assets with a `TypeId` panic. Consequence: only
-    `TuiFontSource::Ready` (embedded bytes) works; `TuiFontSource::Asset` doesn't.
+  - `bevy_markup` (`main`, the owner's own crate — HTML/Tera + CSS + Fluent → Bevy UI): every
+    client UI surface (see "UI (bevy_markup)"). It requires bevy `^0.19.1`; `Cargo.lock` pins
+    0.19.1. Its README asks apps to patch `fluent-syntax` to its fork
+    (`nchashch/fluent-rs`, `fix/fuzzing-bugs-0.11`: a panic on a broken unicode escape and a
+    stack overflow on deeply nested expressions), done in the root `[patch.crates-io]`.
   - `bevy_mod_outline` (`fix/skinned-motion-outline`): stencil/flood-init passes inherit the
     view's `motion_vector_prepass` flag (otherwise skinned meshes + TAA crash in wgpu validation).
   - `gltf` (`feat/khr_texture_basisu`, via `[patch.crates-io]`): adds `KHR_texture_basisu`.
@@ -304,47 +303,108 @@ systems.
 - **`controls/camera.rs`** — FPS camera driven by the same `RotateCamera` action the server
   consumes; in `--mcp` mode, `OffscreenRenderTarget` (1280×800) and the headless camera
   maintenance (see below).
-- **`events.rs`** — client-local events (`Connect`, `Disconnect`, `Play`, `SpawnCube`, `SpawnNpc`,
+- **`events.rs`** — client-local events (`Connect`, `Disconnect`, `SpawnCube`, `SpawnNpc`,
   animation triggers, `AttackSelected`/`KillSelected`).
 - **`lifecycle/networking.rs`** — connection, token fetch, and every `GameState` transition above.
   `ServerAddress` comes from `config.toml`.
-- **`lifecycle/lobby.rs`** — spawns the lobby UI and its `MenuControls` context; registers the
-  level-picker systems. Its `on_play` observer sends `LoadLevelRequest` for a hardcoded
-  `levels/spawn.level.ron` on the `Play` event — that level no longer exists, and this path may be
-  dead (the lobby's Play button sends `InGameRequest` directly).
+- **`lifecycle/lobby.rs`** — on `OnEnter(Lobby)` spawns the lobby UI (`ui/lobby.rs`) and its
+  `MenuControls` context.
 - **`lifecycle/loading.rs`** — `OnEnter(InGame)` spawns the HUD; `spawn_client_world_assets` loads
   the `.glb` referenced by any replicated `ClientWorldAsset` and inserts `WorldAssetRoot`. This is
   how server-authored world content appears client-side.
-- **`ui/ui.rs`** — main menu on `bevy::feathers`: Connect, Options (stub selector), Credits (stub),
-  Quit, Language (`en-US`/`ru-RU`/`ja-JP`). Gamepad confirm (`on_ui_confirm`) synthesizes the real
-  `bevy::ui_widgets::Activate`; literal Enter on old `widgets::button()` surfaces goes through
-  `on_ui_confirm_enter`'s `LegacyActivate` bridge (`FeathersButton` handles Enter natively —
-  synthesizing a second activation double-fires).
-- **`ui/lobby.rs`** — Play (`InGameRequest`), level picker (`selector.rs` over the replicated
-  `Levels`, names localized via Fluent), Main Menu. Feathers buttons must listen for
-  `bevy::ui_widgets::Activate`, not the legacy `ui::widgets` one.
-- **`ui/selector.rs`** — generic paginated popup (5 rows) firing `UiSelected { entity }`; used by
-  the level, language and options pickers.
-- **`ui/hud.rs`** — data frame, hotbar, crosshair, control tips; reads ahoy's
-  `CharacterControllerState::grounded`.
-- **`ui/tui_panel.rs`** — ratatui panel on the main menu; skipped unless the font exists at build
-  time (`crates/client/build.rs` emits the `has_tui_font` cfg).
-- **`ui/` others** — `input_icons.rs` (Kenney/Steam Deck glyphs), `widgets.rs` (hand-rolled
-  button/panel used by HUD and pause modal), `modal_menu.rs`, `nameplate.rs`, `npc_ui_quad.rs`,
-  `quad_panel.rs`, `localization.rs` (Fluent), `framework.rs` (unused demo).
+- **`ui/`** — every UI surface; see "UI (bevy_markup)" below.
 - **`presentation/`** — `animation.rs` (reads `Character`/`Idle` and ahoy's grounded state),
   `mesh_primitive.rs` (polling: turns a replicated `MeshPrimitive` into `Mesh3d` + default
   material), `particles.rs` (`bevy_hanabi`).
 - **`dev/console.rs`** — `chill_bevy_console` commands: `fps`, `physics_debug`, `respawn`,
   `despawn_cubes`, `despawn_npcs`, `play_animation`, `load_level`, `controls`, `nameplates`, `hud`,
-  `kcc_debug` (dumps the local player's input → movement chain).
+  `kcc_debug` (dumps the local player's input → movement chain). Its output is localized through
+  `ui/localization.rs`'s `localized()` (bevy_fluent `Localization`), not bevy_markup.
 - **`dev/tool_api.rs`** — the agent tool API (see below).
 - **`assets/collections.rs`** — `CommonAssets`: five world-asset handles plus optional "furniture"
-  (`#[asset(key = "…", optional)]` `Option<Handle<T>>` — fonts, sounds, skybox, icon atlases);
-  every consumer degrades when absent. `CommonAssets::placeholder()` is used by
-  `--no-common-assets`. `override_default_font` patches Bevy's default font;
-  `override_feathers_button_font` re-inserts `InheritableFont` on feathers buttons (mutating in
-  place doesn't propagate).
+  (`#[asset(key = "…", optional)]` `Option<Handle<T>>` — fonts incl. `serif_bold_font`, sounds,
+  skybox, icon atlases); every consumer degrades when absent. `CommonAssets::placeholder()` is
+  used by `--no-common-assets`. `override_default_font` patches Bevy's default font (plain `Text`
+  outside the `HtmlUi`s).
+
+### UI (bevy_markup)
+
+Every UI surface is a `bevy_markup` `HtmlUi`: a Tera template + the one stylesheet + Fluent,
+built into plain Bevy UI nodes. Design: ADR 0015. Templates and `theme.css` live in
+`crates/client/src/ui/html/` and are compiled in (`embedded_asset!`, path
+`embedded://p19_client/ui/html/<file>`), so they are versioned with the code and present under
+every asset root (`BEVY_ASSET_ROOT` sets, `--no-common-assets`, `--no-render`). Each surface
+module registers its own templates; `markup::template(&asset_server, "x.html")` loads one.
+
+- **`ui/markup.rs`** (`MarkupPlugin`) — the shared layer: `BevyMarkupPlugin`, `DefaultStylesheet`
+  = `theme.css`, the UI font in `FontFamilies` (CSS `serif`, from `CommonAssets`), `ActiveLocale`
+  following bevy_fluent's `Locale` (bundle `locales/<id>/main.ftl.yml`; the language picker writes
+  `Locale`), and the interaction layer:
+  - **One input path.** Pointer clicks on `data-on-click` elements arrive as bevy_markup
+    `ElementSignal` messages; `UiConfirm` (gamepad South or Enter, `MenuControls`) emits the same
+    message for the focused element. Surfaces handle buttons in one `MessageReader<ElementSignal>`
+    system, matching namespaced names (`main-menu.connect`, `lobby.play`, `pause.resume`,
+    `selector.toggle`/`selector.pick`, `wrist-game.main-menu`, …) and `data-with` payloads.
+  - **Navigation/focus.** `MenuControls` (`markup::menu_controls()`, spawned per UI state: main
+    menu, lobby, pause menu) drives `UiNavigate` (d-pad, arrows, left stick; auto-repeat after
+    0.4 s, then every 0.08 s). The clickable elements of `UiNav` roots get
+    `AutoDirectionalNavigation` automatically (`sync_navigation`); a visible `UiNavModal` root
+    (selector popup, pause menu) confines navigation. `repair_focus` keeps `InputFocus` on a
+    navigable element: same `id` in the same root after a rebuild, else the `autofocus`-classed
+    element, else the first. A dead-end move fires `UiNavigateEdge` (the selector pages on it).
+    The focus ring is an `Outline` drawn while `InputFocusVisible` (set by directional input,
+    cleared by pointer clicks, which also move focus).
+  - **Tooltips.** `data-on-enter="tooltip" data-on-leave="tooltip"` + `data-with`
+    `{"tooltip": key, "tooltip_args": {...}, "tooltip_above": bool}` → a `tooltip.html` root beside
+    the element, on the element's UI camera.
+- **`ui/ui.rs`** — main menu (`main_menu.html`): Connect, Options (stub selector), Credits
+  (stub), Quit, Language (`en-US`/`ru-RU`/`ja-JP`, labels in their own script). The same template
+  (`wrist = true`) is the VR main-menu wrist panel. Registers `HudPlugin` and `SelectorPlugin`.
+- **`ui/selector.rs`** — generic popup (ADR 0001's behavior): a `Selector { key, options }`
+  entity per picker; a toggle element (`data-on-click="selector.toggle"`, `data-with`
+  `{"selector": key}`) opens a `selector.html` root (`UiNavModal`) right of it, 5 visible rows
+  (ids `slot-0..4`) over a paginated window, a discrete scrollbar, wheel and edge paging, resume at
+  the last pick; picks arrive as `SelectorPicked { selector, value }` messages.
+- **`ui/lobby.rs`** — `lobby.html`: Play (`InGameRequest`), Level selector (options from the
+  replicated `Levels`, re-seeded on change; labels are Fluent keys; a pick sends
+  `LoadLevelRequest`), Main Menu (`Disconnect` + `MainMenu`).
+- **`ui/modal_menu.rs`** — pause menu (`pause_menu.html`, `UiNavModal`, Main Menu above Resume,
+  Resume auto-focused), the controls tips (`controls_tips.html`, keyboard/mouse vs Steam Deck rows
+  by `InputDeviceState`) and the VR in-game wrist panel (`wrist_game.html`).
+- **`ui/hud.rs`** — crosshair (dot, or the `CrosshairGcdMaterial` ring while the GCD runs), data
+  frame (Tab/Select via `DataFrameVisible`, re-rendered only when shown values change), hotbar
+  (`HOTBAR_ENABLED = false`); `HudVisible` (console `hud`) hides them. Reads ahoy's
+  `CharacterControllerState::grounded`.
+- **`ui/nameplate.rs`** — one screen-space `nameplate.html` root per `HitPoints` entity, moved and
+  faded per frame; hidden by default (`NameplatesVisible`, console `nameplates`).
+- **`ui/npc_ui_quad.rs`** — one `npc_sign.html` root rendered into a shared texture shown on every
+  NPC's billboard quad (`NpcUiQuad`/`NpcUiQuadMesh`, used by `gameplay/npc_spawner.rs`).
+- **`ui/quad_panel.rs`** — `quad_panel(.., content: impl Bundle)`: an interactive UI root on a
+  render-to-texture 3D quad, picked by the desktop crosshair ray or VR lasers (VR wrist panels).
+- **`ui/tui_panel.rs`** — terminal-styled demo panel (`tui_panel.html`) top-right of the main menu.
+- **`ui/input_icons.rs`** — Kenney keyboard/mouse and Steam Deck glyph atlases
+  (`InputIconAtlases::image_node(name)`, `None` when a pack is absent).
+- **`ui/localization.rs`** — the `Locale` resource and the console's `Localization`.
+
+bevy_markup rules that bite (the crate's own `AGENTS.md`, in its checkout under
+`~/.cargo/git/checkouts/bevy_markup-*/`, documents the full CSS subset and pipeline):
+
+- An `HtmlUi` root's children belong to the pipeline: a `TemplateContext`/locale/template change
+  despawns and rebuilds them (`HtmlUiBuilt` — re-attach components there); style-only changes
+  restyle in place (`HtmlUiRestyled`). Never parent other entities under an `HtmlUi` root (the
+  menu/lobby `WorldAssetRoot` backgrounds are separate entities). Per-frame values (crosshair GCD,
+  nameplate position/fade/fill, the TUI gauge) mutate built entities instead of re-rendering.
+- Restyle-in-place compares each built node's shape, **including `ImageNode` presence**; an app
+  `ImageNode` inserted on a built element turns every restyle (any `:hover`, and the
+  `PseudoState` insert after each build) into a rebuild — a rebuild loop. Put app images on a
+  child that is itself an (empty) `HtmlUi` (`modal_menu.rs`'s icons, `icon.html`), which the shape
+  check skips. `MaterialNode`s, `Outline` and other non-`ImageNode` components are safe.
+- The CSS subset has no positioning, `z-index`, `overflow`, `border-color`, `border-radius` or
+  combinators: anything placed on screen is its own root whose `Node` and `GlobalZIndex` the
+  spawning code sets (pause menu 100/101, selector popup 900, tooltips 1000). No `border-image`
+  either (its image would never load under `--no-render`, so the UI would never build).
+- `button` isn't a container: buttons are `<div class="button" id="…" data-on-click="…">` with a
+  `<p data-l10n-id="…">English fallback</p>` label. Give every clickable a stable `id`.
 
 ### Headless camera mechanics (`--mcp`)
 
@@ -466,6 +526,11 @@ Full playbook: `docs/agents/skills/playtest.md`. Design: ADRs 0009–0012.
   `game/select_level`, `game/input` (action-level `ActionMock`; bypasses modifiers), `game/gamepad`
   / `game/keyboard` / `game/mouse` (device-level mocks through real bindings), `game/ui`,
   `game/cameras`, `game/screenshot` + `game/screenshot/get`.
+- `game/ui` marks a node `clickable` iff it has a bevy_markup `data-on-click` hook
+  (`ElementSignals`); its `text` is the node's text block (`Text` + `TextSpan` runs), buttons
+  aggregate their subtree; `interaction` comes from bevy_markup's `PseudoState` (`:active` /
+  `:hover`). Gamepad South and Enter (`game/gamepad` / `game/keyboard`) both confirm the focused
+  element headlessly.
 - Implementation gotchas: BEI's gamepad-button reader uses `Gamepad`'s `analog` field, not
   `digital`; mouse motion/scroll must be written as `MouseMotion`/`MouseWheel` events (the
   accumulated resources are overwritten every frame); `game/select {"nearest": true}` excludes the

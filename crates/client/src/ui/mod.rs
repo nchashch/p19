@@ -1,8 +1,8 @@
-pub mod framework;
 pub mod hud;
 pub mod input_icons;
 pub mod lobby;
 pub mod localization;
+pub mod markup;
 pub mod modal_menu;
 pub mod nameplate;
 pub mod npc_ui_quad;
@@ -10,4 +10,3 @@ pub mod quad_panel;
 pub mod selector;
 pub mod tui_panel;
 pub mod ui;
-pub mod widgets;

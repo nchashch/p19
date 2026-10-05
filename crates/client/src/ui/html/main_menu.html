@@ -1,0 +1,26 @@
+<div class="panel {% if wrist %}wrist-main-panel{% else %}main-menu-panel{% endif %}">
+  <div class="button primary autofocus" id="connect" data-on-click="main-menu.connect"
+       data-on-enter="tooltip" data-on-leave="tooltip"
+       data-with='{"tooltip": "main-menu-connect-tooltip"}'>
+    <p data-l10n-id="main-menu-connect">Connect</p>
+  </div>
+  <div class="button" id="options" data-on-click="selector.toggle"
+       data-on-enter="tooltip" data-on-leave="tooltip"
+       data-with='{"selector": "main-menu.options", "tooltip": "main-menu-options-tooltip", "tooltip_above": true}'>
+    <p data-l10n-id="main-menu-options">Options</p>
+  </div>
+  <div class="button" id="credits" data-on-click="main-menu.credits"
+       data-on-enter="tooltip" data-on-leave="tooltip"
+       data-with='{"tooltip": "main-menu-credits-tooltip"}'>
+    <p data-l10n-id="main-menu-credits">Credits</p>
+  </div>
+  <div class="button" id="quit" data-on-click="main-menu.quit"
+       data-on-enter="tooltip" data-on-leave="tooltip"
+       data-with='{"tooltip": "main-menu-quit-tooltip"}'>
+    <p data-l10n-id="main-menu-quit">Quit</p>
+  </div>
+  <div class="button" id="language" data-on-click="selector.toggle"
+       data-with='{"selector": "main-menu.language"}'>
+    <p data-l10n-id="main-menu-language">Language</p>
+  </div>
+</div>

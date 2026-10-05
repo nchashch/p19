@@ -29,7 +29,6 @@ dev-tools = [
     "dep:reqwest",
     "dep:base64",
     "dep:image",
-    "dep:serde_json",
     "dep:schemars",
 ]
 
@@ -46,8 +45,6 @@ bevy_ahoy.workspace = true
 bevy_asset_loader.workspace = true
 bevy_common_assets.workspace = true
 bevy_hanabi.workspace = true
-bevy_tui_texture.workspace = true
-ratatui.workspace = true
 bevy_mod_outline.workspace = true
 bevy_vello.workspace = true
 bevy_seedling.workspace = true
@@ -76,6 +73,7 @@ openxr = "0.21.1"
 bevy_fluent.workspace = true
 fluent_content.workspace = true
 unic-langid.workspace = true
+bevy_markup.workspace = true
 quick-xml.workspace = true
 ron.workspace = true
 lightyear.workspace = true
@@ -104,5 +102,6 @@ base64 = { version = "0.22", optional = true }
 image = { version = "0.25", optional = true, default-features = false, features = [
     "png",
 ] }
-serde_json = { version = "1", optional = true }
+# `bevy_markup`'s `ElementSignal` payloads (`data-with`) are `serde_json::Value`s.
+serde_json = "1"
 schemars = { version = "1.0", optional = true }

@@ -1,0 +1,21 @@
+<div class="selector-popup">
+  <div class="selector-rows">
+    {% if empty %}
+    <p class="selector-empty" data-l10n-id="selector-empty">Nothing to choose yet</p>
+    {% endif %}
+    {% for row in rows %}
+    <div class="button selector-row" id="slot-{{ row.slot }}" data-on-click="selector.pick" data-with='{"index": {{ row.index }} }'>
+      {% if row.localized %}
+      <p data-l10n-id="{{ row.label }}">{{ row.label }}</p>
+      {% else %}
+      <p>{{ row.label }}</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  <div class="selector-track">
+    {% for thumb in scrollbar %}
+    <div class="{% if thumb %}selector-thumb{% else %}selector-cell{% endif %}"></div>
+    {% endfor %}
+  </div>
+</div>

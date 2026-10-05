@@ -38,7 +38,6 @@
 //! combination that produces what `bevy_fluent` actually needs, so `localization.rs` keeps its
 //! own manual `asset_server.load_folder("locales")` + polling instead.
 
-use bevy::feathers::font_styles::InheritableFont;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy::world_serialization::WorldAsset;
@@ -87,13 +86,15 @@ pub struct CommonAssets {
     #[asset(key = "skybox", optional)]
     pub skybox: Option<Handle<Image>>,
 
-    /// The client's main UI font — IosevkaSlabQP (a slab-serif face), replacing IBM Plex Serif.
-    /// Field name kept as `serif_font` rather than renamed to match: "slab serif" is still a
-    /// serif, and every call site (`widgets.rs`, `hud.rs`, `npc_ui_quad.rs`,
-    /// `override_default_font` below) already reads `serif_font` for "the UI font," not
-    /// specifically IBM Plex — renaming would've been a pure churn edit with no behavior change.
+    /// The client's UI font — IosevkaSlabQP (a slab serif), registered as the CSS `serif`
+    /// family for every `HtmlUi` (`ui::markup::register_ui_fonts`) and as Bevy's default font
+    /// (`override_default_font`).
     #[asset(key = "serif_font", optional)]
     pub serif_font: Option<Handle<Font>>,
+
+    /// The bold face of `serif_font` (CSS `font-weight: bold`, headings).
+    #[asset(key = "serif_bold_font", optional)]
+    pub serif_bold_font: Option<Handle<Font>>,
 
     /// Noto Sans JP — kept loaded purely so `parley` (Bevy 0.19's text-shaping stack) has a
     /// CJK-capable font actually registered in its font collection to fall back to for glyphs
@@ -141,6 +142,7 @@ impl CommonAssets {
             explosion: None,
             skybox: None,
             serif_font: None,
+            serif_bold_font: None,
             noto_sans_jp_font: None,
             keyboard_mouse_atlas_image: None,
             keyboard_mouse_atlas_manifest: None,
@@ -198,14 +200,8 @@ struct SpawnTrigger {
 /// set) with `CommonAssets.serif_font`, so the fallback matches this project's own UI font
 /// instead of Bevy's embedded FiraMono. `bevy_text::TextPlugin` (part of `DefaultPlugins`) seeds
 /// that same slot once, in its own `build()`, with the embedded font — this just overwrites it
-/// afterward with a real asset already in `Assets<Font>`.
-///
-/// **Does not cover `bevy_feathers` widgets** — despite an earlier version of this doc comment
-/// claiming otherwise. Confirmed by reading `bevy_feathers::controls::button`'s source:
-/// `FeathersButton` always inserts a real, explicit `font_styles::InheritableFont { font:
-/// fonts::REGULAR, .. }` pointing at feathers' own embedded Fira Sans — it never reads
-/// `Handle::default()` at all, so patching the default id here has no effect on it whatsoever.
-/// See `override_feathers_button_font`, below, for the actual fix for that.
+/// afterward with a real asset already in `Assets<Font>`. Covers plain `Text` outside the
+/// `HtmlUi`s (which pick faces through `FontFamilies`, see `ui::markup`).
 ///
 /// Not a `Startup` system, despite the name suggesting one — `CommonAssets` doesn't exist until
 /// `GameState::AssetLoading`'s `LoadingState` finishes, well after `Startup` runs (same ordering
@@ -228,49 +224,4 @@ pub fn override_default_font(common_assets: Res<CommonAssets>, mut fonts: ResMut
     // and `Assets::insert`'s `Err` case only ever comes from the `Index` variant — this can't
     // actually fail, so there's nothing meaningful to do with the `Result`.
     let _ = fonts.insert(AssetId::<Font>::default(), font);
-}
-
-/// The actual fix for `bevy_feathers` widgets not picking up `override_default_font`'s patch —
-/// see that function's doc comment for why it doesn't reach them. Overwrites
-/// `InheritableFont.font` with `CommonAssets.serif_font` the instant one is inserted, on whatever
-/// entity it lands on — `FeathersButton` is the only widget this project currently spawns that
-/// carries one, but this isn't scoped to buttons specifically, since nothing about
-/// `InheritableFont` itself is button-specific.
-///
-/// A continuous `Update` system, not a one-shot `OnEnter(GameState::MainMenu)` system like
-/// `override_default_font` — feathers widgets keep getting spawned well after the main menu
-/// (lobby, the pause modal, `selector` popups, ...), and each one inserts its own fresh
-/// `InheritableFont` at spawn time that needs the same overwrite.
-///
-/// `.run_if(resource_exists::<CommonAssets>)` in `main.rs` is load-bearing, not defensive
-/// boilerplate — confirmed by a real panic: unlike `override_default_font` (which only ever runs
-/// once `CommonAssets` is guaranteed to exist, on `OnEnter(GameState::MainMenu)`), this system
-/// runs every frame from `Startup`, well before `GameState::AssetLoading`'s `LoadingState`
-/// finishes — `Res<CommonAssets>` panics (a hard parameter-validation failure, not a query that
-/// just comes up empty) on every one of those early frames without the guard.
-///
-/// Re-`insert`s the whole component via `Commands` rather than writing through `&mut
-/// InheritableFont` directly — confirmed by testing that the `&mut` version compiles and runs but
-/// silently has no visible effect: `bevy_feathers::font_styles::on_changed_font` (the observer
-/// that actually propagates `InheritableFont.font` down into a real `TextFont` on `ThemedText`
-/// descendants) only reacts to `On<Insert, InheritableFont>`, which a plain mutable-query write
-/// never triggers — inserts/hook-fired triggers and ordinary `DerefMut` component writes are
-/// different things in Bevy, and only the former re-fires insert observers. A real `.insert()`
-/// call — even one that just replaces an already-present component's value — does re-trigger
-/// `On<Insert, _>`, which is what actually gets the corrected font propagated.
-pub fn override_feathers_button_font(
-    mut commands: Commands,
-    fonts: Query<(Entity, &InheritableFont), Added<InheritableFont>>,
-    common_assets: Res<CommonAssets>,
-) {
-    for (entity, font) in &fonts {
-        // `None` (playtest-assets mode): leave the feathers default font alone.
-        let Some(serif_font) = &common_assets.serif_font else {
-            return;
-        };
-        commands.entity(entity).insert(InheritableFont {
-            font: serif_font.clone(),
-            ..font.clone()
-        });
-    }
 }

@@ -1,5 +1,4 @@
 use avian3d::prelude::*;
-use bevy::feathers::{dark_theme::create_dark_theme, theme::UiTheme};
 use bevy::prelude::*;
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::winit::WinitPlugin;
@@ -171,8 +170,8 @@ impl Plugin for Prototype19 {
                         .disable::<bevy::post_process::PostProcessPlugin>(),
                 )
                 .init_asset::<Image>()
-                // `Shader` assets are normally registered by a render-side plugin; some
-                // always-added plugins (feathers' shaders) insert handles regardless.
+                // `Shader` assets are normally registered by a render-side plugin; UI material
+                // plugins (`UiMaterialPlugin` in `ui::hud`) insert shader handles regardless.
                 .init_asset::<bevy::shader::Shader>()
                 // Same for the visual-material stores: UI/logic systems (e.g. the NPC-quad
                 // setup) insert into them unconditionally. With no render app they're inert
@@ -267,7 +266,7 @@ impl Plugin for Prototype19 {
         }
 
         app.add_plugins((
-            bevy::feathers::FeathersPlugins,
+            ui::tui_panel::TuiPanelPlugin,
             PAnimationPlugin,
             PConsolePlugin,
             LoadingPlugin,
@@ -378,6 +377,7 @@ impl Plugin for Prototype19 {
                     GameStatePlugin { vr_enabled },
                     InputDevicePlugin,
                     NameplatePlugin,
+                    ui::markup::MarkupPlugin,
                     ui::ui::PrototypeUiPlugin,
                     lifecycle::networking::NetworkingPlugin,
                     ModalMenuPlugin,
@@ -409,16 +409,7 @@ impl Plugin for Prototype19 {
         // 15703 — dev-only (the client is untrusted; a tool API in it is a cheat surface).
         app.add_plugins(dev::tool_api::DevToolsPlugin);
 
-        // Separate statement, not folded into the plugin tuple above — that tuple is already at
-        // Bevy's 15-element `Plugins` limit (see the `AhoyPlugins` comment nearby). Must run
-        // *after* `DefaultPlugins`/`AssetPlugin` (`TerminalPlugin::build()` needs `AssetServer`
-        // to already exist to register its own asset type/loader) — see `../bevy_tui_texture`'s
-        // vendored patch (workspace `Cargo.toml`'s `bevy_tui_texture` entry) for why that loader
-        // registration is disabled there rather than solved by reordering the other way.
-        app.add_plugins(ui::tui_panel::TuiPanelPlugin);
-
-        app.insert_resource(UiTheme(create_dark_theme()))
-            .insert_resource(UiScale(UI_SCALE))
+        app.insert_resource(UiScale(UI_SCALE))
             .insert_resource(ClearColor(Color::srgb(0.1, 0.1, 0.15)))
             .insert_resource(GlobalAmbientLight {
                 color: Color::WHITE,
@@ -434,11 +425,6 @@ impl Plugin for Prototype19 {
                     ui::ui::spawn_main_menu,
                     assets::collections::override_default_font,
                 ),
-            )
-            .add_systems(
-                Update,
-                assets::collections::override_feathers_button_font
-                    .run_if(resource_exists::<assets::collections::CommonAssets>),
             );
 
         if no_common_assets {

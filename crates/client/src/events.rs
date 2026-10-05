@@ -18,9 +18,6 @@ pub struct PlayAnimationOnce {
 }
 
 #[derive(Event)]
-pub struct Play;
-
-#[derive(Event)]
 pub struct Connect;
 
 #[derive(Event)]

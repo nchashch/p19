@@ -4,6 +4,17 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0022` — bevy_markup UI Migration: Every Surface Driven Through Mouse, Gamepad and Enter
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-05 05:47 – 06:05 UTC |
+| **Commit** | `ecf2349` "Replicate Transforms" + the uncommitted bevy_markup UI migration (ADR 0015; every `crates/client/src/ui/` file, `game/ui`, bevy 0.19.1 lock); the controls-tips icon fix (F1) landed mid-run |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0022.md`](playtest_0022.md) |
+
+Verifies the client UI rewrite on bevy_markup (HTML templates + CSS + Fluent; ADR 0015) on `--mcp` and `--no-render` clients. Checks main menu, both selectors (gamepad edge paging, wheel paging, resume at the last pick), language switching to Japanese, tooltips, lobby, level pick, play, data frame, pause menu with controls tips, and nameplates. Mouse clicks, gamepad navigation/South and keyboard Enter all confirm buttons, so the old windowless-Enter gap is gone, and bug_0008 is fixed (label-only tips without atlases). Found and fixed a runaway rebuild loop: an app `ImageNode` on a built element fails bevy_markup's restyle shape check, so icons now sit on nested empty `HtmlUi`s. Open: the NPC sign quad was never attached because `decorate_npcs` didn't run (cause unconfirmed), plus one `IsDefaultUiCamera` warning.
+
 ### `playtest_0021` — Console/Modal Input Lock: Replicated Context Deactivation (bug_0007)
 
 | Field | Value |

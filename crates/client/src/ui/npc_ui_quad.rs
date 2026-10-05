@@ -1,4 +1,4 @@
-//! Demonstrates rendering `bevy_ui` onto a texture and displaying that texture on a 3D quad — the
+//! Demonstrates rendering UI onto a texture and displaying that texture on a 3D quad — the
 //! same technique as Bevy's own `examples/ui/render_ui_to_texture.rs` (a second `Camera2d`
 //! targeting an off-screen `Image` instead of the window, with a UI root pointed at it via
 //! `UiTargetCamera`), applied here to a small `Rectangle` mesh parented onto each NPC
@@ -25,12 +25,10 @@
 //! texture: see `update_npc_ui_quad_hover_material`.
 
 use bevy::{
-    asset::RenderAssetUsages,
+    asset::{RenderAssetUsages, embedded_asset},
     camera::RenderTarget,
-    color::palettes::css::{DARK_SLATE_GRAY, WHITE_SMOKE},
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages},
-    text::FontSourceTemplate,
 };
 use bevy_mod_openxr::openxr_session_running;
 use bevy_xr_utils::{
@@ -38,23 +36,22 @@ use bevy_xr_utils::{
     tracking_utils::{XrTrackedLeftGrip, XrTrackedRightGrip},
 };
 
-use crate::assets::collections::CommonAssets;
 use crate::controls::targeting::{SELECT_RANGE, Selected, screen_center_ray};
 use crate::controls::vr_controllers::{LeftTriggerAction, RightTriggerAction, analog_just_pressed};
+use crate::ui::markup;
 use p19_shared::game_state::GameState;
 
 pub struct NpcUiQuadPlugin;
 
 impl Plugin for NpcUiQuadPlugin {
     fn build(&self, app: &mut App) {
+        embedded_asset!(app, "html/npc_sign.html");
         app.init_resource::<NpcUiQuadTarget>();
-        // Not `Startup` — needs `Res<CommonAssets>` for its `TextFont`, which doesn't exist until
-        // `GameState::AssetLoading`'s `LoadingState` finishes (see `assets.rs`), well after
-        // `Startup` runs. `MainMenu` always comes after that, and always before an NPC could
-        // possibly spawn (`InGame`-only) — but unlike `Startup`, `MainMenu` isn't a once-ever
-        // state (`return_to_main_menu` re-enters it), so this needs the `run_if` guard to stay a
-        // real one-time setup instead of spawning a second render-target camera/UI scene (with no
-        // despawn logic for the first one) on every trip back to the main menu.
+        // Not `Startup`: the first `MainMenu` comes after `GameState::AssetLoading`, so the UI
+        // font is already registered when the sign first builds, and always before an NPC could
+        // possibly spawn (`InGame`-only). `MainMenu` isn't a once-ever state
+        // (`return_to_main_menu` re-enters it), so the `run_if` guard keeps this a one-time setup
+        // instead of spawning a second render-target camera/sign on every trip back.
         app.add_systems(
             OnEnter(GameState::MainMenu),
             setup_npc_ui_quad.run_if(not(resource_exists::<NpcUiQuad>)),
@@ -116,12 +113,11 @@ const QUAD_HEIGHT: f32 = 0.4;
 
 fn setup_npc_ui_quad(
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    common_assets: Res<CommonAssets>,
 ) {
-    let font = common_assets.serif_font.clone().unwrap_or_default();
     let size = Extent3d {
         width: TEXTURE_SIZE,
         height: TEXTURE_SIZE,
@@ -152,30 +148,16 @@ fn setup_npc_ui_quad(
         ))
         .id();
 
-    commands
-        .spawn_scene(bsn! {
-            Node {
-                width: percent(100),
-                height: percent(100),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-            }
-            BackgroundColor(DARK_SLATE_GRAY)
-            Children [
-                (
-                    Text("NPC")
-                    TextColor(WHITE_SMOKE)
-                    TextFont {
-                        font: FontSourceTemplate::Handle(font),
-                        font_size: px(64),
-                    }
-                ),
-            ]
-        })
-        // `UiTargetCamera` doesn't implement `FromTemplate`, so it can't be constructed through
-        // bsn!'s tuple-call component syntax the way e.g. `BackgroundColor` above can — inserted
-        // directly instead, same effect.
-        .insert(UiTargetCamera(texture_camera));
+    // The sign (`html/npc_sign.html`) fills the whole texture.
+    commands.spawn((
+        markup::template(&asset_server, "npc_sign.html"),
+        Node {
+            width: percent(100),
+            height: percent(100),
+            ..default()
+        },
+        UiTargetCamera(texture_camera),
+    ));
 
     let mesh = meshes.add(Rectangle::new(QUAD_WIDTH, QUAD_HEIGHT));
     let material = materials.add(StandardMaterial {

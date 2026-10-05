@@ -112,7 +112,7 @@ fn spawn_client_link(mut commands: Commands) {
 }
 
 /// Kicks off the connect-token fetch (see [`poll_token_fetch`]) — the actual connection opens
-/// once the token arrives. Safe to call every time `Play` is pressed: an in-flight fetch or an
+/// once the token arrives. Safe to call every time Connect is pressed: an in-flight fetch or an
 /// already-open connection returns early.
 fn on_connect_request(
     _: On<Connect>,

@@ -20,6 +20,7 @@
 use bevy::{
     asset::{RenderAssetUsages, uuid::Uuid},
     camera::{NormalizedRenderTarget, RenderTarget},
+    ecs::{lifecycle::HookContext, world::DeferredWorld},
     picking::{
         PickingSystems,
         pointer::{Location, PointerAction, PointerButton, PointerId, PointerInput},
@@ -59,19 +60,36 @@ impl Plugin for QuadPanelPlugin {
 /// resolve a `MeshRayCast` hit on it into a `bevy_ui` pointer position: which camera renders its
 /// content, and the render texture's pixel size (a hit's UV, in `0.0..1.0`, needs scaling into
 /// that to become a `Location::position`).
+///
+/// Despawning the panel despawns its texture camera and UI root too (they're separate root
+/// entities, not children: a UI root can't be parented to a 3D mesh).
 #[derive(Component)]
+#[component(on_despawn = despawn_quad_panel_parts)]
 pub struct QuadPanel {
     texture_camera: Entity,
+    content: Entity,
     texture_size: Vec2,
 }
 
-/// Builds one quad-panel instance: an off-screen `Camera2d`/`Image` render target, `scene` spawned
-/// as its UI content, and a `Rectangle` mesh (`width` x `height`, in world units) displaying that
-/// texture — returned as a bundle for the caller to spawn wherever it belongs (as a child of an
-/// NPC, a VR controller, or anywhere else). `texture_width`/`texture_height` are the render
-/// texture's resolution, which is also the coordinate space `scene`'s `Node`s lay out in (a `px`
-/// size in `scene` maps directly to that many texture pixels), independent of the mesh's physical
-/// `width`/`height` in the 3D world.
+fn despawn_quad_panel_parts(mut world: DeferredWorld, context: HookContext) {
+    let Some(panel) = world.get::<QuadPanel>(context.entity) else {
+        return;
+    };
+    let parts = [panel.texture_camera, panel.content];
+    let mut commands = world.commands();
+    for part in parts {
+        commands.entity(part).try_despawn();
+    }
+}
+
+/// Builds one quad-panel instance: an off-screen `Camera2d`/`Image` render target, `content`
+/// spawned as its UI root (with `UiTargetCamera` pointing at that camera — e.g. an `HtmlUi`
+/// bundle), and a `Rectangle` mesh (`width` x `height`, in world units) displaying that texture —
+/// returned as a bundle for the caller to spawn wherever it belongs (as a child of an NPC, a VR
+/// controller, or anywhere else). `texture_width`/`texture_height` are the render texture's
+/// resolution, which is also the coordinate space `content` lays out in (a `px` size in it maps
+/// directly to that many texture pixels), independent of the mesh's physical `width`/`height`
+/// in the 3D world.
 pub fn quad_panel(
     commands: &mut Commands,
     images: &mut Assets<Image>,
@@ -81,7 +99,7 @@ pub fn quad_panel(
     height: f32,
     texture_width: u32,
     texture_height: u32,
-    scene: impl Scene,
+    content: impl Bundle,
 ) -> impl Bundle {
     let size = Extent3d {
         width: texture_width,
@@ -113,11 +131,9 @@ pub fn quad_panel(
         ))
         .id();
 
-    // `UiTargetCamera` doesn't implement `FromTemplate`, so it can't be constructed through
-    // bsn!'s tuple-call component syntax inside `scene` itself — inserted directly instead.
-    commands
-        .spawn_scene(scene)
-        .insert(UiTargetCamera(texture_camera));
+    let content = commands
+        .spawn((content, UiTargetCamera(texture_camera)))
+        .id();
 
     let mesh = meshes.add(Rectangle::new(width, height));
     let material = materials.add(StandardMaterial {
@@ -139,6 +155,7 @@ pub fn quad_panel(
     (
         QuadPanel {
             texture_camera,
+            content,
             texture_size: Vec2::new(texture_width as f32, texture_height as f32),
         },
         Mesh3d(mesh),

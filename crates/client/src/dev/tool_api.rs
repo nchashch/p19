@@ -39,13 +39,12 @@ use std::path::PathBuf;
 use bevy::prelude::*;
 use bevy::camera::RenderTarget;
 use bevy::ecs::query::QueryState;
-use bevy::feathers::controls::FeathersButton;
 use bevy::picking::Pickable;
 use bevy::picking::hover::Hovered as PickHovered;
 use bevy::ecs::relationship::Relationship;
 use bevy::text::TextSpan;
-use bevy::ui::{ComputedUiTargetCamera, Pressed as UiPressed, UiGlobalTransform, UiStack};
-use bevy::ui_widgets::Button as UiWidgetsButton;
+use bevy::ui::{ComputedUiTargetCamera, UiGlobalTransform, UiStack};
+use bevy_markup::prelude::{ElementSignals, PseudoState};
 use std::collections::HashSet;
 use bevy::remote::http::RemoteHttpPlugin;
 use bevy::remote::{BrpError, BrpResult, RemotePlugin};
@@ -698,8 +697,9 @@ fn screenshot_get_method(_params: In<Option<serde_json::Value>>, world: &mut Wor
 
 /// `game/ui` — an accessibility-tree-style dump of the current UI: every laid-out node in
 /// back-to-front render order with its rect **in screenshot pixel space** (the same space
-/// `game/mouse`'s `move_to`/clicks consume), plus per-node text (own `Text` + descendant
-/// `TextSpan`s), `Interaction` state, bevy_picking's real hovered-entity set, and the mocked
+/// `game/mouse`'s `move_to`/clicks consume), plus per-node text (a text block's `Text` +
+/// `TextSpan` runs), clickability (a bevy_markup `data-on-click` hook), pressed/hovered state,
+/// bevy_picking's real hovered-entity set, and the mocked
 /// pointer's position. Turns "find the button in the image and guess its pixel center" into
 /// "read the row, click its rect" — and doubles as ground truth for verifying text actually
 /// rendered (a screenshot shows tofu/blank for missing fonts; this shows the string either
@@ -912,9 +912,8 @@ fn ui_dump_snapshot(world: &mut World) -> serde_json::Value {
         &UiGlobalTransform,
         &ComputedUiTargetCamera,
         Option<&InheritedVisibility>,
-        Has<UiWidgetsButton>,
-        Has<FeathersButton>,
-        Has<UiPressed>,
+        Option<&ElementSignals>,
+        Option<&PseudoState>,
         Option<&PickHovered>,
     ), (
         Without<AgentCursorRoot>,
@@ -925,12 +924,10 @@ fn ui_dump_snapshot(world: &mut World) -> serde_json::Value {
     let mut children = world.query::<&Children>();
     let mut parents = world.query::<&ChildOf>();
 
-    // First pass: raw rows in stack order. Interactive detection uses the widget markers this
-    // project's UI actually carries — `bevy_ui_widgets::Button`/`FeathersButton` (every menu,
-    // lobby, and selector button) — NOT bevy_ui's `Interaction`, which feathers buttons don't
-    // carry (confirmed via `world.list_components` on a live `FeathersButton`). The hand-rolled
-    // `widgets::button()` carries no marker at all (picking observers only) — those rows still
-    // appear with their labels, just without a clickable flag.
+    // First pass: raw rows in stack order. A row is clickable iff it declares a bevy_markup
+    // `data-on-click` hook (`ElementSignals`) — the one interaction convention every client UI
+    // surface uses (`ui::markup`). Pressed/hovered come from bevy_markup's `PseudoState`
+    // (`:active`/`:hover`, maintained from picking), hovered also from picking's own `Hovered`.
     struct Row {
         entity: Entity,
         rect: [i32; 4],
@@ -940,7 +937,7 @@ fn ui_dump_snapshot(world: &mut World) -> serde_json::Value {
     }
     let mut rows = Vec::new();
     for &entity in &stack {
-        let Ok((node, transform, target, visibility, ui_button, feathers, pressed, hovered)) =
+        let Ok((node, transform, target, visibility, signals, pseudo, hovered)) =
             nodes.get(world, entity)
         else {
             continue;
@@ -965,10 +962,11 @@ fn ui_dump_snapshot(world: &mut World) -> serde_json::Value {
         if angle.abs() > 0.01 {
             continue;
         }
-        let clickable = ui_button || feathers;
-        let interaction = if pressed {
+        let clickable = signals.is_some_and(crate::ui::markup::is_clickable);
+        let pseudo = pseudo.copied().unwrap_or_default();
+        let interaction = if pseudo.active {
             Some("Pressed".to_owned())
-        } else if hovered.is_some_and(|hovered| hovered.0) {
+        } else if pseudo.hovered || hovered.is_some_and(|hovered| hovered.0) {
             Some("Hovered".to_owned())
         } else if clickable {
             Some("Idle".to_owned())
@@ -976,12 +974,12 @@ fn ui_dump_snapshot(world: &mut World) -> serde_json::Value {
             None
         };
         // Clickable rows aggregate their subtree text (that's the button's label); plain
-        // containers show only their own text — otherwise the root panel row would repeat
-        // every label on screen.
+        // nodes show only their own text (a `Text` block with its `TextSpan` runs) — otherwise
+        // the root panel row would repeat every label on screen.
         let text = if clickable {
             subtree_text(entity, &*world, &mut texts, &mut spans, &mut children)
         } else {
-            direct_text(entity, &*world, &mut texts, &mut spans)
+            direct_text(entity, &*world, &mut texts, &mut spans, &mut children)
         };
         rows.push(Row {
             entity,
@@ -1055,9 +1053,8 @@ fn ui_dump_snapshot(world: &mut World) -> serde_json::Value {
     })
 }
 
-/// The text carried by `entity`'s whole subtree: its own `Text` plus every descendant's
-/// `TextSpan`/`Text`, in child order, joined with spaces. `None` when the subtree carries no
-/// non-empty text.
+/// The text carried by `entity`'s whole subtree: each text block ([`direct_text`]) in child
+/// order, joined with spaces. `None` when the subtree carries no non-empty text.
 fn subtree_text(
     entity: Entity,
     world: &World,
@@ -1065,19 +1062,10 @@ fn subtree_text(
     spans: &mut QueryState<&TextSpan>,
     children: &mut QueryState<&Children>,
 ) -> Option<String> {
+    if texts.get(world, entity).is_ok() {
+        return direct_text(entity, world, texts, spans, children);
+    }
     let mut parts: Vec<String> = Vec::new();
-    if let Ok(text) = texts.get(world, entity) {
-        let text = text.trim();
-        if !text.is_empty() {
-            parts.push(text.to_owned());
-        }
-    }
-    if let Ok(spans) = spans.get(world, entity) {
-        let text = spans.trim();
-        if !text.is_empty() {
-            parts.push(text.to_owned());
-        }
-    }
     if let Ok(kids) = children.get(world, entity) {
         for kid in kids.iter() {
             if let Some(more) = subtree_text(kid, world, texts, spans, children) {
@@ -1088,29 +1076,39 @@ fn subtree_text(
     (!parts.is_empty()).then(|| parts.join(" "))
 }
 
-/// Only the text components on `entity` itself — no descent. Used for non-clickable rows so a
-/// container node doesn't repeat every descendant label (buttons aggregate via
-/// [`subtree_text`] instead).
+/// The text of `entity`'s own text block: its `Text` followed by its `TextSpan` runs
+/// (bevy_markup builds each block as a `Text` with one `TextSpan` child per styled run), runs
+/// concatenated as rendered. No descent into other nodes, so a container doesn't repeat every
+/// descendant label (buttons aggregate via [`subtree_text`] instead).
 fn direct_text(
     entity: Entity,
     world: &World,
     texts: &mut QueryState<&Text>,
     spans: &mut QueryState<&TextSpan>,
+    children: &mut QueryState<&Children>,
 ) -> Option<String> {
-    let mut parts: Vec<String> = Vec::new();
-    if let Ok(text) = texts.get(world, entity) {
-        let text = text.trim();
-        if !text.is_empty() {
-            parts.push(text.to_owned());
+    fn span_runs(
+        entity: Entity,
+        world: &World,
+        spans: &mut QueryState<&TextSpan>,
+        children: &mut QueryState<&Children>,
+        out: &mut String,
+    ) {
+        let Ok(kids) = children.get(world, entity) else {
+            return;
+        };
+        for kid in kids.iter() {
+            if let Ok(span) = spans.get(world, kid) {
+                out.push_str(span);
+                span_runs(kid, world, spans, children, out);
+            }
         }
     }
-    if let Ok(span) = spans.get(world, entity) {
-        let text = span.trim();
-        if !text.is_empty() {
-            parts.push(text.to_owned());
-        }
-    }
-    (!parts.is_empty()).then(|| parts.join(" "))
+    let text = texts.get(world, entity).ok()?;
+    let mut out = text.0.clone();
+    span_runs(entity, world, spans, children, &mut out);
+    let out = out.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!out.is_empty()).then_some(out)
 }
 
 /// `game/input` — inject player input for `ticks` fixed ticks (1–600) by mocking one of the
@@ -1245,7 +1243,7 @@ struct AgentVirtualGamepad;
 /// contexts that don't explicitly set a `GamepadDevice` component default to `GamepadDevice::Any`
 /// ("input will be read from all connected gamepads") — none of this project's contexts set one,
 /// so a bare `Gamepad` component on any entity, real controller or not, is read identically. This
-/// is what makes UI navigation (`ui/ui.rs`'s `MenuControls` — the pause menu, main menu, level
+/// is what makes UI navigation (`ui/markup.rs`'s `MenuControls` — the pause menu, main menu, level
 /// picker, everything `game/input` categorically can't reach since it only knows the three ahoy
 /// gameplay actions) actually testable: the exact same button/stick state a human's controller
 /// would report drives the exact same `Press`/`Axial` bindings, `UiNavigate`/`UiConfirm` actions,

@@ -1,112 +1,301 @@
 use crate::controls::controls::return_to_main_menu;
-use crate::ui::input_icons::{
-    Icon, InputIconAtlases, gamepad_button_icon, gamepad_look_stick_icon, gamepad_move_stick_icon,
-    key_code_icon, mouse_button_icon, mouse_move_icon,
-};
-use crate::ui::localization::LocalizedText;
+use crate::controls::input_device::InputDeviceState;
+use crate::ui::input_icons::{InputIcon, InputIconAtlases};
+use crate::ui::markup::{UiNavModal, menu_controls, template};
 use crate::ui::quad_panel::quad_panel;
-use crate::ui::ui::menu_controls;
-use crate::ui::widgets::{Activate, button, panel};
-use bevy::color::palettes::css::WHITE;
-use bevy::input_focus::AutoFocus;
+use bevy::asset::embedded_asset;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions};
+use bevy_markup::prelude::*;
 use bevy_xr_utils::tracking_utils::XrTrackedLeftGrip;
-use crate::controls::input_device::InputDeviceState;
 use p19_shared::game_state::{GameState, ModalMenuState, VRState};
+use serde_json::{Value, json};
 use std::f32::consts::FRAC_PI_2;
 
 /// The in-game pause menu — see `game_state::ModalMenuState`. Opened/closed by
-/// `controls::toggle_modal_menu` (Escape/`GamepadButton::Start`). Besides its two buttons, this is
-/// also where the controls-help panel lives now (`controls_tips`/`gamepad_controls_tips`) — it
-/// used to be part of the always-visible HUD (`hud.rs`), but a reference panel makes more sense
-/// tucked behind the pause menu than permanently on screen during gameplay.
+/// `controls::toggle_modal_menu` (Escape/`GamepadButton::Start`): a dimmed full-screen
+/// `pause_menu.html` root ("Main Menu" above "Resume", Resume auto-focused) plus a top-left
+/// `controls_tips.html` root listing every gameplay binding for the active input device. Also
+/// owns the VR in-game wrist panel (`wrist_game.html` on a `quad_panel`).
+///
+/// Signals: `pause.main-menu`, `pause.resume`, `wrist-game.main-menu`.
 pub struct ModalMenuPlugin;
 
 impl Plugin for ModalMenuPlugin {
     fn build(&self, app: &mut App) {
+        embedded_asset!(app, "html/pause_menu.html");
+        embedded_asset!(app, "html/controls_tips.html");
+        embedded_asset!(app, "html/wrist_game.html");
+        embedded_asset!(app, "html/icon.html");
         app.add_systems(
             OnEnter(ModalMenuState::Open),
             (spawn_modal_menu, spawn_modal_menu_controls),
         );
-        app.add_observer(on_pending_icon);
         // Resets the modal back to `Closed` whenever gameplay ends, regardless of how — this is
-        // the *only* place that happens; the "Main Menu" button below (`return_to_main_menu`)
-        // doesn't touch `ModalMenuState` itself, it just leaves `GameState::InGame`, which fires
-        // this. Also covers any other way `InGame` might end (a future disconnect/kick path from
-        // the server, say), so a later `Play` never starts with a stale `Open` state.
+        // the *only* place that happens; the "Main Menu" button (`return_to_main_menu`) doesn't
+        // touch `ModalMenuState` itself, it just leaves `GameState::InGame`, which fires this.
+        // Also covers any other way `InGame` might end (a future disconnect/kick path from the
+        // server, say), so a later `Play` never starts with a stale `Open` state.
         app.add_systems(OnExit(GameState::InGame), close_modal_menu);
-        app.add_systems(Update, update_controls_tips_visibility);
         app.add_systems(
             Update,
-            spawn_vr_in_game_wrist_panel
-                .run_if(in_state(GameState::InGame).and_then(in_state(VRState::VR))),
+            (
+                handle_modal_menu_signals,
+                refresh_controls_tips.run_if(state_changed::<InputDeviceState>),
+                spawn_vr_in_game_wrist_panel
+                    .run_if(in_state(GameState::InGame).and_then(in_state(VRState::VR))),
+            ),
         );
     }
 }
+
+/// Above the HUD; the controls tips sit one above the dimmed pause root.
+const PAUSE_MENU_Z: i32 = 100;
 
 fn close_modal_menu(mut next_state: ResMut<NextState<ModalMenuState>>) {
     next_state.set(ModalMenuState::Closed);
 }
 
-/// Without this, gamepad/keyboard directional navigation did nothing while the modal was open —
-/// `ui.rs`'s `MenuControls` context (the thing that actually turns d-pad/stick/arrow presses into
-/// `InputFocus` movement, and South/Enter into `Activate`) is normally only spawned for the main
-/// menu, and `controls::PlayerControls` (active throughout `InGame`) has no `UiNavigate`/`UiConfirm`
-/// bindings of its own — it's built for gameplay input, not UI. Spawning the same `MenuControls`
-/// context here, scoped to `ModalMenuState::Open` instead of `GameState::MainMenu`, reuses
-/// `ui.rs`'s existing `on_ui_navigate`/`on_ui_confirm` observers (they react to the action, not to
-/// which entity/context fired it) rather than duplicating that binding set.
+/// `controls::PlayerControls` (active throughout `InGame`) has no UI navigation bindings, so the
+/// pause menu spawns its own `MenuControls` context (d-pad/stick/arrows, South/Enter), scoped to
+/// `ModalMenuState::Open`.
 fn spawn_modal_menu_controls(mut commands: Commands) {
     commands.spawn((menu_controls(), DespawnOnExit(ModalMenuState::Open)));
 }
 
-/// A real system (not the usual `some_scene.spawn()` adapter, which only works for a zero-arg
-/// `Fn() -> impl SceneList`) since building the controls-tips rows needs `Res<InputIconAtlases>`
-/// to look up icons — see `input_icons.rs`. `CommandsSceneExt::spawn_scene_list` is the normal
-/// system-compatible way to spawn a `SceneList`, same underlying mechanism `.spawn()` wraps.
-fn spawn_modal_menu(mut commands: Commands, atlases: Res<InputIconAtlases>) {
-    commands.spawn_scene_list(bsn_list![modal_menu(&atlases)]);
-}
+/// Marks the controls-tips root, re-rendered by `refresh_controls_tips` when the active input
+/// device changes.
+#[derive(Component)]
+struct ControlsTips;
 
-fn modal_menu(atlases: &InputIconAtlases) -> impl Scene {
-    bsn! {
+fn spawn_modal_menu(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    input_device: Res<State<InputDeviceState>>,
+    atlases: Option<Res<InputIconAtlases>>,
+) {
+    commands.spawn((
+        template(&asset_server, "pause_menu.html"),
+        UiNavModal,
         Node {
+            position_type: PositionType::Absolute,
             width: percent(100),
             height: percent(100),
             align_items: AlignItems::Center,
             justify_content: JustifyContent::Center,
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
+        GlobalZIndex(PAUSE_MENU_Z),
+        DespawnOnExit(ModalMenuState::Open),
+    ));
+    commands
+        .spawn((
+            ControlsTips,
+            template(&asset_server, "controls_tips.html"),
+            controls_tips_context(*input_device.get(), atlases.as_deref()),
+            Node {
+                position_type: PositionType::Absolute,
+                left: px(0),
+                top: px(0),
+                ..default()
+            },
+            GlobalZIndex(PAUSE_MENU_Z + 1),
+            Pickable::IGNORE,
+            DespawnOnExit(ModalMenuState::Open),
+        ))
+        .observe(attach_controls_tip_icons);
+}
+
+/// Every button of this module's surfaces. "Resume" closes the modal and hands control back to
+/// gameplay — `GameState` never left `InGame` while the modal was up, so this is just
+/// `ModalMenuState::Closed` plus re-locking the cursor, mirroring `controls::toggle_modal_menu`'s
+/// close branch (see that function's doc comment for why the cursor is set directly rather than
+/// via an `OnExit(ModalMenuState::Open)` system).
+fn handle_modal_menu_signals(
+    mut signals: MessageReader<ElementSignal>,
+    mut next_state: ResMut<NextState<ModalMenuState>>,
+    // `Query`, not `Single<&mut …>` — windowless (`--mcp`) mode has no `CursorOptions` at all.
+    mut cursor_options: Query<&mut CursorOptions>,
+    mut commands: Commands,
+) {
+    for signal in signals.read() {
+        if signal.trigger != SignalTrigger::Click {
+            continue;
         }
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6))
-        DespawnOnExit::<ModalMenuState>(ModalMenuState::Open)
-        Children [
-            controls_tips(atlases),
-            gamepad_controls_tips(atlases),
-            (
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    column_gap: px(20),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
+        match signal.name.as_ref() {
+            "pause.main-menu" | "wrist-game.main-menu" => return_to_main_menu(commands.reborrow()),
+            "pause.resume" => {
+                next_state.set(ModalMenuState::Closed);
+                for mut options in &mut cursor_options {
+                    options.visible = false;
+                    options.grab_mode = CursorGrabMode::Locked;
                 }
-                Children [
-                    (
-                        button(px(320), px(120), "modal-menu-main-menu")
-                        on(main_menu_button)
-                    ),
-                    (
-                        button(px(320), px(120), "modal-menu-resume")
-                        AutoFocus
-                        on(resume_button)
-                    ),
-                ]
-            )
-        ]
+            }
+            _ => {}
+        }
     }
 }
 
-fn main_menu_button(_: On<Activate>, commands: Commands) {
-    return_to_main_menu(commands);
+/// One controls-tips row: a binding `controls.rs`'s `player_controls()` sets up, with the inputs
+/// it's bound to on each device — kept in sync with that list by hand (there's no single source
+/// of truth `bevy_enhanced_input` bindings could be introspected from), but written as the actual
+/// `KeyCode`s/`GamepadButton`s so a row visibly says which input it documents.
+struct ControlTip {
+    /// Fluent key of the label.
+    key: &'static str,
+    /// English fallback of the label.
+    label: &'static str,
+    keyboard_mouse: &'static [InputIcon],
+    gamepad: &'static [InputIcon],
+}
+
+const CONTROL_TIPS: [ControlTip; 11] = [
+    ControlTip {
+        key: "hud-controls-move",
+        label: "Move",
+        keyboard_mouse: &[
+            InputIcon::Key(KeyCode::KeyW),
+            InputIcon::Key(KeyCode::KeyA),
+            InputIcon::Key(KeyCode::KeyS),
+            InputIcon::Key(KeyCode::KeyD),
+        ],
+        gamepad: &[InputIcon::LeftStick],
+    },
+    ControlTip {
+        key: "hud-controls-look",
+        label: "Look",
+        keyboard_mouse: &[InputIcon::MouseMove],
+        gamepad: &[InputIcon::RightStick],
+    },
+    ControlTip {
+        key: "hud-controls-jump",
+        label: "Jump",
+        keyboard_mouse: &[InputIcon::Key(KeyCode::Space)],
+        gamepad: &[InputIcon::Gamepad(GamepadButton::South)],
+    },
+    ControlTip {
+        key: "hud-controls-select",
+        label: "Select",
+        keyboard_mouse: &[InputIcon::Mouse(MouseButton::Left)],
+        gamepad: &[InputIcon::Gamepad(GamepadButton::RightThumb)],
+    },
+    ControlTip {
+        key: "hud-controls-deselect",
+        label: "Deselect",
+        keyboard_mouse: &[InputIcon::Mouse(MouseButton::Right)],
+        gamepad: &[InputIcon::Gamepad(GamepadButton::LeftThumb)],
+    },
+    ControlTip {
+        key: "hud-controls-attack",
+        label: "Attack",
+        keyboard_mouse: &[InputIcon::Key(KeyCode::KeyF)],
+        gamepad: &[InputIcon::Gamepad(GamepadButton::RightTrigger2)],
+    },
+    ControlTip {
+        key: "hud-controls-kill",
+        label: "Kill",
+        keyboard_mouse: &[InputIcon::Key(KeyCode::KeyT)],
+        gamepad: &[InputIcon::Gamepad(GamepadButton::RightTrigger)],
+    },
+    ControlTip {
+        key: "hud-controls-spawn-cube",
+        label: "Spawn cube",
+        keyboard_mouse: &[InputIcon::Key(KeyCode::KeyE)],
+        gamepad: &[InputIcon::Gamepad(GamepadButton::LeftTrigger)],
+    },
+    ControlTip {
+        key: "hud-controls-spawn-npc",
+        label: "Spawn NPC",
+        keyboard_mouse: &[InputIcon::Key(KeyCode::KeyR)],
+        gamepad: &[InputIcon::Gamepad(GamepadButton::LeftTrigger2)],
+    },
+    ControlTip {
+        key: "hud-controls-menu",
+        label: "Menu",
+        keyboard_mouse: &[InputIcon::Key(KeyCode::Escape)],
+        gamepad: &[InputIcon::Gamepad(GamepadButton::Start)],
+    },
+    ControlTip {
+        key: "hud-controls-stats",
+        label: "Stats",
+        keyboard_mouse: &[InputIcon::Key(KeyCode::Tab)],
+        gamepad: &[InputIcon::Gamepad(GamepadButton::Select)],
+    },
+];
+
+/// `controls_tips.html`'s `rows` for `input_device`: each row's label key/fallback and the names
+/// of its icons — only icons a loaded atlas has, so a row whose icons are all missing (no
+/// atlases under `--no-common-assets`) renders label-only.
+fn controls_tips_context(
+    input_device: InputDeviceState,
+    atlases: Option<&InputIconAtlases>,
+) -> TemplateContext {
+    let rows: Vec<Value> = CONTROL_TIPS
+        .iter()
+        .map(|tip| {
+            let inputs = match input_device {
+                InputDeviceState::KeyboardMouse => tip.keyboard_mouse,
+                InputDeviceState::Gamepad => tip.gamepad,
+            };
+            let icons: Vec<&str> = inputs
+                .iter()
+                .filter_map(|input| input.name())
+                .filter(|name| atlases.is_some_and(|atlases| atlases.contains(name)))
+                .collect();
+            json!({ "key": tip.key, "label": tip.label, "icons": icons })
+        })
+        .collect();
+    TemplateContext::new().with("rows", &rows)
+}
+
+fn refresh_controls_tips(
+    input_device: Res<State<InputDeviceState>>,
+    atlases: Option<Res<InputIconAtlases>>,
+    mut tips: Query<&mut TemplateContext, With<ControlsTips>>,
+) {
+    for mut context in &mut tips {
+        *context = controls_tips_context(*input_device.get(), atlases.as_deref());
+    }
+}
+
+/// Installs the atlas image in each `controls-tip-icon` element (class `icon-<name>`) after every
+/// (re)build — bevy_markup has no `<img>`. The image goes on a child that is itself an (empty)
+/// `HtmlUi`, not on the element: bevy_markup's restyle-in-place compares each built node's shape
+/// (`ImageNode` presence included) and rebuilds on a mismatch, while nested `HtmlUi` children
+/// are exempt. An `ImageNode` on the element itself made every restyle (any `:hover` change, and
+/// the `PseudoState` insert right after each build) rebuild the tips — every frame.
+fn attach_controls_tip_icons(
+    built: On<HtmlUiBuilt>,
+    elements: HtmlElements,
+    atlases: Option<Res<InputIconAtlases>>,
+    asset_server: Res<AssetServer>,
+    mut commands: Commands,
+) {
+    let Some(atlases) = atlases else {
+        return;
+    };
+    for (entity, element) in elements.iter(built.entity) {
+        let Some(name) = element
+            .classes
+            .iter()
+            .find_map(|class| class.strip_prefix("icon-"))
+        else {
+            continue;
+        };
+        if let Some(image) = atlases.image_node(name) {
+            commands.entity(entity).with_child((
+                template(&asset_server, "icon.html"),
+                image,
+                Node {
+                    width: percent(100),
+                    height: percent(100),
+                    ..default()
+                },
+                Pickable::IGNORE,
+            ));
+        }
+    }
 }
 
 const IN_GAME_WRIST_PANEL_WIDTH: f32 = 0.18;
@@ -120,24 +309,10 @@ const IN_GAME_WRIST_PANEL_TEXTURE_HEIGHT: u32 = 220;
 #[derive(Component)]
 struct VrInGameWristPanel;
 
-/// Same single-button content on every `quad_panel`, reusing `main_menu_button` directly — a VR
-/// player presses this exactly the way they'd press the pause modal's own "Main Menu" button,
-/// just without needing to open the pause modal first.
-fn in_game_wrist_menu() -> impl Scene {
-    bsn! {
-        panel(px(300), px(120))
-        Children [
-            (
-                button(px(240), px(70), "modal-menu-main-menu")
-                on(main_menu_button)
-            ),
-        ]
-    }
-}
-
-/// Spawns a `quad_panel` with a single "Main Menu" button, attached to the left controller's
-/// tracked grip pose — the always-available VR equivalent of the pause modal's own "Main Menu"
-/// button, for a player who wants to quit to the main menu without first opening the pause modal.
+/// Spawns a `quad_panel` with a single "Main Menu" button (`wrist_game.html`, signal
+/// `wrist-game.main-menu`), attached to the left controller's tracked grip pose — the
+/// always-available VR equivalent of the pause modal's own "Main Menu" button, for a player who
+/// wants to quit to the main menu without first opening the pause modal.
 ///
 /// Runs every frame while `GameState::InGame` and `VRState::VR`, rather than once on
 /// `OnEnter(GameState::InGame)` — same reasoning as `ui::spawn_vr_main_menu_wrist_panel`: the
@@ -149,6 +324,7 @@ fn in_game_wrist_menu() -> impl Scene {
 /// before spawning) and becomes a no-op afterward.
 fn spawn_vr_in_game_wrist_panel(
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     mut images: ResMut<Assets<Image>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -171,7 +347,16 @@ fn spawn_vr_in_game_wrist_panel(
         IN_GAME_WRIST_PANEL_HEIGHT,
         IN_GAME_WRIST_PANEL_TEXTURE_WIDTH,
         IN_GAME_WRIST_PANEL_TEXTURE_HEIGHT,
-        in_game_wrist_menu(),
+        (
+            template(&asset_server, "wrist_game.html"),
+            Node {
+                width: percent(100),
+                height: percent(100),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+        ),
     );
     commands.spawn((
         panel,
@@ -182,274 +367,4 @@ fn spawn_vr_in_game_wrist_panel(
         ChildOf(left_grip),
         DespawnOnExit(GameState::InGame),
     ));
-}
-
-/// Closes the modal and hands control back to gameplay — `GameState` never left `InGame` while
-/// the modal was up, so this is just `ModalMenuState::Closed` plus re-locking the cursor. Mirrors
-/// `controls::toggle_modal_menu`'s close branch exactly (see that function's doc comment for why
-/// the cursor is set directly here rather than via an `OnExit(ModalMenuState::Open)` system).
-fn resume_button(
-    _: On<Activate>,
-    mut next_state: ResMut<NextState<ModalMenuState>>,
-    // `Query`, not `Single<&mut …>` — windowless (`--mcp`) mode has no `CursorOptions` at all.
-    mut cursor_options: Query<&mut CursorOptions>,
-) {
-    next_state.set(ModalMenuState::Closed);
-    for mut options in &mut cursor_options {
-        options.visible = false;
-        options.grab_mode = CursorGrabMode::Locked;
-    }
-}
-
-/// Marks `controls_tips`'s root — shown only while `InputDeviceState` is `KeyboardMouse`. See
-/// `update_controls_tips_visibility`.
-#[derive(Component, Clone, Default)]
-struct KeyboardMouseControlsTips;
-
-/// Marks `gamepad_controls_tips`'s root — the mirror image of `KeyboardMouseControlsTips`, shown
-/// only while `InputDeviceState` is `Gamepad`.
-#[derive(Component, Clone, Default)]
-struct GamepadControlsTips;
-
-/// Both panels are always spawned as children of `modal_menu()` (they only exist at all while the
-/// modal is open — there's no separate `HudVisible`-style toggle to combine here any more, unlike
-/// when this lived in `hud.rs`), so this only needs to pick which one matches the currently active
-/// input device.
-fn update_controls_tips_visibility(
-    input_device: Res<State<InputDeviceState>>,
-    mut keyboard_mouse: Query<
-        &mut Visibility,
-        (
-            With<KeyboardMouseControlsTips>,
-            Without<GamepadControlsTips>,
-        ),
-    >,
-    mut gamepad: Query<
-        &mut Visibility,
-        (
-            With<GamepadControlsTips>,
-            Without<KeyboardMouseControlsTips>,
-        ),
-    >,
-) {
-    let visibility = |show: bool| {
-        if show {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        }
-    };
-    let show_keyboard_mouse = *input_device.get() == InputDeviceState::KeyboardMouse;
-    let show_gamepad = *input_device.get() == InputDeviceState::Gamepad;
-    for mut element_visibility in &mut keyboard_mouse {
-        *element_visibility = visibility(show_keyboard_mouse);
-    }
-    for mut element_visibility in &mut gamepad {
-        *element_visibility = visibility(show_gamepad);
-    }
-}
-
-const CONTROLS_TIPS_ICON_SIZE: f32 = 40.0;
-const CONTROLS_TIPS_ICON_GAP: f32 = 4.0;
-const CONTROLS_TIPS_LABEL_FONT_SIZE: f32 = 16.0;
-
-/// Top-left panel listing every keyboard/mouse binding `controls.rs`'s `player_controls()` sets up
-/// — kept in sync with that list by hand, same as `console.ftl`'s `console-controls` text hint is;
-/// there's no single source of truth `bevy_enhanced_input` bindings could be introspected from
-/// automatically. Using the actual `KeyCode`s here (via `control_tip_keys`/`input_icons`) at least
-/// makes *that* part self-documenting — a row visibly says `KeyCode::Escape`, not an opaque asset
-/// path with nothing connecting it back to which key it's supposed to be. Mouse buttons/motion
-/// aren't `KeyCode`, so `hud-controls-look`/`hud-controls-select` go through `control_tip_icons`
-/// directly with an `Icon` from `input_icons::mouse_button_icon`/`mouse_move_icon` instead of a
-/// `key_code_icon` lookup. `mouse_move` (for `FpsCameraRotation`'s mouse-motion binding) is
-/// included since it's a real, always-on control, even though it isn't a discrete key/button
-/// press. See `input_icons`'s module doc comment for why these icons come from a packed texture
-/// atlas rather than one `ImageNode` per separate PNG.
-///
-/// `position_type: Absolute` (escaping `modal_menu()`'s centered flex flow) is what lets this sit
-/// at the top-left corner as a sibling of the centered button row instead of being squeezed into
-/// the same flex line.
-fn controls_tips(atlases: &InputIconAtlases) -> impl Scene {
-    bsn! {
-        KeyboardMouseControlsTips
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(0),
-            left: px(0),
-            width: percent(100),
-            height: percent(100),
-            align_items: AlignItems::Start,
-            justify_content: JustifyContent::Start,
-        }
-        Pickable::IGNORE
-        Children[
-            panel(px(300), px(600))
-            Children [
-                control_tip_keys(
-                    atlases,
-                    &[KeyCode::KeyW, KeyCode::KeyA, KeyCode::KeyS, KeyCode::KeyD],
-                    "hud-controls-move",
-                ),
-                control_tip_icons(vec![mouse_move_icon(atlases)], "hud-controls-look"),
-                control_tip_keys(atlases, &[KeyCode::Space], "hud-controls-jump"),
-                control_tip_mouse_button(atlases, MouseButton::Left, "hud-controls-select"),
-                control_tip_mouse_button(atlases, MouseButton::Right, "hud-controls-deselect"),
-                control_tip_keys(atlases, &[KeyCode::KeyF], "hud-controls-attack"),
-                control_tip_keys(atlases, &[KeyCode::KeyT], "hud-controls-kill"),
-                control_tip_keys(atlases, &[KeyCode::KeyE], "hud-controls-spawn-cube"),
-                control_tip_keys(atlases, &[KeyCode::KeyR], "hud-controls-spawn-npc"),
-                control_tip_keys(atlases, &[KeyCode::Escape], "hud-controls-menu"),
-                control_tip_keys(atlases, &[KeyCode::Tab], "hud-controls-stats"),
-            ]
-        ]
-    }
-}
-
-/// The gamepad equivalent of `controls_tips` — same rows, same order, same labels, just Steam
-/// Deck button/stick icons (`input_icons::gamepad_button_icon`) sourced from the actual
-/// `GamepadButton`s `controls.rs`'s `player_controls()` binds, instead of `KeyCode`s. Shown
-/// instead of `controls_tips` (never alongside it) once `InputDeviceState` says a gamepad is the
-/// active device — see `update_controls_tips_visibility`.
-fn gamepad_controls_tips(atlases: &InputIconAtlases) -> impl Scene {
-    bsn! {
-        GamepadControlsTips
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(0),
-            left: px(0),
-            width: percent(100),
-            height: percent(100),
-            align_items: AlignItems::Start,
-            justify_content: JustifyContent::Start,
-        }
-        Pickable::IGNORE
-        Children[
-            panel(px(300), px(600))
-            Children [
-                control_tip_icons(vec![gamepad_move_stick_icon(atlases)], "hud-controls-move"),
-                control_tip_icons(vec![gamepad_look_stick_icon(atlases)], "hud-controls-look"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::South], "hud-controls-jump"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::RightThumb], "hud-controls-select"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::LeftThumb], "hud-controls-deselect"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::RightTrigger2], "hud-controls-attack"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::RightTrigger], "hud-controls-kill"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::LeftTrigger], "hud-controls-spawn-cube"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::LeftTrigger2], "hud-controls-spawn-npc"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::Start], "hud-controls-menu"),
-                control_tip_gamepad_buttons(atlases, &[GamepadButton::Select], "hud-controls-stats"),
-            ]
-        ]
-    }
-}
-
-/// Same idea as `control_tip_keys`, for `GamepadButton`s instead of `KeyCode`s — any button the
-/// pack doesn't cover is silently skipped, same contract as `input_icons::gamepad_button_icon`.
-fn control_tip_gamepad_buttons(
-    atlases: &InputIconAtlases,
-    buttons: &[GamepadButton],
-    label_key: &'static str,
-) -> impl Scene {
-    let icons: Vec<_> = buttons
-        .iter()
-        .filter_map(|&button| gamepad_button_icon(atlases, button))
-        .collect();
-    control_tip_icons(icons, label_key)
-}
-
-/// Builds a `control_tip_icons` row directly from the `KeyCode`s a binding actually uses, via
-/// `input_icons::key_code_icon` — any key the pack doesn't cover is silently skipped rather
-/// than showing a broken image or panicking, so an unmapped key just quietly narrows the icon set
-/// for that row instead of breaking it.
-fn control_tip_keys(
-    atlases: &InputIconAtlases,
-    keys: &[KeyCode],
-    label_key: &'static str,
-) -> impl Scene {
-    let icons: Vec<_> = keys
-        .iter()
-        .filter_map(|&key| key_code_icon(atlases, key))
-        .collect();
-    control_tip_icons(icons, label_key)
-}
-
-/// Same idea as `control_tip_keys`, for the one mouse-button tip (`Select`) — not a `KeyCode`, so
-/// it goes through `input_icons::mouse_button_icon` instead.
-fn control_tip_mouse_button(
-    atlases: &InputIconAtlases,
-    button: MouseButton,
-    label_key: &'static str,
-) -> impl Scene {
-    let icons: Vec<_> = mouse_button_icon(atlases, button).into_iter().collect();
-    control_tip_icons(icons, label_key)
-}
-
-/// One row: zero or more icon images side by side (e.g. `W A S D` as four separate `ImageNode`s,
-/// left to right) followed by a localized label. `icons` is a `Vec` rather than a fixed-size slice
-/// since a binding can use any number of keys, including zero if none of them mapped to an icon —
-/// the row then just shows the label on its own instead of disappearing entirely, so a gap in
-/// icon coverage stays visible/debuggable rather than silently dropping the whole tip.
-fn control_tip_icons(icons: Vec<Icon>, label_key: &'static str) -> impl Scene {
-    let icons: Vec<_> = icons.into_iter().map(control_tip_icon).collect();
-    bsn! {
-        Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(8),
-        }
-        Pickable::IGNORE
-        Children [
-            {icons},
-            (
-                Text(label_key)
-                LocalizedText(label_key)
-                TextFont {
-                    font_size: px(CONTROLS_TIPS_LABEL_FONT_SIZE),
-                }
-                TextColor(WHITE)
-                Pickable::IGNORE
-            ),
-        ]
-    }
-}
-
-/// Carries a resolved `Icon` (which atlas pack + index, both plain `Copy` data — see
-/// `input_icons.rs`) into `on_pending_icon`, which resolves it against `Res<InputIconAtlases>` and
-/// installs the real `ImageNode` right after spawn. Needed because `ImageNode` derives
-/// `FromTemplate`, and its `texture_atlas: Option<TextureAtlas>` field's own derived template type
-/// has no ergonomic "just take an already-built `TextureAtlas`" conversion `bsn!`'s struct-literal
-/// field syntax can reach (nor, transitively, does any wrapper type whose fields include
-/// `ImageNode`/`TextureAtlas`/`Handle<T>` directly — they all opt out of the trivial blanket
-/// `FromTemplate` impl for exactly this reason). Plain `Copy` data like `Icon` has no such
-/// problem, so it passes through `bsn!` as ordinary component data with no conversion fuss.
-#[derive(Component, Clone, Copy, Default)]
-struct PendingIcon(Icon);
-
-fn on_pending_icon(
-    added: On<Add, PendingIcon>,
-    pending: Query<&PendingIcon>,
-    atlases: Res<InputIconAtlases>,
-    mut commands: Commands,
-) {
-    let Ok(pending) = pending.get(added.entity) else {
-        return;
-    };
-    commands
-        .entity(added.entity)
-        .insert(pending.0.resolve(&atlases))
-        .remove::<PendingIcon>();
-}
-
-/// A single icon image at the panel's fixed icon size — one `ImageNode` per key/button, laid out
-/// in a row by `control_tip_icons`'s parent `Node` rather than packed into one `Text` the way the
-/// font-glyph version did.
-fn control_tip_icon(icon: Icon) -> impl Scene {
-    bsn! {
-        PendingIcon(icon)
-        Node {
-            width: px(CONTROLS_TIPS_ICON_SIZE),
-            height: px(CONTROLS_TIPS_ICON_SIZE),
-            margin: UiRect::right(px(CONTROLS_TIPS_ICON_GAP)),
-        }
-        Pickable::IGNORE
-    }
 }

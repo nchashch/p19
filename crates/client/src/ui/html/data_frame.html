@@ -1,0 +1,33 @@
+<div class="panel data-frame">
+  <p data-l10n-id="hud-console-hint">Press ` for console</p>
+
+  <p class="data-frame-group" data-l10n-id="hud-hp" data-l10n-args='{{ hp_args }}'>HP: {{ hp_args.hp }}/{{ hp_args.max_hp }}</p>
+  <p data-l10n-id="hud-damage" data-l10n-args='{{ damage_args }}'>Damage: {{ damage_args.damage }}</p>
+  <p data-l10n-id="hud-attack-range" data-l10n-args='{{ attack_range_args }}'>Attack range: {{ attack_range_args.range }}m</p>
+  <p data-l10n-id="hud-select-range" data-l10n-args='{{ select_range_args }}'>Select range: {{ select_range_args.range }}m</p>
+  <p data-l10n-id="hud-gcd" data-l10n-args='{{ gcd_args }}'>GCD: {{ gcd_args.seconds }}s</p>
+  <p data-l10n-id="hud-grounded" data-l10n-args='{{ grounded_args }}'>Grounded: {{ grounded_args.grounded }}</p>
+
+  {% if hovered %}
+  <p class="data-frame-group" data-l10n-id="hud-hovered" data-l10n-args='{{ hovered.entity_args }}'>Hovered: {{ hovered.entity_args.entity }}</p>
+  <p data-l10n-id="hud-distance" data-l10n-args='{{ hovered.distance_args }}'>Distance: {{ hovered.distance_args.distance }}</p>
+  {% else %}
+  <p class="data-frame-group" data-l10n-id="hud-hovered-none">Hovered: n/a</p>
+  <p data-l10n-id="hud-distance-none">Distance: n/a</p>
+  {% endif %}
+
+  {% if selected %}
+  <p class="data-frame-group" data-l10n-id="hud-selected" data-l10n-args='{{ selected.entity_args }}'>Selected: {{ selected.entity_args.entity }}</p>
+  {% if selected.distance_args %}
+  <p data-l10n-id="hud-distance" data-l10n-args='{{ selected.distance_args }}'>Distance: {{ selected.distance_args.distance }}</p>
+  {% else %}
+  <p data-l10n-id="hud-distance-none">Distance: n/a</p>
+  {% endif %}
+  {% if selected.name_args %}
+  <p data-l10n-id="hud-name" data-l10n-args='{{ selected.name_args }}'>Name: {{ selected.name_args.name }}</p>
+  {% endif %}
+  {% if selected.hp_args %}
+  <p data-l10n-id="hud-hp" data-l10n-args='{{ selected.hp_args }}'>HP: {{ selected.hp_args.hp }}/{{ selected.hp_args.max_hp }}</p>
+  {% endif %}
+  {% endif %}
+</div>

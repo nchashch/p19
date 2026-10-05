@@ -44,23 +44,15 @@ pub struct Shoot;
 pub struct SpawnNpcAction;
 
 /// Directional input for menu navigation (gamepad d-pad/left stick, or arrow keys) — see
-/// `ui.rs`'s `MenuControls`. Distinct from `Movement`: this drives `InputFocus` via
-/// `bevy::input_focus::directional_navigation`, not a character.
+/// `ui::markup`'s `MenuControls`. Distinct from `Movement`: this drives `InputFocus` via
+/// `bevy::ui::auto_directional_navigation`, not a character.
 #[derive(InputAction)]
 #[action_output(Vec2)]
 pub struct UiNavigate;
 
-/// "Activate the focused UI element" via gamepad South/A — see `ui.rs`'s `MenuControls`. Kept
-/// separate from `UiConfirmEnter` (the literal-Enter counterpart) specifically so their handlers
-/// can react differently: `bevy_ui_widgets` has no native gamepad handling at all, so gamepad
-/// needs a synthetic `Activate` bridge; it *does* react to `KeyCode::Enter` natively, so Enter
-/// doesn't — see `ui.rs`'s `on_ui_confirm`/`on_ui_confirm_enter` doc comments for the full story.
+/// "Activate the focused UI element" — gamepad South or Enter, see `ui::markup`'s
+/// `MenuControls`. Emits the focused element's `data-on-click` signal, the same message a
+/// pointer click produces.
 #[derive(InputAction)]
 #[action_output(bool)]
 pub struct UiConfirm;
-
-/// "Activate the focused UI element" via the literal Enter key — see `UiConfirm`'s doc comment
-/// for why this is a separate action rather than folded into it.
-#[derive(InputAction)]
-#[action_output(bool)]
-pub struct UiConfirmEnter;
