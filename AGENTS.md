@@ -98,8 +98,7 @@ Current, confirmed gaps. Don't assume these work.
   `clear_effects` (never called), `crates/client/src/assets/level.rs` and `crates/shared/src/server_state.rs`
   (empty; the latter isn't even declared), `PreloadCollection` (never loaded), `Character`
   registered for replication twice, the `vleue_navigator` workspace dependency and the client's
-  `bevy_simple_text_input` dependency (nothing uses either). The main menu's Options rows are
-  stubs that log "not implemented yet"; the HUD hotbar is built but not
+  `bevy_simple_text_input` dependency (nothing uses either). The HUD hotbar is built but not
   spawned (`hud.rs`'s `HOTBAR_ENABLED = false`).
 - **Doc/code mismatches to distrust**: `p19_shared::assets::level::Level`'s doc comment claims
   `model`/`skybox` are dependency-tracked handles — the loader just converts them to plain
@@ -384,15 +383,20 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
     hovering shows a `tooltip.html` root
     anchored beside (or above) the element with bevy_markup's `HtmlAnchor` (follows it, stays in
     the viewport, renders on its UI camera, despawned with it).
-- **`ui/ui.rs`** — main menu (`main_menu.html`): Connect, Options (stub selector), Credits,
-  Quit, Language (`en-US`/`ru-RU`/`ja-JP`, labels in their own script). The same template
-  (`wrist = true`, without Credits) is the VR main-menu wrist panel. Registers `HudPlugin`,
-  `SelectorPlugin` and `CreditsPlugin`.
-- **`ui/credits.rs`** — the credits screen (`credits.html`, `HtmlModal` over the main menu,
-  `.credits-root` z-index 100): the third-party assets from its `CREDITS` table, which mirrors
-  `assets/CREDITS.md` — **add an asset to both**, plus its `credits-use-<id>` Fluent key in every
-  locale. Back, Escape or gamepad East close it (`UiCancel`, bound by its own `CreditsControls`
-  context only while it's open) and focus returns to the Credits button.
+- **`ui/ui.rs`** — main menu (`main_menu.html`): Connect, Options, Credits, Quit. Options opens
+  the options screen (`options.html`): the Language selector (`en-US`/`ru-RU`/`ja-JP`, labels in
+  their own script) and Back. The same main-menu template (`wrist = true`) is the VR wrist panel:
+  Connect, Language (the selector itself), Quit — no Options/Credits, since screen-space modals
+  don't show in a headset. Registers `HudPlugin`, `SelectorPlugin`, `MenuScreenPlugin` and
+  `CreditsPlugin`.
+- **`ui/menu_screen.rs`** — main-menu screens (Options, Credits): `open_menu_screen` spawns the
+  screen's root (`HtmlModal`, `.menu-screen-root` z-index 100) and a separate cancel context
+  (`MenuScreenControls`: `UiCancel` on Escape / gamepad East, bound only while a screen is open).
+  Back (`menu-screen.back`), Escape or East close it and focus the button that opened it; with a
+  selector popup open, cancel closes the popup first.
+- **`ui/credits.rs`** — the credits screen (`credits.html`): the third-party assets from its
+  `CREDITS` table, which mirrors `assets/CREDITS.md` — **add an asset to both**, plus its
+  `credits-use-<id>` Fluent key in every locale.
 - **`ui/selector.rs`** — generic popup (ADR 0001's behavior): a `Selector { key, options }`
   entity per picker; a toggle element (`data-on-click="selector.toggle"`,
   `data-selector="key"`) opens a `selector.html` root (`HtmlModal`) anchored right of it

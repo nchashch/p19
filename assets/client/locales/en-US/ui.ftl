@@ -1,7 +1,7 @@
 main-menu-connect = Connect
 main-menu-connect-tooltip = Connect to the server.
 main-menu-options = Options
-main-menu-options-tooltip = Not implemented yet.
+main-menu-options-tooltip = Game settings.
 main-menu-credits = Credits
 main-menu-credits-tooltip = The third-party assets this game uses.
 main-menu-quit = Quit
@@ -27,4 +27,6 @@ credits-use-input-prompts = Keyboard, mouse and Steam Deck button glyphs
 credits-use-night-sky = The night sky
 credits-use-rubber-tiles = The floor texture of the start level
 credits-original = Everything else was made for this game.
-credits-back = Back
+menu-screen-back = Back
+options-title = Options
+options-language-tooltip = The language of the game's text.

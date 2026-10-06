@@ -1,7 +1,7 @@
 main-menu-connect = Подключиться
 main-menu-connect-tooltip = Подключиться к серверу.
 main-menu-options = Настройки
-main-menu-options-tooltip = Пока не реализовано.
+main-menu-options-tooltip = Настройки игры.
 main-menu-credits = Авторы
 main-menu-credits-tooltip = Сторонние ресурсы, используемые в игре.
 main-menu-quit = Выход
@@ -27,4 +27,6 @@ credits-use-input-prompts = Значки клавиш клавиатуры, мы
 credits-use-night-sky = Ночное небо
 credits-use-rubber-tiles = Текстура пола стартового уровня
 credits-original = Всё остальное создано для этой игры.
-credits-back = Назад
+menu-screen-back = Назад
+options-title = Настройки
+options-language-tooltip = Язык текста в игре.

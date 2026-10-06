@@ -2,8 +2,8 @@
    assets the game uses — the same entries as `assets/CREDITS.md`. Asset titles and authors are
    names (not translated); everything else is Fluent. #}
 {% include "components.html" %}
-<html class="credits-root">
-<div class="panel credits-panel">
+<html class="menu-screen-root">
+<div class="panel menu-screen-panel">
   <h1 data-l10n-id="credits-title">Credits</h1>
   <p class="credits-intro" data-l10n-id="credits-intro">Third-party assets, all dedicated to the public domain (CC0 1.0). Thank you to their authors.</p>
   {% for credit in credits %}
@@ -15,7 +15,7 @@
   </div>
   {% endfor %}
   <p class="credits-outro" data-l10n-id="credits-original">Everything else was made for this game.</p>
-  {{ <ui.button id="credits-back" class="primary" autofocus={true} signal="credits.back"
-                key="credits-back" label="Back" /> }}
+  {{ <ui.button id="credits-back" class="primary" autofocus={true} signal="menu-screen.back"
+                key="menu-screen-back" label="Back" /> }}
 </div>
 </html>

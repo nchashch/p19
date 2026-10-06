@@ -7,6 +7,7 @@ use crate::events::Connect;
 use crate::ui::credits;
 use crate::ui::hud::HudPlugin;
 use crate::ui::markup::{self, menu_controls};
+use crate::ui::menu_screen::{self, OpenMenuScreens, open_menu_screen};
 use crate::ui::quad_panel::quad_panel;
 use crate::ui::selector::{self, Selector, SelectorOption, SelectorPicked};
 use bevy::{asset::embedded_asset, prelude::*};
@@ -17,8 +18,8 @@ use p19_shared::game_state::{GameState, VRState};
 use std::f32::consts::FRAC_PI_2;
 use unic_langid::LanguageIdentifier;
 
-/// Selector keys; `main_menu.html`'s toggles name them in their `data-with`.
-const OPTIONS_SELECTOR: &str = "main-menu.options";
+/// The language selector's key; its toggles (`options.html`, the VR wrist panel's
+/// `main_menu.html`) name it in `data-selector`.
 const LANGUAGE_SELECTOR: &str = "main-menu.language";
 
 /// Selectable languages: locale id and the language's own name in its own script — deliberately
@@ -31,22 +32,18 @@ const LANGUAGES: [(&str, &str); 3] = [
     ("ja-JP", "日本語"),
 ];
 
-/// The Options selector's placeholder rows (there are no real settings yet).
-const STUB_OPTIONS: [&str; 6] = [
-    "Stub Option A",
-    "Stub Option B",
-    "Stub Option C",
-    "Stub Option D",
-    "Stub Option E",
-    "Stub Option F",
-];
-
 pub struct PrototypeUiPlugin;
 
 impl Plugin for PrototypeUiPlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "html/main_menu.html");
-        app.add_plugins((HudPlugin, selector::SelectorPlugin, credits::CreditsPlugin));
+        embedded_asset!(app, "html/options.html");
+        app.add_plugins((
+            HudPlugin,
+            selector::SelectorPlugin,
+            menu_screen::MenuScreenPlugin,
+            credits::CreditsPlugin,
+        ));
         app.add_systems(OnEnter(GameState::MainMenu), spawn_menu_controls);
         app.on_html_click(
             "main-menu.connect",
@@ -54,6 +51,7 @@ impl Plugin for PrototypeUiPlugin {
                 commands.trigger(Connect);
             },
         )
+        .on_html_click("main-menu.options", open_options)
         .on_html_click(
             "main-menu.quit",
             |_: In<ElementSignal>, mut commands: Commands| {
@@ -102,28 +100,32 @@ pub fn spawn_main_menu(
             .with_selected(LANGUAGES.iter().position(|(id, _)| *id == current)),
         DespawnOnExit(GameState::MainMenu),
     ));
-    let options = STUB_OPTIONS
-        .iter()
-        .map(|label| SelectorOption::literal(*label, *label))
-        .collect();
-    commands.spawn((
-        Selector::new(OPTIONS_SELECTOR, options),
-        DespawnOnExit(GameState::MainMenu),
-    ));
 }
 
-/// Main-menu selector picks (desktop and wrist panel alike); its buttons are `on_html_click`
-/// handlers.
+/// `main-menu.options`: the options screen (`options.html`), holding the language picker.
+fn open_options(
+    _: In<ElementSignal>,
+    open: OpenMenuScreens,
+    asset_server: Res<AssetServer>,
+    mut commands: Commands,
+) {
+    open_menu_screen(
+        &mut commands,
+        &asset_server,
+        &open,
+        "options.html",
+        TemplateContext::new(),
+        "options",
+    );
+}
+
+/// Language picks (the options screen and the VR wrist panel alike).
 fn handle_main_menu_picks(mut picked: MessageReader<SelectorPicked>, mut locale: ResMut<Locale>) {
-    for pick in picked.read() {
-        match pick.selector {
-            OPTIONS_SELECTOR => info!("selected option: {} (not implemented yet)", pick.value),
-            LANGUAGE_SELECTOR => match pick.value.parse::<LanguageIdentifier>() {
-                Ok(language) if locale.requested != language => locale.requested = language,
-                Ok(_) => {}
-                Err(error) => warn!("language option {:?}: {error}", pick.value),
-            },
-            _ => {}
+    for pick in picked.read().filter(|pick| pick.selector == LANGUAGE_SELECTOR) {
+        match pick.value.parse::<LanguageIdentifier>() {
+            Ok(language) if locale.requested != language => locale.requested = language,
+            Ok(_) => {}
+            Err(error) => warn!("language option {:?}: {error}", pick.value),
         }
     }
 }

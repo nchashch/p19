@@ -3,15 +3,17 @@
 <div class="panel {% if wrist %}wrist-main-panel{% else %}main-menu-panel{% endif %}">
   {{ <ui.button id="connect" class="primary" autofocus={true} signal="main-menu.connect"
                 key="main-menu-connect" label="Connect" tooltip="main-menu-connect-tooltip" /> }}
-  {{ <ui.selector_toggle id="options" selector="main-menu.options" key="main-menu-options" label="Options"
-                         tooltip="main-menu-options-tooltip" placement="above" /> }}
-  {% if not wrist %}
-  {# Desktop only: the credits screen is a screen-space modal, which a VR headset wouldn't show. #}
+  {% if wrist %}
+  {# VR: Options and Credits are screen-space modals, which a headset wouldn't show; the wrist
+     panel keeps the language picker itself. #}
+  {{ <ui.selector_toggle id="language" selector="main-menu.language" key="main-menu-language" label="Language" /> }}
+  {% else %}
+  {{ <ui.button id="options" signal="main-menu.options" key="main-menu-options" label="Options"
+                tooltip="main-menu-options-tooltip" /> }}
   {{ <ui.button id="credits" signal="main-menu.credits" key="main-menu-credits" label="Credits"
                 tooltip="main-menu-credits-tooltip" /> }}
   {% endif %}
   {{ <ui.button id="quit" signal="main-menu.quit" key="main-menu-quit" label="Quit"
                 tooltip="main-menu-quit-tooltip" /> }}
-  {{ <ui.selector_toggle id="language" selector="main-menu.language" key="main-menu-language" label="Language" /> }}
 </div>
 </html>

@@ -1,7 +1,7 @@
 main-menu-connect = 接続
 main-menu-connect-tooltip = サーバーに接続します。
 main-menu-options = オプション
-main-menu-options-tooltip = 未実装です。
+main-menu-options-tooltip = ゲームの設定。
 main-menu-credits = クレジット
 main-menu-credits-tooltip = このゲームが使用しているサードパーティ素材。
 main-menu-quit = 終了
@@ -27,4 +27,6 @@ credits-use-input-prompts = キーボード・マウス・Steam Deck のボタ�
 credits-use-night-sky = 夜空
 credits-use-rubber-tiles = スタートレベルの床のテクスチャ
 credits-original = それ以外はすべてこのゲームのために制作しました。
-credits-back = 戻る
+menu-screen-back = 戻る
+options-title = オプション
+options-language-tooltip = ゲーム内テキストの言語。

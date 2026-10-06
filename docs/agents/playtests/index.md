@@ -4,6 +4,17 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0041` — Options Screen
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-07 02:09 – 02:12 +0400 |
+| **Commit** | `c4d3bd8` "Add credits for assets" + uncommitted options screen |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0041.md`](playtest_0041.md) |
+
+Verifies the main menu's Options screen (a modal like Credits, holding the Language selector that used to sit in the main menu): the language popup opens over it, Escape/gamepad East close the popup first and then the screen, focus returns to the opening button, language changes apply with the screen open, and Credits still works.
+
 ### `playtest_0040` — Credits Screen
 
 | Field | Value |

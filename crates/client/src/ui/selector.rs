@@ -143,10 +143,10 @@ pub struct SelectorPicked {
 
 /// An open popup root.
 #[derive(Component)]
-struct SelectorPopup {
+pub struct SelectorPopup {
     selector: Entity,
-    /// The toggle element that opened it (focus returns here on pick).
-    toggle: Entity,
+    /// The toggle element that opened it (focus returns here on pick or cancel).
+    pub toggle: Entity,
     /// Index of the option shown in the top row.
     window_start: usize,
 }
