@@ -1,19 +1,11 @@
+{% include "components.html" %}
 <html class="screen-root">
 <div class="panel lobby-panel">
-  <div class="button primary" id="play" autofocus data-on-click="lobby.play"
-       data-on-enter="tooltip" data-on-leave="tooltip"
-       data-with='{"tooltip": "lobby-play-tooltip"}'>
-    <p data-l10n-id="lobby-play">Play</p>
-  </div>
-  <div class="button" id="level" data-on-click="selector.toggle"
-       data-on-enter="tooltip" data-on-leave="tooltip"
-       data-with='{"selector": "lobby.level", "tooltip": "lobby-level-tooltip", "tooltip_above": true}'>
-    <p data-l10n-id="lobby-level">Level</p>
-  </div>
-  <div class="button" id="main-menu" data-on-click="lobby.main-menu"
-       data-on-enter="tooltip" data-on-leave="tooltip"
-       data-with='{"tooltip": "lobby-main-menu-tooltip"}'>
-    <p data-l10n-id="lobby-main-menu">Main Menu</p>
-  </div>
+  {{ <ui.button id="play" class="primary" autofocus={true} signal="lobby.play"
+                key="lobby-play" label="Play" tooltip="lobby-play-tooltip" /> }}
+  {{ <ui.selector_toggle id="level" selector="lobby.level" key="lobby-level" label="Level"
+                         tooltip="lobby-level-tooltip" placement="above" /> }}
+  {{ <ui.button id="main-menu" signal="lobby.main-menu" key="lobby-main-menu" label="Main Menu"
+                tooltip="lobby-main-menu-tooltip" /> }}
 </div>
 </html>

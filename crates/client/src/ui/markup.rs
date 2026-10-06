@@ -19,9 +19,9 @@
 //!   never take it, `:focus-visible` + `outline` in `theme.css` draw the ring). This module only
 //!   binds the input: `MenuControls` (d-pad, arrows, left stick, South/Enter) drives
 //!   `HtmlFocus::navigate`, with press-and-hold auto-repeat.
-//! - **Tooltips.** `data-on-enter="tooltip" data-on-leave="tooltip"` plus a `data-with` carrying
-//!   `"tooltip"` (a Fluent key) and optional `"tooltip_args"`/`"tooltip_above"` shows a tooltip
-//!   beside the element while the pointer is over it.
+//! - **Tooltips** are bevy_markup's: `data-tooltip` (a Fluent key) and optional
+//!   `data-tooltip-args` (JSON) / `data-tooltip-placement="above"` show `tooltip.html` beside the
+//!   element while the pointer is over it (`HtmlTooltips`, inserted here).
 //!
 //! Each template's `<html class="…-root">` places, stacks and (un)picks its `HtmlUi` root from
 //! `theme.css` ("Roots"); overlays (tooltips, selector popups) are placed beside their element by
@@ -36,7 +36,6 @@ use bevy_enhanced_input::prelude::{Press, *};
 use bevy_fluent::prelude::Locale;
 use bevy_markup::prelude::*;
 use chill_bevy_console::console_closed;
-use serde_json::Value;
 
 pub struct MarkupPlugin;
 
@@ -44,6 +43,8 @@ impl Plugin for MarkupPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(BevyMarkupPlugin);
         embedded_asset!(app, "html/theme.css");
+        // Shared `{% component %}`s, included by the templates that use them.
+        embedded_asset!(app, "html/components.html");
         embedded_asset!(app, "html/tooltip.html");
         app.add_input_context::<MenuControls>()
             .init_resource::<UiNavigateHold>()
@@ -55,7 +56,6 @@ impl Plugin for MarkupPlugin {
                     register_ui_fonts.run_if(resource_added::<CommonAssets>),
                     sync_active_locale,
                     repeat_ui_navigate_while_held.run_if(console_closed),
-                    show_tooltips,
                 ),
             );
         add_observers_run_if!(app, console_closed, on_ui_navigate, on_ui_confirm);
@@ -76,8 +76,14 @@ pub fn template(asset_server: &AssetServer, name: &str) -> HtmlUi {
     HtmlUi::new(asset_server.load(embedded_path(name)))
 }
 
-fn load_default_stylesheet(mut stylesheet: ResMut<DefaultStylesheet>, assets: Res<AssetServer>) {
+/// The stylesheet, and bevy_markup's `data-tooltip` tooltips rendered from `tooltip.html`.
+fn load_default_stylesheet(
+    mut stylesheet: ResMut<DefaultStylesheet>,
+    assets: Res<AssetServer>,
+    mut commands: Commands,
+) {
     *stylesheet = DefaultStylesheet::new(assets.load(embedded_path("theme.css")));
+    commands.insert_resource(HtmlTooltips::new(assets.load(embedded_path("tooltip.html"))));
 }
 
 /// The CSS name of the UI font; `theme.css` also maps the `serif` generic to it.
@@ -215,73 +221,26 @@ fn repeat_ui_navigate_while_held(
 }
 
 /// Gamepad South / Enter: activates the focused element — the same `ElementSignal` a pointer
-/// click on it emits (minus `position`).
-fn on_ui_confirm(_confirm: On<Start<UiConfirm>>, mut focus: HtmlFocus) {
-    focus.activate();
-}
-
-/// Signal name of the tooltip hooks (`data-on-enter` / `data-on-leave`).
-pub const TOOLTIP_SIGNAL: &str = "tooltip";
-
-/// The tooltip root shown for `element`.
-#[derive(Component)]
-struct Tooltip {
-    element: Entity,
-}
-
-const TOOLTIP_GAP: f32 = 8.0;
-
-/// Spawns a tooltip root anchored beside (or `tooltip_above`) the hovered element on `tooltip`
-/// enter, despawns it on leave. bevy_markup's `HtmlAnchor` places it, renders it on the
-/// element's UI camera (quad panels render to textures) and despawns it with the element;
-/// `.tooltip-root` makes it absolute, topmost and unpickable.
-fn show_tooltips(
-    mut signals: MessageReader<ElementSignal>,
-    tooltips: Query<(Entity, &Tooltip)>,
-    asset_server: Res<AssetServer>,
-    mut commands: Commands,
+/// click on it emits, its source the input that did it (`UiConfirm` doesn't say which of its
+/// bindings fired, so the devices are asked; the tool API's device mocks count as the device).
+fn on_ui_confirm(
+    _confirm: On<Start<UiConfirm>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    gamepads: Query<(Entity, &Gamepad)>,
+    mut focus: HtmlFocus,
 ) {
-    for signal in signals
-        .read()
-        .filter(|signal| signal.name == TOOLTIP_SIGNAL)
+    let input = if keys.just_pressed(KeyCode::Enter) {
+        ActivationInput::Key(KeyCode::Enter)
+    } else if let Some((gamepad, _)) = gamepads
+        .iter()
+        .find(|(_, pad)| pad.just_pressed(GamepadButton::South))
     {
-        match signal.trigger {
-            SignalTrigger::Enter => {
-                let Some(key) = signal.payload.get("tooltip").and_then(Value::as_str) else {
-                    continue;
-                };
-                let above = signal
-                    .payload
-                    .get("tooltip_above")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false);
-                let placement = if above {
-                    AnchorPlacement::Above
-                } else {
-                    AnchorPlacement::Right
-                };
-                let args = signal
-                    .payload
-                    .get("tooltip_args")
-                    .cloned()
-                    .unwrap_or(Value::Object(Default::default()));
-                commands.spawn((
-                    Tooltip {
-                        element: signal.target,
-                    },
-                    template(&asset_server, "tooltip.html"),
-                    TemplateContext::new().with("key", key).with("args", &args),
-                    HtmlAnchor::new(signal.target, placement).with_gap(TOOLTIP_GAP),
-                ));
-            }
-            SignalTrigger::Leave => {
-                for (entity, tooltip) in &tooltips {
-                    if tooltip.element == signal.target {
-                        commands.entity(entity).try_despawn();
-                    }
-                }
-            }
-            _ => {}
+        ActivationInput::GamepadButton {
+            gamepad,
+            button: GamepadButton::South,
         }
-    }
+    } else {
+        ActivationInput::Other
+    };
+    focus.activate(input);
 }

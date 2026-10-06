@@ -10,7 +10,7 @@
 //!    with [`Selector::set_options`]; an open popup follows.
 //! 2. Put a toggle element in the owner's template:
 //!    `<div class="button" id="level" data-on-click="selector.toggle"
-//!    data-with='{"selector": "lobby.level"}'>…</div>`. This module handles the click: it opens
+//!    data-selector="lobby.level">…</div>`. This module handles the click: it opens
 //!    the popup just right of that element (on the element's UI camera, so VR quad panels work)
 //!    or closes it if it's already open.
 //! 3. Read [`SelectorPicked`] messages for your key; `value` is the picked
@@ -38,8 +38,7 @@ use serde_json::{Value, json};
 /// How many rows a selector popup shows at once.
 pub const SELECTOR_VISIBLE_ROWS: usize = 5;
 
-/// `data-on-click` name of a selector's toggle element; its `data-with` names the selector
-/// (`{"selector": "<key>"}`).
+/// `data-on-click` name of a selector's toggle element; its `data-selector` names the selector.
 pub const TOGGLE_SIGNAL: &str = "selector.toggle";
 /// `data-on-click` name of a popup row (`selector.html`); `data-with` carries the option index.
 const PICK_SIGNAL: &str = "selector.pick";
@@ -218,8 +217,8 @@ fn handle_selector_signals(
     {
         match signal.name.as_ref() {
             TOGGLE_SIGNAL => {
-                let Some(key) = signal.payload.get("selector").and_then(Value::as_str) else {
-                    warn!("{TOGGLE_SIGNAL} without a \"selector\" key in data-with");
+                let Some(key) = signal.data("selector") else {
+                    warn!("{TOGGLE_SIGNAL} without a data-selector attribute");
                     continue;
                 };
                 let Some((selector_entity, selector)) =

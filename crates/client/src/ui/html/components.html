@@ -1,0 +1,17 @@
+{# Shared UI components (Tera 2 `{% component %}`s). A template uses them by including this file —
+   `{% include "components.html" %}`, inside a block if the template extends another; it renders
+   nothing — then calling `{{ <ui.button … /> }}`. #}
+
+{# A focusable button: `signal` is its `data-on-click`, `key`/`label` the Fluent id and its
+   English fallback; optional extra classes, `autofocus`, a tooltip (`data-tooltip`, `placement`
+   "above"…) and a selector key (`data-selector`, for `selector.toggle`). #}
+{% component ui.button(id: string, signal: string, key: string, label: string, class: string = "", autofocus: bool = false, tooltip: string = "", placement: string = "", selector: string = "") %}
+<div class="button{% if class %} {{ class }}{% endif %}" id="{{ id }}"{% if autofocus %} autofocus{% endif %} data-on-click="{{ signal }}"{% if tooltip %} data-tooltip="{{ tooltip }}"{% endif %}{% if placement %} data-tooltip-placement="{{ placement }}"{% endif %}{% if selector %} data-selector="{{ selector }}"{% endif %}>
+  <p data-l10n-id="{{ key }}">{{ label }}</p>
+</div>
+{% endcomponent ui.button %}
+
+{# A button opening a `Selector` popup (`ui/selector.rs`). #}
+{% component ui.selector_toggle(id: string, selector: string, key: string, label: string, tooltip: string = "", placement: string = "") %}
+{{ <ui.button id signal="selector.toggle" key label tooltip placement selector /> }}
+{% endcomponent ui.selector_toggle %}

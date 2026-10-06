@@ -1,10 +1,9 @@
+{% include "components.html" %}
 <html class="pause-root">
 <div class="pause-menu">
-  <div class="button pause-menu-button" id="pause-main-menu" data-on-click="pause.main-menu">
-    <p data-l10n-id="modal-menu-main-menu">Main Menu</p>
-  </div>
-  <div class="button pause-menu-button" id="pause-resume" autofocus data-on-click="pause.resume">
-    <p data-l10n-id="modal-menu-resume">Resume</p>
-  </div>
+  {{ <ui.button id="pause-main-menu" class="pause-menu-button" signal="pause.main-menu"
+                key="modal-menu-main-menu" label="Main Menu" /> }}
+  {{ <ui.button id="pause-resume" class="pause-menu-button" autofocus={true} signal="pause.resume"
+                key="modal-menu-resume" label="Resume" /> }}
 </div>
 </html>

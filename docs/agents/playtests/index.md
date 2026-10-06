@@ -4,6 +4,83 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0037` — In-Place Updates Write Only What Changed
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-06 02:22 – 02:24 UTC |
+| **Commit** | `0da1fcb` "Use bevy_markup for UI" + uncommitted client UI changes (and the uncommitted bevy_markup write-if-different updates on top of `9d84990`) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0037.md`](playtest_0037.md) |
+
+Verifies the client after bevy_markup's in-place updates started writing only changed components (600-element UI with one changing value: 9.85 → 4.06 ms/frame in a release bench): the TUI gauge still animates, focus and tooltips work, and a 51%-HP NPC's bar lays out at 31 of 60 px. Notes bevy_markup bug_0025, a pre-existing flaky property test.
+
+### `playtest_0036` — Nameplates on bevy_markup's `HtmlWorldAnchor`
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-06 02:15 – 02:17 UTC |
+| **Commit** | `0da1fcb` "Use bevy_markup for UI" + uncommitted client UI changes (and the uncommitted bevy_markup `HtmlWorldAnchor` on top of `9d84990`) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0036.md`](playtest_0036.md) |
+
+Verifies the client after nameplates moved onto bevy_markup's `HtmlWorldAnchor` (projection, visibility and cleanup upstream; toggle and fade as a `hidden` class): the NPC plate sits bottom-centered over the head (610/132 for a 60×30 plate at 640/162), the own player's off-screen plate hides, the toggle maps to `display: none`, and the plate disappears past the 30 m fade end. Plates are now centered over their targets.
+
+### `playtest_0035` — Buttons Routed by Name (`on_html_click`)
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-06 02:11 – 02:12 UTC |
+| **Commit** | `0da1fcb` "Use bevy_markup for UI" + uncommitted client UI changes (and the uncommitted bevy_markup `HtmlSignalsExt` on top of `9d84990`) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0035.md`](playtest_0035.md) |
+
+Verifies the client after its main-menu, lobby and pause-menu buttons moved from one `MessageReader` + name `match` per surface to bevy_markup's `app.on_html_click(name, system)`: Connect (Enter and gamepad South), lobby Main Menu, Play, Resume and pause Main Menu all work.
+
+### `playtest_0034` — Buttons From a Shared Template Component Library
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-06 02:07 – 02:09 UTC |
+| **Commit** | `0da1fcb` "Use bevy_markup for UI" + uncommitted client UI changes (and the uncommitted bevy_markup template composition on top of `9d84990`) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0034.md`](playtest_0034.md) |
+
+Verifies the client after its menus, lobby, pause menu and VR wrist panel started building buttons from `html/components.html` (Tera 2 `ui.button` / `ui.selector_toggle`, included across files — new in bevy_markup): every button has the same id, classes and `data-*` as the hand-written markup, autofocus, tooltips and selectors work, Enter plays and the pause menu resumes.
+
+### `playtest_0033` — Built-in `data-tooltip` Tooltips
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-06 02:02 – 02:03 UTC |
+| **Commit** | `0da1fcb` "Use bevy_markup for UI" + uncommitted client UI changes (and the uncommitted bevy_markup `data-tooltip` tooltips on top of `9d84990`) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0033.md`](playtest_0033.md) |
+
+Verifies the client after its tooltip signal plumbing was replaced by bevy_markup's built-in `data-tooltip` (`HtmlTooltips`): Connect, Options (above) and Quit tooltips appear exactly where the hand-rolled ones did, with their translated text, and none remain after the pointer leaves.
+
+### `playtest_0032` — Per-Feature `data-*` Attributes Instead of Shared `data-with`
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-06 01:58 – 02:00 UTC |
+| **Commit** | `0da1fcb` "Use bevy_markup for UI" + uncommitted client UI changes (and the uncommitted bevy_markup `HtmlElement::dataset` / `ElementSignal::data` on top of `9d84990`) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0032.md`](playtest_0032.md) |
+
+Verifies the client after tooltips and selector toggles moved from one shared `data-with` object per button to their own `data-tooltip*` / `data-selector` attributes (read through bevy_markup's new `ElementSignal::data`): tooltips land where they did in playtest 0029 (right 348/340, above with bottom 414) with their translated text, and the Options, Language and Level selectors open.
+
+### `playtest_0031` — Signal Sources: Activation Input, Primary-Only Clicks
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-05 23:25 – 23:27 UTC |
+| **Commit** | `0da1fcb` "Use bevy_markup for UI" + uncommitted client UI changes (and the uncommitted bevy_markup `SignalSource`/`ActivationInput`/`data-on-auxclick` on top of `c8ab00f`) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0031.md`](playtest_0031.md) |
+
+Verifies the client after `ElementSignal` gained a `source` and `HtmlFocus::activate` started requiring the activating input (the client reports Enter or the gamepad's South): Enter connects, gamepad South resumes from the pause menu, a left click on Play enters the game, and a right click on Play now does nothing (bevy_markup bug_0024: any mouse button used to fire `data-on-click`).
+
 ### `playtest_0030` — In-Place UI Updates, `style` Attributes and `opacity`
 
 | Field | Value |

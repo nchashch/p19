@@ -47,10 +47,25 @@ impl Plugin for PrototypeUiPlugin {
         embedded_asset!(app, "html/main_menu.html");
         app.add_plugins((HudPlugin, selector::SelectorPlugin));
         app.add_systems(OnEnter(GameState::MainMenu), spawn_menu_controls);
+        app.on_html_click(
+            "main-menu.connect",
+            |_: In<ElementSignal>, mut commands: Commands| {
+                commands.trigger(Connect);
+            },
+        )
+        .on_html_click("main-menu.credits", |_: In<ElementSignal>| {
+            info!("credits: not implemented yet");
+        })
+        .on_html_click(
+            "main-menu.quit",
+            |_: In<ElementSignal>, mut commands: Commands| {
+                commands.write_message(AppExit::Success);
+            },
+        );
         app.add_systems(
             Update,
             (
-                handle_main_menu_signals,
+                handle_main_menu_picks,
                 spawn_vr_main_menu_wrist_panel
                     .run_if(in_state(GameState::MainMenu).and_then(in_state(VRState::VR))),
             ),
@@ -99,26 +114,9 @@ pub fn spawn_main_menu(
     ));
 }
 
-/// Every main-menu button and selector pick, desktop and wrist panel alike.
-fn handle_main_menu_signals(
-    mut signals: MessageReader<ElementSignal>,
-    mut picked: MessageReader<SelectorPicked>,
-    mut locale: ResMut<Locale>,
-    mut commands: Commands,
-) {
-    for signal in signals
-        .read()
-        .filter(|signal| signal.trigger == SignalTrigger::Click)
-    {
-        match signal.name.as_ref() {
-            "main-menu.connect" => commands.trigger(Connect),
-            "main-menu.credits" => info!("credits: not implemented yet"),
-            "main-menu.quit" => {
-                commands.write_message(AppExit::Success);
-            }
-            _ => {}
-        }
-    }
+/// Main-menu selector picks (desktop and wrist panel alike); its buttons are `on_html_click`
+/// handlers.
+fn handle_main_menu_picks(mut picked: MessageReader<SelectorPicked>, mut locale: ResMut<Locale>) {
     for pick in picked.read() {
         match pick.selector {
             OPTIONS_SELECTOR => info!("selected option: {} (not implemented yet)", pick.value),

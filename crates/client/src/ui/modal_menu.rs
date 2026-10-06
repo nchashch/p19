@@ -37,10 +37,15 @@ impl Plugin for ModalMenuPlugin {
         // Also covers any other way `InGame` might end (a future disconnect/kick path from the
         // server, say), so a later `Play` never starts with a stale `Open` state.
         app.add_systems(OnExit(GameState::InGame), close_modal_menu);
+        for main_menu in ["pause.main-menu", "wrist-game.main-menu"] {
+            app.on_html_click(main_menu, |_: In<ElementSignal>, commands: Commands| {
+                return_to_main_menu(commands);
+            });
+        }
+        app.on_html_click("pause.resume", resume);
         app.add_systems(
             Update,
             (
-                handle_modal_menu_signals,
                 refresh_controls_tips.run_if(state_changed::<InputDeviceState>),
                 spawn_vr_in_game_wrist_panel
                     .run_if(in_state(GameState::InGame).and_then(in_state(VRState::VR))),
@@ -89,28 +94,17 @@ fn spawn_modal_menu(
 /// `ModalMenuState::Closed` plus re-locking the cursor, mirroring `controls::toggle_modal_menu`'s
 /// close branch (see that function's doc comment for why the cursor is set directly rather than
 /// via an `OnExit(ModalMenuState::Open)` system).
-fn handle_modal_menu_signals(
-    mut signals: MessageReader<ElementSignal>,
+/// `pause.resume`: close the modal and hand the cursor back to the game.
+fn resume(
+    _: In<ElementSignal>,
     mut next_state: ResMut<NextState<ModalMenuState>>,
     // `Query`, not `Single<&mut …>` — windowless (`--mcp`) mode has no `CursorOptions` at all.
     mut cursor_options: Query<&mut CursorOptions>,
-    mut commands: Commands,
 ) {
-    for signal in signals.read() {
-        if signal.trigger != SignalTrigger::Click {
-            continue;
-        }
-        match signal.name.as_ref() {
-            "pause.main-menu" | "wrist-game.main-menu" => return_to_main_menu(commands.reborrow()),
-            "pause.resume" => {
-                next_state.set(ModalMenuState::Closed);
-                for mut options in &mut cursor_options {
-                    options.visible = false;
-                    options.grab_mode = CursorGrabMode::Locked;
-                }
-            }
-            _ => {}
-        }
+    next_state.set(ModalMenuState::Closed);
+    for mut options in &mut cursor_options {
+        options.visible = false;
+        options.grab_mode = CursorGrabMode::Locked;
     }
 }
 

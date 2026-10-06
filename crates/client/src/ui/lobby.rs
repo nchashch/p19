@@ -26,7 +26,15 @@ pub struct LobbyUiPlugin;
 impl Plugin for LobbyUiPlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "html/lobby.html");
-        app.add_systems(Update, (sync_level_options, handle_lobby_signals));
+        app.on_html_click("lobby.play", play)
+            .on_html_click(
+                "lobby.main-menu",
+                |_: In<ElementSignal>, mut commands: Commands| {
+                    commands.trigger(Disconnect);
+                    commands.set_state(GameState::MainMenu);
+                },
+            )
+            .add_systems(Update, (sync_level_options, load_picked_level));
     }
 }
 
@@ -79,32 +87,19 @@ fn sync_level_options(
     }
 }
 
-/// Every lobby button and level pick.
-fn handle_lobby_signals(
-    mut signals: MessageReader<ElementSignal>,
-    mut picked: MessageReader<SelectorPicked>,
-    mut in_game: Query<&mut MessageSender<InGameRequest>>,
-    mut load_level: Query<&mut MessageSender<LoadLevelRequest>>,
-    mut commands: Commands,
-) {
-    for signal in signals
-        .read()
-        .filter(|signal| signal.trigger == SignalTrigger::Click)
-    {
-        match signal.name.as_ref() {
-            "lobby.play" => {
-                if let Ok(mut sender) = in_game.single_mut() {
-                    info!("InGameRequest sent");
-                    sender.send::<OrderedReliable>(InGameRequest);
-                }
-            }
-            "lobby.main-menu" => {
-                commands.trigger(Disconnect);
-                commands.set_state(GameState::MainMenu);
-            }
-            _ => {}
-        }
+/// `lobby.play`: ask the server to put this client in the game.
+fn play(_: In<ElementSignal>, mut in_game: Query<&mut MessageSender<InGameRequest>>) {
+    if let Ok(mut sender) = in_game.single_mut() {
+        info!("InGameRequest sent");
+        sender.send::<OrderedReliable>(InGameRequest);
     }
+}
+
+/// A level pick asks the server to load it.
+fn load_picked_level(
+    mut picked: MessageReader<SelectorPicked>,
+    mut load_level: Query<&mut MessageSender<LoadLevelRequest>>,
+) {
     for pick in picked.read().filter(|pick| pick.selector == LEVEL_SELECTOR) {
         if let Ok(mut sender) = load_level.single_mut() {
             sender.send::<OrderedReliable>(LoadLevelRequest {

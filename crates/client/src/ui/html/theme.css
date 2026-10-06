@@ -1,10 +1,10 @@
 /*
  * The one stylesheet (`DefaultStylesheet`) for every client `HtmlUi`; see `ui/markup.rs`.
  * bevy_markup's CSS subset: type/.class/#id compound selectors (+ :hover/:active/:focus), no
- * combinators or `overflow`. Each template's `<html class="…-root">` styles the `HtmlUi`
- * entity itself (placement, size, stacking, pickability: the "Roots" section); values the code
- * computes (nameplate positions; tooltip and popup positions via bevy_markup's `HtmlAnchor`)
- * stay on the `Node`, since CSS leaves undeclared fields alone. `pointer-events` is inherited: a root set
+ * combinators. Each template's `<html class="…-root">` styles the `HtmlUi`
+ * entity itself (placement, size, stacking, pickability: the "Roots" section); overlay positions
+ * (bevy_markup's `HtmlAnchor` for tooltips and popups, `HtmlWorldAnchor` for nameplates) stay
+ * on the `Node`, since CSS leaves undeclared fields alone. `pointer-events` is inherited: a root set
  * to `none` re-enables its interactive panels with `auto`. Each surface keeps its other rules
  * in its own section below.
  */
@@ -119,7 +119,7 @@ h2 {
   pointer-events: none;
 }
 
-/* Placed beside its element by `HtmlAnchor` (`ui/markup.rs`). */
+/* bevy_markup's `data-tooltip` tooltips (`HtmlTooltips`, inserted by `ui/markup.rs`). */
 .tooltip-root {
   position: absolute;
   z-index: 1000;
@@ -164,10 +164,15 @@ h2 {
   pointer-events: none;
 }
 
-/* Moved to its target's screen position every frame by `ui/nameplate.rs` (left/top). */
+/* Kept over its target by bevy_markup's `HtmlWorldAnchor` (`ui/nameplate.rs`). */
 .nameplate-root {
   position: absolute;
   pointer-events: none;
+}
+
+/* Toggled off (`NameplatesVisible`) or faded out. */
+.nameplate-root.hidden {
+  display: none;
 }
 
 /* === Main menu === */

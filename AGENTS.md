@@ -341,11 +341,17 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
   = `theme.css`, the UI font in `FontFamilies` (CSS `serif`, from `CommonAssets`), `ActiveLocale`
   following bevy_fluent's `Locale` (bundle `locales/<id>/main.ftl.yml`; the language picker writes
   `Locale`), and the interaction layer:
-  - **One input path.** Pointer clicks on `data-on-click` elements arrive as bevy_markup
-    `ElementSignal` messages; `UiConfirm` (gamepad South or Enter, `MenuControls`) emits the same
-    message for the focused element. Surfaces handle buttons in one `MessageReader<ElementSignal>`
-    system, matching namespaced names (`main-menu.connect`, `lobby.play`, `pause.resume`,
-    `selector.toggle`/`selector.pick`, `wrist-game.main-menu`, …) and `data-with` payloads.
+  - **One input path.** Primary-button clicks on `data-on-click` elements arrive as bevy_markup
+    `ElementSignal` messages (right/middle clicks are `data-on-auxclick`, unused here); `UiConfirm`
+    (gamepad South or Enter, `MenuControls`) emits the same message for the focused element.
+    `signal.source` says what produced it: `Pointer { pointer, button, position, .. }` (mouse,
+    or a VR laser's `PointerId::Custom` from `quad_panel.rs`) or `Activation(input)` (the key or
+    gamepad button `on_ui_confirm` saw). Buttons are routed by name with bevy_markup's
+    `app.on_html_click("lobby.play", system)` (namespaced names: `main-menu.connect`,
+    `pause.resume`, `wrist-game.main-menu`, …; each handler a system taking `In<ElementSignal>`);
+    the selector reads the `ElementSignal` messages itself (`selector.toggle`/`selector.pick`).
+    Handlers read per-feature `data-*` attributes (`signal.data("selector")`) or a structured
+    `data-with` payload (row indices).
   - **Navigation/focus** is bevy_markup's (its `focus` module, browser-style): `data-on-click`
     elements are focusable, the `autofocus` attribute takes the initial focus, focus survives
     rebuilds by element `id`, an `HtmlModal` root (selector popup, pause menu) confines it, an
@@ -355,16 +361,17 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
     spawned per UI state: main menu, lobby, pause menu) → `HtmlFocus::navigate` (d-pad, arrows,
     left stick; auto-repeat after 0.4 s, then every 0.08 s) and `HtmlFocus::activate` (South /
     Enter). A dead-end move fires bevy_markup's `FocusEdge` (the selector pages on it).
-  - **Tooltips.** `data-on-enter="tooltip" data-on-leave="tooltip"` + `data-with`
-    `{"tooltip": key, "tooltip_args": {...}, "tooltip_above": bool}` → a `tooltip.html` root
+  - **Tooltips** are bevy_markup's `data-tooltip="key"` (optional `data-tooltip-args='{…}'`,
+    `data-tooltip-placement="above"`): `markup.rs` inserts `HtmlTooltips(tooltip.html)`, and
+    hovering shows a `tooltip.html` root
     anchored beside (or above) the element with bevy_markup's `HtmlAnchor` (follows it, stays in
     the viewport, renders on its UI camera, despawned with it).
 - **`ui/ui.rs`** — main menu (`main_menu.html`): Connect, Options (stub selector), Credits
   (stub), Quit, Language (`en-US`/`ru-RU`/`ja-JP`, labels in their own script). The same template
   (`wrist = true`) is the VR main-menu wrist panel. Registers `HudPlugin` and `SelectorPlugin`.
 - **`ui/selector.rs`** — generic popup (ADR 0001's behavior): a `Selector { key, options }`
-  entity per picker; a toggle element (`data-on-click="selector.toggle"`, `data-with`
-  `{"selector": key}`) opens a `selector.html` root (`HtmlModal`) anchored right of it
+  entity per picker; a toggle element (`data-on-click="selector.toggle"`,
+  `data-selector="key"`) opens a `selector.html` root (`HtmlModal`) anchored right of it
   (`HtmlAnchor`; closes with the toggle), 5 visible rows
   (ids `slot-0..4`, updated in place when paging, so focus stays on its row) over a paginated
   window, a discrete scrollbar, wheel and edge paging, resume at the last pick (its row is
@@ -381,9 +388,12 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
   frame (Tab/Select via `DataFrameVisible`; its context is written every frame while shown),
   hotbar (`HOTBAR_ENABLED = false`); `HudVisible` (console `hud`) hides them. Reads ahoy's
   `CharacterControllerState::grounded`.
-- **`ui/nameplate.rs`** — one screen-space `nameplate.html` root per `HitPoints` entity, moved
-  per frame (`Node.left`/`top`); name, health (`style="width: …%"`) and distance fade (root
-  `style="opacity: …"`) are template values written every frame while shown (rounded to 1%);
+- **`ui/nameplate.rs`** — one screen-space `nameplate.html` root per `HitPoints` entity, kept
+  centered over the target's head by bevy_markup's `HtmlWorldAnchor` (hidden off screen, behind
+  the camera or over an invisible target; despawned with it); name, health (`style="width: …%"`),
+  distance fade (root `style="opacity: …"`, from `HtmlWorldAnchorView::distance`) and the
+  `hidden` class (toggle off / faded out → `display: none`) are template values written every
+  frame (rounded to 1%);
   hidden by default (`NameplatesVisible`, console `nameplates`; reflected, so BRP
   `world.insert_resources` toggles it too).
 - **`ui/npc_ui_quad.rs`** — one `npc_sign.html` root rendered into a shared texture shown on every
@@ -408,7 +418,8 @@ documents the full CSS subset and pipeline):
   `style="…"` attribute (`width`, `opacity`, …), rounded to what's visible. Style-only changes
   restyle in place (`HtmlUiRestyled`). Never parent other entities under an `HtmlUi` root (the
   menu/lobby `WorldAssetRoot` backgrounds are separate entities). Material uniforms (crosshair
-  GCD ring) and the nameplates' screen position stay component updates.
+  GCD ring) stay component updates; overlays follow elements (`HtmlAnchor`) or world points
+  (`HtmlWorldAnchor`) by bevy_markup.
 - App components on built elements (an atlas `ImageNode` for an icon, a `MaterialNode`, a
   marker a per-frame system queries) are declared in the template: `<div is="<name>" data-…>`
   runs the system registered with `app.define_html_element("<name>", system)`
@@ -420,12 +431,15 @@ documents the full CSS subset and pipeline):
   root: every template is wrapped in `<html class="<surface>-root">`, and `theme.css`'s "Roots"
   section places, sizes, stacks and (un)picks the roots — `z-index` there is Bevy's `ZIndex`
   among roots (pause menu 100/101, selector popup 900, tooltips 1000; the agent cursor's
-  `GlobalZIndex::MAX` stays on top). Spawning code sets only what it computes (nameplate
-  `left`/`top`); overlays beside an element use `HtmlAnchor`. CSS leaves undeclared `Node` fields and
-  components alone and gives back anything it stops declaring. No `overflow` or combinators. No `border-image` (its
+  `GlobalZIndex::MAX` stays on top). Spawning code sets no placement: overlays beside an
+  element use `HtmlAnchor`, over a world point `HtmlWorldAnchor`. CSS leaves undeclared `Node` fields and
+  components alone and gives back anything it stops declaring. `overflow` works; combinators don't. No `border-image` (its
   image would never load under `--no-render`, so the UI would never build).
 - `button` isn't a container: buttons are `<div class="button" id="…" data-on-click="…">` with a
-  `<p data-l10n-id="…">English fallback</p>` label. Give every clickable a stable `id`.
+  `<p data-l10n-id="…">English fallback</p>` label — write them with the shared components in
+  `html/components.html` (`{% include "components.html" %}`, then
+  `{{ <ui.button id=… signal=… key=… label=… /> }}` / `<ui.selector_toggle …/>`). Give every
+  clickable a stable `id`.
 
 ### Headless camera mechanics (`--mcp`)
 
