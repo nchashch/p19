@@ -1,5 +1,6 @@
 //! `CommonAssets` is the single manifest for every asset the client needs regardless of which
-//! level is loaded — models, sounds, the skybox, UI fonts, and the two input-prompt icon packs.
+//! level is loaded — models, sounds, the skybox and the two input-prompt icon packs (no fonts:
+//! the UI uses the system's, see `ui::markup::register_ui_fonts`).
 //! It's loaded once, up front, via `bevy_asset_loader`'s `LoadingState` (see `main.rs`'s
 //! `GameState::AssetLoading` — the app doesn't reach `MainMenu` until this collection is fully
 //! loaded), so every other module reads a pre-loaded `Handle`/lookup out of `Res<CommonAssets>`
@@ -74,8 +75,8 @@ pub struct CommonAssets {
     /// Furniture fields are `Option` so an asset manifest can omit them entirely — that's the
     /// `--no-common-assets`/playtest-assets mode: the playtest's own
     /// `collections/common_assets.assets.ron` lists only the world keys, and these come back
-    /// `None` (the consumers degrade to Bevy's built-in defaults: the embedded default font,
-    /// no skybox pass, no icon quads, no sample playback). The normal `assets/client` manifest
+    /// `None` (the consumers degrade to Bevy's built-in defaults: no skybox pass, no icon
+    /// quads, no sample playback). The normal `assets/client` manifest
     /// lists every key, so production behavior is unchanged.
     #[asset(key = "crunch", optional)]
     pub crunch: Option<Handle<AudioSample>>,
@@ -85,27 +86,6 @@ pub struct CommonAssets {
     /// See `scripts/hdri_to_skybox.py`'s doc comment for how this KTX2 cubemap is built.
     #[asset(key = "skybox", optional)]
     pub skybox: Option<Handle<Image>>,
-
-    /// The client's UI font — IosevkaSlabQP (a slab serif), registered as the CSS `serif`
-    /// family for every `HtmlUi` (`ui::markup::register_ui_fonts`) and as Bevy's default font
-    /// (`override_default_font`).
-    #[asset(key = "serif_font", optional)]
-    pub serif_font: Option<Handle<Font>>,
-
-    /// The bold face of `serif_font` (CSS `font-weight: bold`, headings).
-    #[asset(key = "serif_bold_font", optional)]
-    pub serif_bold_font: Option<Handle<Font>>,
-
-    /// Noto Sans JP — kept loaded purely so `parley` (Bevy 0.19's text-shaping stack) has a
-    /// CJK-capable font actually registered in its font collection to fall back to for glyphs
-    /// `serif_font` doesn't cover (confirmed via `bevy_text::font::load_font_assets_into_font_collection`'s
-    /// own source: *every* loaded `Font` asset gets registered into the same `parley::fontique`
-    /// collection shaping draws from, whether or not any `TextFont` ever names it directly — this
-    /// field's own `Handle` never needs to be read anywhere else). Replaces relying on
-    /// `system_font_discovery` (a host-machine-dependent CJK font, not a shipped one) for the
-    /// `ja-JP` locale added alongside it — see `ui.rs`'s `language_options`.
-    #[asset(key = "noto_sans_jp_font", optional)]
-    pub noto_sans_jp_font: Option<Handle<Font>>,
 
     /// Kenney's own pre-built texture atlas for the keyboard/mouse "Input Prompts" pack — a single
     /// sheet PNG plus a Sparrow/Starling-format XML manifest (`input_icons::SparrowAtlasManifest`
@@ -141,9 +121,6 @@ impl CommonAssets {
             crunch: None,
             explosion: None,
             skybox: None,
-            serif_font: None,
-            serif_bold_font: None,
-            noto_sans_jp_font: None,
             keyboard_mouse_atlas_image: None,
             keyboard_mouse_atlas_manifest: None,
             steam_deck_atlas_image: None,
@@ -193,35 +170,4 @@ struct DespawnTrigger {
 #[reflect(Component)]
 struct SpawnTrigger {
     ids: Vec<String>,
-}
-
-/// Overrides Bevy's own built-in default font (`AssetId::<Font>::default()` — what any
-/// `TextFont`/`FontSource` left at its `#[default]` resolves to, e.g. plain `Text` with no font
-/// set) with `CommonAssets.serif_font`, so the fallback matches this project's own UI font
-/// instead of Bevy's embedded FiraMono. `bevy_text::TextPlugin` (part of `DefaultPlugins`) seeds
-/// that same slot once, in its own `build()`, with the embedded font — this just overwrites it
-/// afterward with a real asset already in `Assets<Font>`. Covers plain `Text` outside the
-/// `HtmlUi`s (which pick faces through `FontFamilies`, see `ui::markup`).
-///
-/// Not a `Startup` system, despite the name suggesting one — `CommonAssets` doesn't exist until
-/// `GameState::AssetLoading`'s `LoadingState` finishes, well after `Startup` runs (same ordering
-/// constraint as `npc_ui_quad.rs`'s `setup_npc_ui_quad`, which hit exactly this as a real panic:
-/// `Res<CommonAssets>` "resource does not exist"). `OnEnter(GameState::MainMenu)` is the earliest
-/// point `Res<CommonAssets>` is guaranteed to exist.
-pub fn override_default_font(common_assets: Res<CommonAssets>, mut fonts: ResMut<Assets<Font>>) {
-    // `None` = the playtest-assets mode omitted the font keys; keep Bevy's embedded default.
-    let Some(serif_font) = &common_assets.serif_font else {
-        return;
-    };
-    let Some(font) = fonts.get(serif_font).cloned() else {
-        // Shouldn't happen — every handle in `CommonAssets` is guaranteed fully loaded by the
-        // time the collection resource itself exists — but fail soft rather than panic/unwrap if
-        // that guarantee is ever violated.
-        warn!("override_default_font: CommonAssets.serif_font isn't loaded yet");
-        return;
-    };
-    // `AssetId::<Font>::default()` is always the `Uuid` variant (see `Handle<A>::default()`),
-    // and `Assets::insert`'s `Err` case only ever comes from the `Index` variant — this can't
-    // actually fail, so there's nothing meaningful to do with the `Result`.
-    let _ = fonts.insert(AssetId::<Font>::default(), font);
 }

@@ -7,9 +7,11 @@
 //!   root (`BEVY_ASSET_ROOT` playtest sets, `--no-common-assets`). Each surface module registers
 //!   its own templates; [`template`] loads one. `html/theme.css` is the single
 //!   `DefaultStylesheet` for every surface.
-//! - **Fonts / locale.** `FontFamilies` gets the UI font from `CommonAssets` once loaded (CSS
-//!   `font-family: serif`); `ActiveLocale` follows bevy_fluent's `Locale` resource (the language
-//!   picker writes `Locale`), loading `locales/<id>/main.ftl.yml`.
+//! - **Fonts / locale.** The UI uses the system's fonts: [`register_ui_fonts`] maps the CSS
+//!   generics `serif` / `sans-serif` / `monospace` to the host's families (Bevy's
+//!   `system_font_discovery`; no font files ship with the game). `ActiveLocale` follows
+//!   bevy_fluent's `Locale` resource (the language picker writes `Locale`), loading
+//!   `locales/<id>/main.ftl.yml`.
 //! - **Interaction.** Pointer clicks on `data-on-click` elements arrive as `ElementSignal`
 //!   messages (bevy_markup), and so does gamepad South / Enter ([`UiConfirm`] → bevy_markup's
 //!   `HtmlFocus::activate` on the focused element), so every surface handles one input path: a
@@ -28,7 +30,6 @@
 //! bevy_markup's `HtmlAnchor`.
 
 use crate::add_observers_run_if;
-use crate::assets::collections::CommonAssets;
 use crate::controls::actions::{UiConfirm, UiNavigate};
 use bevy::asset::embedded_asset;
 use bevy::{math::CompassOctant, platform::collections::HashMap, prelude::*};
@@ -49,11 +50,10 @@ impl Plugin for MarkupPlugin {
         app.add_input_context::<MenuControls>()
             .init_resource::<UiNavigateHold>()
             .init_resource::<LocaleBundles>()
-            .add_systems(Startup, load_default_stylesheet)
+            .add_systems(Startup, (load_default_stylesheet, register_ui_fonts))
             .add_systems(
                 Update,
                 (
-                    register_ui_fonts.run_if(resource_added::<CommonAssets>),
                     sync_active_locale,
                     repeat_ui_navigate_while_held.run_if(console_closed),
                 ),
@@ -83,25 +83,24 @@ fn load_default_stylesheet(
     mut commands: Commands,
 ) {
     *stylesheet = DefaultStylesheet::new(assets.load(embedded_path("theme.css")));
-    commands.insert_resource(HtmlTooltips::new(assets.load(embedded_path("tooltip.html"))));
+    commands.insert_resource(HtmlTooltips::new(
+        assets.load(embedded_path("tooltip.html")),
+    ));
 }
 
-/// The CSS name of the UI font; `theme.css` also maps the `serif` generic to it.
-const UI_FONT_FAMILY: &str = "Iosevka Slab QP";
-
-/// Registers `CommonAssets`' UI font faces. Absent faces (`--no-common-assets`) leave the
-/// family unregistered, so CSS falls back to Bevy's default font.
-fn register_ui_fonts(common_assets: Res<CommonAssets>, mut fonts: ResMut<FontFamilies>) {
-    let Some(regular) = common_assets.serif_font.clone() else {
-        return;
-    };
-    let mut faces = FontFaces::new(regular);
-    if let Some(bold) = common_assets.serif_bold_font.clone() {
-        faces = faces.with_bold(bold);
-    }
+/// Maps the CSS generic families `theme.css` uses to the system's fonts (Bevy's
+/// `FontSource` generics, resolved by `system_font_discovery`): one source per family, the
+/// system picks the bold and italic faces. Glyphs a family lacks (Japanese, say) fall back to
+/// any installed font that has them. Nothing ships with the game, so the look follows the
+/// player's system, and a locale renders only if some installed font covers its script.
+fn register_ui_fonts(mut fonts: ResMut<FontFamilies>) {
     fonts
-        .insert(UI_FONT_FAMILY, faces)
-        .set_generic(GenericFamily::Serif, UI_FONT_FAMILY);
+        .insert("System Serif", FontFaces::new(FontSource::Serif))
+        .insert("System Sans", FontFaces::new(FontSource::SansSerif))
+        .insert("System Mono", FontFaces::new(FontSource::Monospace))
+        .set_generic(GenericFamily::Serif, "System Serif")
+        .set_generic(GenericFamily::SansSerif, "System Sans")
+        .set_generic(GenericFamily::Monospace, "System Mono");
 }
 
 /// Loaded locale bundles by language id, kept alive so switching back is instant.

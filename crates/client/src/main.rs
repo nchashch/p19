@@ -421,10 +421,7 @@ impl Plugin for Prototype19 {
             .register_asset_loader(assets::character::CharacterAssetLoader)
             .add_systems(
                 OnEnter(GameState::MainMenu),
-                (
-                    ui::ui::spawn_main_menu,
-                    assets::collections::override_default_font,
-                ),
+                ui::ui::spawn_main_menu,
             );
 
         if no_common_assets {

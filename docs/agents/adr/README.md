@@ -17,7 +17,7 @@ Each record uses the same shape: **Context** (the problem, forces, constraints),
 | # | Title | Status |
 |---|-------|--------|
 | [0001](./0001-generic-paginated-selector-widget.md) | Generic paginated selector widget, replacing continuous scrolling | Accepted |
-| [0002](./0002-bundle-cjk-capable-fonts.md) | Bundle CJK-capable fonts instead of relying on system font discovery | Accepted |
+| [0002](./0002-bundle-cjk-capable-fonts.md) | Bundle CJK-capable fonts instead of relying on system font discovery | Superseded by [0016](./0016-system-fonts.md) |
 | [0003](./0003-room-based-interest-management.md) | Room-based interest management for lobby/in-game separation | Accepted |
 | [0004](./0004-decouple-player-character-from-connection-entity.md) | Decouple the player character from the client connection entity | Accepted |
 | [0005](./0005-gut-character-controller-for-prediction-rewrite.md) | Gut the character controller pending a client-side-prediction rewrite | Accepted |
@@ -31,6 +31,7 @@ Each record uses the same shape: **Context** (the problem, forces, constraints),
 | [0013](./0013-server-determinism-and-session-replay.md) | Server-side determinism hardening and session recording/replay for post-release debugging | Accepted |
 | [0014](./0014-multiplayer-hardening-netcode-tokens-and-portable-builds.md) | Multiplayer hardening, per-client netcode tokens over TLS, and portable CI builds | Accepted |
 | [0015](./0015-client-ui-on-bevy-markup.md) | Client UI on bevy_markup (HTML templates + CSS + Fluent) | Accepted |
+| [0016](./0016-system-fonts.md) | Use the system's fonts instead of shipping font files | Accepted |
 
 New records should be added to this index in the same PR/commit that adds the file. From 0014
 onward, records follow [`docs/agents/skills/adr.md`](../skills/adr.md) (header table, author

@@ -4,6 +4,17 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0038` — System Fonts
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-07 00:50 – 00:52 +0400 |
+| **Commit** | `9158192` "Use crates.io version of bevy_markup" + uncommitted system-fonts change (ADR 0016) |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0038.md`](playtest_0038.md) |
+
+Verifies the client after it stopped loading font files and switched to the system's fonts: the main menu in English (system serif and monospace) and Japanese (CJK fallback, no missing glyphs), lobby → in game, a nameplate, the controls panel and the pause menu all render. The UI's look now follows the host's fonts; a system without a CJK font would not render Japanese.
+
 ### `playtest_0037` — In-Place Updates Write Only What Changed
 
 | Field | Value |

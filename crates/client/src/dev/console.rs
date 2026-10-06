@@ -42,23 +42,25 @@ impl Plugin for PConsolePlugin {
         // (and the startup toggle that writes its config) is skipped entirely. (The `fps`
         // console command is likewise a no-op-with-error there.)
         if !crate::config::is_no_render_presync() {
-            app.add_plugins(FpsOverlayPlugin::default());
+            // The system's monospace font (no font files ship with the game).
+            app.add_plugins(FpsOverlayPlugin {
+                config: FpsOverlayConfig {
+                    text_config: TextFont {
+                        font: FontSource::Monospace,
+                        ..FpsOverlayConfig::default().text_config
+                    },
+                    ..default()
+                },
+            });
             app.add_systems(Startup, disable_fps_overlay);
         }
         app.add_plugins((
             ChillConsole {
-                // `font_path` resolves via a normal `asset_server.load(path)` (see
-                // `chill_bevy_console`'s `ConsoleAssets::from_world`), same as any other font
-                // reference in this codebase — `None` (the default) falls back to the crate's
-                // embedded Ubuntu Mono / Bevy's built-in default font instead. `--no-common-assets`
-                // playtest roots carry no font files at all, so the flag forces that fallback
-                // rather than pointing the load at a path that can't exist there.
+                // No font file: `font_path: None` uses Bevy's built-in default font (FiraMono,
+                // compiled into Bevy; this crate's own `embedded-font` feature is off). The
+                // console only takes a path or a handle, not a system family.
                 config: ConsoleConfig {
-                    font_path: if crate::config::is_no_common_assets_presync() {
-                        None
-                    } else {
-                        Some("fonts/IosevkaSlabMono/IosevkaSlabMono-Regular.ttf".to_string())
-                    },
+                    font_path: None,
                     ..default()
                 },
                 ..default()

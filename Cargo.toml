@@ -25,15 +25,12 @@ bevy = { version = "0.19.0", default-features = true, features = [
 	"basis-universal",
 	"ktx2",
 	"bevy_dev_tools",
-	# Lets `parley` (Bevy 0.19's text-shaping stack — see `parley_context.rs`'s `FontCx`) fall back
-	# to fonts discovered on the host system when the explicitly-set UI font (`CommonAssets.
-	# serif_font`, IBM Plex Serif — Latin/Cyrillic only) lacks a glyph a string actually needs, e.g.
-	# Japanese kana/kanji. Only `client` renders text at all — `server`/`shared` declare their own
-	# separate, smaller `bevy` feature set (see AGENTS.md's dependency-layout notes), so this only
-	# affects `client`. Worth knowing: this makes CJK *readable on a dev machine that happens to
-	# have a CJK-capable font installed* (confirmed present here: Noto Sans CJK under
-	# `/usr/share/fonts/noto-cjk/`) — it is not a substitute for actually bundling a CJK font asset
-	# for the shipped game, since a player's machine has no such guarantee.
+	# The client's only fonts: the UI uses the host system's (`FontSource::Serif` / `SansSerif` /
+	# `Monospace`, mapped to the CSS generics in `ui/markup.rs`'s `register_ui_fonts`), and
+	# `parley` (Bevy 0.19's text shaping) falls back to any installed font for glyphs a family lacks
+	# (Japanese kana/kanji). No font files ship with the game, so the look follows the player's
+	# system and a locale renders only if an installed font covers its script (ADR 0016). Only
+	# `client` renders text — `server`/`shared` declare their own smaller `bevy` feature set.
 	"system_font_discovery",
 ] }
 avian3d = { version = "0.7.0", features = ["simd", "serialize"] }

@@ -218,7 +218,11 @@ cargo run -p p19-client --release     # connects when the main menu's Connect bu
 - **bevy_common_assets** (`ron`, `toml`) is a generic data-file loader, separate from
   `bevy_asset_loader`'s collections. `Level` uses its own `LevelAssetLoader`, not
   `RonAssetPlugin`.
-- `bevy`'s `system_font_discovery` lets `parley` fall back to a host CJK font (`ja-JP` locale).
+- **Fonts are the system's**: `bevy`'s `system_font_discovery` resolves the CSS generics
+  (`serif`, `sans-serif`, `monospace`) to installed fonts and lets `parley` fall back to any
+  installed font for missing glyphs (`ja-JP`). No font files ship (ADR 0016); a script renders
+  only if the player's system has a font for it. Exceptions: the dev console (`chill_bevy_console`
+  takes only a path) uses Bevy's built-in FiraMono.
 - `chill_bevy_console` is the in-game dev console (backtick).
 - Other crates.io deps of note: `avian3d` 0.7, `bevy_skein`, `bevy_enhanced_input` 0.26,
   `bevy_asset_loader`, `bevy_hanabi`, `bevy_vello`, `bevy_seedling`, `audionimbus`,
@@ -323,10 +327,9 @@ systems.
   `ui/localization.rs`'s `localized()` (bevy_fluent `Localization`), not bevy_markup.
 - **`dev/tool_api.rs`** — the agent tool API (see below).
 - **`assets/collections.rs`** — `CommonAssets`: five world-asset handles plus optional "furniture"
-  (`#[asset(key = "…", optional)]` `Option<Handle<T>>` — fonts incl. `serif_bold_font`, sounds,
-  skybox, icon atlases); every consumer degrades when absent. `CommonAssets::placeholder()` is
-  used by `--no-common-assets`. `override_default_font` patches Bevy's default font (plain `Text`
-  outside the `HtmlUi`s).
+  (`#[asset(key = "…", optional)]` `Option<Handle<T>>` — sounds, skybox, icon atlases; no
+  fonts, see "Fonts are the system's"); every consumer degrades when absent.
+  `CommonAssets::placeholder()` is used by `--no-common-assets`.
 
 ### UI (bevy_markup)
 
@@ -338,7 +341,8 @@ every asset root (`BEVY_ASSET_ROOT` sets, `--no-common-assets`, `--no-render`). 
 module registers its own templates; `markup::template(&asset_server, "x.html")` loads one.
 
 - **`ui/markup.rs`** (`MarkupPlugin`) — the shared layer: `BevyMarkupPlugin`, `DefaultStylesheet`
-  = `theme.css`, the UI font in `FontFamilies` (CSS `serif`, from `CommonAssets`), `ActiveLocale`
+  = `theme.css`, the system's fonts in `FontFamilies` (`register_ui_fonts`, at `Startup`: CSS
+  `serif` / `sans-serif` / `monospace`), `ActiveLocale`
   following bevy_fluent's `Locale` (bundle `locales/<id>/main.ftl.yml`; the language picker writes
   `Locale`), and the interaction layer:
   - **One input path.** Primary-button clicks on `data-on-click` elements arrive as bevy_markup

@@ -21,9 +21,9 @@ const OPTIONS_SELECTOR: &str = "main-menu.options";
 const LANGUAGE_SELECTOR: &str = "main-menu.language";
 
 /// Selectable languages: locale id and the language's own name in its own script — deliberately
-/// not localized, so every option is readable whichever language is active. The UI font covers
-/// Latin/Cyrillic only; Japanese glyphs fall back to `CommonAssets.noto_sans_jp_font` (or a host
-/// CJK font via `system_font_discovery` when the manifest omits it).
+/// not localized, so every option is readable whichever language is active. Fonts are the
+/// system's (`markup::register_ui_fonts`): Japanese renders only if an installed font covers it
+/// (ADR 0016).
 const LANGUAGES: [(&str, &str); 3] = [
     ("en-US", "English"),
     ("ru-RU", "Русский"),
