@@ -1739,7 +1739,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_markup"
-version = "0.2.0"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1114a33ab6782bb1b1c67a088062ddb9e1738a006a8e072a5096ef3b2ff70d4"
 dependencies = [
  "astral-tl",
  "bevy",
