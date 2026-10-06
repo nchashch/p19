@@ -1,0 +1,5 @@
+locale: ja-JP
+resources:
+  - ui.ftl
+  - hud.ftl
+  - console.ftl

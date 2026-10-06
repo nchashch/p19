@@ -10,13 +10,13 @@ controller over `lightyear`'s replicated-input/rollback pipeline), not a stub �
 local input is simulated immediately and reconciled against the server's authoritative result,
 the same architecture a shipped multiplayer game would use.
 
-**Status: pre-release prototype, actively evolving, not currently playable end-to-end.**
-Movement/prediction, combat, and cube/NPC spawning genuinely work now, but known gaps remain —
-most visibly, disconnected players' characters aren't cleaned up (blocking a clean reconnect),
-and all players share one spawn point — see [`AGENTS.md`](./AGENTS.md)'s "Known gaps"
-section for the current, specific set, and
-[`docs/agents/adr/`](./docs/agents/adr/) for the reasoning behind major decisions. Expect things to be broken
-or half-built; this is a live development snapshot, not a demo.
+**Status: pre-release prototype, actively evolving.** It runs end to end from a fresh clone:
+start the server and the client, connect, pick a level in the lobby, and play — movement with
+prediction, combat, and cube/NPC spawning all work. Known gaps remain — most visibly,
+disconnected players' characters aren't cleaned up (rejoining needs a server restart), and all
+players share one spawn point — see [`AGENTS.md`](./AGENTS.md)'s "Known gaps" section for the
+current, specific set, and [`docs/agents/adr/`](./docs/agents/adr/) for the reasoning behind
+major decisions. Expect rough edges; this is a live development snapshot, not a finished game.
 
 An agent-driven QA tool API (BRP + MCP, gated behind the `dev-tools` cargo feature) lets an AI
 coding agent actually play the game headlessly — connect, navigate menus, move, inject input,
@@ -27,31 +27,41 @@ after each session; several real bugs in this repo were found and root-caused th
 
 ## Getting started
 
-Requires a Rust toolchain supporting edition 2024, and [Git LFS](https://git-lfs.com/) (`git
-lfs install`, once per machine) to pull the actual screenshot images referenced by
-`docs/agents/playtests/` reports — the repo still clones and builds fine without it, you'd just see
-LFS pointer text instead of images for those specific files.
+Requirements:
+
+- a Rust toolchain supporting edition 2024;
+- [Git LFS](https://git-lfs.com/) — **required**: the binary game assets (models, textures,
+  the skybox, sounds) and the playtest screenshots are stored as LFS objects;
+- on Linux, Bevy's system libraries (audio, input, windowing; see Bevy's
+  [Linux dependencies](https://github.com/bevyengine/bevy/blob/main/docs/linux_dependencies.md)).
 
 ```sh
-cargo check --workspace   # fastest way to confirm everything compiles
-cargo run -p p19-server --release   # start the authoritative server (listens on 0.0.0.0:6000)
-cargo run -p p19-client --release   # start the game client (connects once you press Connect)
+git lfs install                                  # once per machine, before cloning
+git clone https://github.com/nchashch/p19.git
+cd p19
+cargo run -p p19-server --release                # terminal 1: the authoritative server
+cargo run -p p19-client --release                # terminal 2: the game client
 ```
+
+In the client: **Connect** → in the lobby, pick a level → **Play**. The client connects to
+`127.0.0.1` by default; to play against a server on another machine, set `server_ip` in
+`assets/client/config.toml`.
+
+If you cloned before installing Git LFS, the asset files are small text pointers (they start
+with `version https://git-lfs.github.com/spec/v1`) and the game can't load them; run
+`git lfs install && git lfs pull` to fetch the real files.
+
+On first run, the server creates its netcode key and token-TLS identity in
+`assets/server/network/`, and the client pins the server's certificate fingerprint in
+`assets/client/network/` the first time it connects. Both directories are machine-local and
+gitignored. If the server's identity is regenerated, delete
+`assets/client/network/token-tls-fingerprint.txt` so the client pins the new one.
 
 To drive the client as an agent instead of a human — headless, no window, scriptable over
 HTTP — build with `--features dev-tools` and run with `--mcp`; see
 [`docs/agents/skills/playtest.md`](./docs/agents/skills/playtest.md) for the full playbook (launch recipe,
 tool API surface, known gotchas) and [`docs/agents/adr/0009`](./docs/agents/adr/0009-agent-tool-api-via-brp.md)
 for the design behind it.
-
-**Assets are not tracked in git** (`assets/client/`, `assets/server/`, and `assets/src/` are
-all gitignored) — there is currently no automated, documented process to provision them from
-a fresh clone. If you're picking this up on a new machine, you'll need to copy those
-directories over from an existing checkout by hand; there's no `cargo run` that "just works"
-from source alone yet. This is a known gap, not an oversight — worth fixing before this repo
-needs to support more than one working copy. (This doesn't apply to `docs/agents/playtests/screenshots/`
-specifically — those *are* tracked, via Git LFS, since they're small and meant as durable
-history rather than runtime content.)
 
 `cargo build -p <p19-client|p19-server> --release` on the host machine produces a binary linked
 against the host's glibc, which will *not* run correctly on a Steam Deck or inside the
@@ -69,9 +79,11 @@ either.
   both sides need to agree on (character controller, combat, player bundle, spawners,
   replication registration).
 - **`assets/client/`, `assets/server/`** — each binary's runtime asset root (found
-  automatically from a development checkout; see `AGENTS.md` "Commands").
+  automatically from a development checkout; see `AGENTS.md` "Commands"). Binary assets are
+  stored with Git LFS, text assets (levels, translations, shaders, config) in plain git.
 - **`assets/src/`** — raw source assets (`.blend` files, downloaded packs) processed into
-  `assets/client/`/`assets/server/` for actual runtime use. Nothing loads from it directly.
+  `assets/client/`/`assets/server/` for actual runtime use. Nothing loads from it directly, and
+  it isn't in git.
 
 Networking is [`lightyear`](https://github.com/cBournhonesque/lightyear) 0.30 over UDP/netcode.
 Physics is [`avian3d`](https://github.com/Jondolf/avian). Automated tests are a handful of unit
@@ -110,8 +122,14 @@ The **code** in `crates/` is dual-licensed under either the
 option — the standard convention across the Rust and Bevy ecosystem, matching the license of
 most of this project's own dependencies.
 
-This does **not** currently cover assets (`assets/client/`, `assets/server/`, `assets/src/`) —
-those include third-party content under their own separate license terms (e.g. Kenney's CC0
-packs, OFL-licensed fonts), plus original content whose licensing hasn't been decided yet. Not
-resolved yet; treat anything under those directories as unlicensed/all-rights-reserved until
-that's sorted out.
+This does **not** cover the assets (`assets/client/`, `assets/server/`), which are in this
+repository for running the game but are not licensed for reuse: the original content (models,
+levels, translations, shaders) has no license decided yet, so treat it as
+unlicensed/all-rights-reserved. The third-party content in it is public domain (CC0):
+
+- input-prompt glyph sheets (`textures/input_prompts/`): Kenney,
+  [Input Prompts](https://kenney.nl/assets/input-prompts);
+- the night-sky skybox (`skyboxes/night_sky.ktx2`): ambientCG,
+  [Night Sky HDRI 012](https://ambientcg.com/view?id=NightSkyHDRI012);
+- the floor texture in `rigs/environment/start.glb`: Poly Haven,
+  [Rubber Tiles](https://polyhaven.com/a/rubber_tiles) by Amal Kumar.

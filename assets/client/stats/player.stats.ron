@@ -1,0 +1,9 @@
+(
+    vitality: 4,
+    strength: 12,
+    agility: 10,
+    intellect: 9,
+    luck: 19,
+    fire_immunity: false,
+)
+

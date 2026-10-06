@@ -1,0 +1,37 @@
+// Dynamic asset manifest for `p19_client::assets::CommonAssets` — every `#[asset(key = "...")]` field
+// there resolves against one of these entries. Registered in `main.rs` via
+// `LoadingState::with_dynamic_assets_file::<StandardDynamicAssetCollection>("common_assets.assets.ron")`.
+// See `assets.rs`'s module doc comment for how this two-phase (load manifest, then resolve keys)
+// process actually works.
+({
+    "cube_world": File (
+        path: "rigs/prop/cube.glb#Scene0",
+    ),
+    "rig_world": File (
+        path: "rigs/armature/npc.glb#Scene0",
+    ),
+    "rig_gltf": File (
+        path: "rigs/armature/npc.glb",
+    ),
+    "menu_background": File (
+        path: "rigs/environment/main_menu.glb#Scene0",
+    ),
+    "lobby_background": File (
+        path: "rigs/environment/lobby.glb#Scene0",
+    ),
+    "skybox": File (
+        path: "skyboxes/night_sky.ktx2",
+    ),
+    "keyboard_mouse_atlas_image": File (
+        path: "textures/input_prompts/keyboard_mouse_sheet.png",
+    ),
+    "keyboard_mouse_atlas_manifest": File (
+        path: "textures/input_prompts/keyboard_mouse_sheet.xml",
+    ),
+    "steam_deck_atlas_image": File (
+        path: "textures/input_prompts/steam_deck_sheet.png",
+    ),
+    "steam_deck_atlas_manifest": File (
+        path: "textures/input_prompts/steam_deck_sheet.xml",
+    ),
+})

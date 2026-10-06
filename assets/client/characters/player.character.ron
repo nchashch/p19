@@ -1,0 +1,4 @@
+(
+    rig: "rigs/armature/player.glb",
+    controller: "controllers/player.controller.ron",
+)

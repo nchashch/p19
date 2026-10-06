@@ -1,0 +1,5 @@
+locale: ru-RU
+resources:
+  - ui.ftl
+  - hud.ftl
+  - console.ftl

@@ -1,0 +1,24 @@
+// `Controller` values for the player, mirroring `p19_shared::player::player()`'s hardcoded bundle —
+// see that function's `PLAYER_*` constants for `collider`/`acceleration`/`damping`/`jump_impulse`/
+// `gravity`/`terminal_velocity`/`game_layer`, and its `GroundDetection { cast_shape, ..default() } `
+// for `ground_detection_collider`. `ground_detection_max_angle`/`ground_detection_max_distance`
+// aren't overridden there, so they're `GroundDetection::default()`'s values instead (`PI / 6.0`,
+// `0.2`) — not yet actually read from this file anywhere; `player()` still builds its bundle from
+// the Rust constants directly.
+(
+    collider: Capsule(radius: 0.4, height: 1.0),
+
+    acceleration: 100.0,
+    damping: 10.0,
+    jump_impulse: 10.0,
+    gravity: (0.0, -20.0, 0.0),
+    terminal_velocity: 300.0,
+
+    // Slightly smaller than `collider` above, per `player()`'s comment: avoids the ground-detection
+    // shape cast itself getting stuck against the walls the main capsule is already touching.
+    ground_detection_collider: Capsule(radius: 0.399, height: 1.0),
+    ground_detection_max_angle: 0.5235988, // PI / 6.0
+    ground_detection_max_distance: 0.2,
+
+    game_layer: Player,
+)

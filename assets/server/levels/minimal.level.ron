@@ -1,0 +1,5 @@
+(
+    name: "level-minimal-name",
+    model: "rigs/minimal_level.glb",
+    skybox: "skyboxes/night_sky.ktx2",
+)

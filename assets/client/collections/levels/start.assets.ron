@@ -1,0 +1,13 @@
+// Dynamic asset manifest for `p19_client::assets::collections::LevelAssets` — every
+// `#[asset(key = "...", collection(typed, mapped))]` field there needs a matching entry here,
+// each a `Files`/`Folder` dynamic asset (not a plain `File`, which resolves to `Single(handle)`
+// rather than the `Collection(handles)` shape `collection(mapped)` requires) that resolves into a
+// `HashMap<AssetFileStem, Handle<T>>` keyed by each listed file's own filename stem. Minimal for
+// now — add paths under the relevant key once this level actually needs specific rigs,
+// skyboxes, or audio.
+({
+    "armature_rigs": Files(paths: []),
+    "world_rigs": Files(paths: []),
+    "skyboxes": Files(paths: []),
+    "audio": Files(paths: []),
+})

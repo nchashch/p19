@@ -1,6 +1,8 @@
 /target
-/assets/client
-/assets/server
 /assets/src
+# Machine-local network state, (re)created on first run — never commit: the
+# server's netcode key and token-TLS private key, the client's TOFU pin.
+/assets/server/network/
+/assets/client/network/
 /scripts/__pycache__
 /docs/agents/playtests/dist

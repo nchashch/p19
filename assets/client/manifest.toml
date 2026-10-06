@@ -1,0 +1,8 @@
+[metadata]
+version = "0.0.0"
+
+[levels]
+main_menu = "levels/main_menu.level.ron"
+lobby = "levels/lobby.level.ron"
+start = "levels/start.level.ron"
+dungeon = "levels/dungeon.level.ron"

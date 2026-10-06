@@ -41,8 +41,9 @@ Reflected type paths (Skein extras in `.glb`/`.gltf`, BRP queries) therefore sta
 `p19_shared::`/`p19_client::`/`p19_server::`. Documents written before the 2026-10-02 rename
 (old ADRs, playtests, bug reports) still say `shared::…`, `client::…`, `target/release/client`.
 
-Status: pre-release, not playable end to end. Steam Deck is the primary / minimum-spec target (see
-"Platform targets").
+Status: pre-release prototype. It runs end to end from a fresh clone with Git LFS (connect →
+lobby → pick a level → play: movement, combat, spawning); see "Known gaps" for what's missing.
+Steam Deck is the primary / minimum-spec target (see "Platform targets").
 
 Key facts to internalize:
 
@@ -154,9 +155,20 @@ cargo run -p p19-server --release     # listens on UDP 0.0.0.0:6000 (+ HTTPS tok
 cargo run -p p19-client --release     # connects when the main menu's Connect button is pressed
 ```
 
+- **Fresh clone**: run `git lfs install` before cloning (or `git lfs install && git lfs pull`
+  after): the binary assets are LFS objects, and without LFS they are small pointer files
+  (`version https://git-lfs.github.com/spec/v1 …`) the game can't load. Nothing else needs
+  provisioning: the server creates `assets/server/network/` and the client its TOFU pin on first
+  run. Verified by running both binaries against exactly the git-tracked asset set (playtest
+  0039).
 - **Layout**: crates in `crates/{client,server,shared}/`; assets outside them in
   `assets/client/` and `assets/server/` (the two asset roots) and `assets/src/` (raw `.blend` files
-  and source packs; nothing loads from it). Assets are not tracked in git.
+  and source packs; nothing loads from it). `assets/client` and `assets/server` are tracked: binary
+  assets (`.glb`, `.ktx2`, `.png`, `.wav`, fonts, …) through Git LFS (`.gitattributes`, per
+  extension — a bare directory pattern matches no file), text assets in plain git.
+  `assets/src` is ignored, and so is each root's `network/` (the server's netcode key and
+  token-TLS key pair, the client's TOFU pin): machine-local, recreated on first run, never
+  committed.
 - **Asset root resolution** (`p19_shared::paths::asset_dir`, used for `AssetPlugin::file_path` and
   for every plain-`std::fs` read of asset-root files — config, network identity, TLS pin):
   1. `BEVY_ASSET_ROOT` set → `$BEVY_ASSET_ROOT/assets` (isolated playtest asset sets, overrides);
@@ -194,11 +206,10 @@ cargo run -p p19-client --release     # connects when the main menu's Connect bu
 - The root `Cargo.toml` centralizes versions in `[workspace.dependencies]`; members use
   `dep.workspace = true`. A member cannot override `default-features` on an inherited dependency,
   so `server`/`shared` declare `bevy` directly with `default-features = false` (headless).
-- **Sibling path dependency (one, temporary):** `bevy_markup` (the owner's own crate — HTML/Tera
-  + CSS + Fluent → Bevy UI; every client UI surface, see "UI (bevy_markup)") is
-  `path = "../../PROTOTYPE_23/bevy_markup/"` while its fixes are developed alongside this repo;
-  a fresh clone without that checkout won't build. It requires bevy `^0.19.1` (`Cargo.lock`
-  pins 0.19.1). Its README asks apps to patch `fluent-syntax` to its fork (`nchashch/fluent-rs`,
+- **`bevy_markup`** 0.3.0 from crates.io (the owner's own crate — HTML/Tera + CSS + Fluent →
+  Bevy UI; every client UI surface, see "UI (bevy_markup)"; source:
+  `github.com/nchashch/bevy_markup`). It requires bevy `^0.19.1` (`Cargo.lock` pins 0.19.1). Its
+  README asks apps to patch `fluent-syntax` to its fork (`nchashch/fluent-rs`,
   `fix/fuzzing-bugs-0.11`: a panic on a broken unicode escape and a stack overflow on deeply
   nested expressions), done in the root `[patch.crates-io]`.
 - Other crates needing local patches are pinned git branches on the owner's forks; check the
@@ -328,7 +339,10 @@ systems.
 - **`dev/tool_api.rs`** — the agent tool API (see below).
 - **`assets/collections.rs`** — `CommonAssets`: five world-asset handles plus optional "furniture"
   (`#[asset(key = "…", optional)]` `Option<Handle<T>>` — sounds, skybox, icon atlases; no
-  fonts, see "Fonts are the system's"); every consumer degrades when absent.
+  fonts, see "Fonts are the system's"); every consumer degrades when absent. No sounds ship at
+  the moment: the manifest lists no `crunch` / `explosion` keys, so combat is silent. A
+  manifest entry whose file is missing (as opposed to an omitted key) keeps the client in
+  `AssetLoading` forever.
   `CommonAssets::placeholder()` is used by `--no-common-assets`.
 
 ### UI (bevy_markup)
@@ -410,7 +424,8 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
   (`InputIconAtlases::image_node(name)`, `None` when a pack is absent).
 - **`ui/localization.rs`** — the `Locale` resource and the console's `Localization`.
 
-bevy_markup rules that bite (the crate's own `AGENTS.md`, in `../../PROTOTYPE_23/bevy_markup/`,
+bevy_markup rules that bite (the crate's own `AGENTS.md`, in its repository
+`github.com/nchashch/bevy_markup` — not in the crates.io package —
 documents the full CSS subset and pipeline):
 
 - An `HtmlUi` root's children belong to the pipeline. A `TemplateContext`/locale/template change

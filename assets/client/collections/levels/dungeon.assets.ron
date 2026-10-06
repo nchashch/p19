@@ -1,0 +1,7 @@
+// See `start.assets.ron` for what this file is and how it's chosen at runtime.
+({
+    "armature_rigs": Files(paths: []),
+    "world_rigs": Files(paths: []),
+    "skyboxes": Files(paths: []),
+    "audio": Files(paths: []),
+})
