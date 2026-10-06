@@ -1,3 +1,4 @@
+pub mod credits;
 pub mod hud;
 pub mod input_icons;
 pub mod lobby;

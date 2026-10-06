@@ -1,0 +1,21 @@
+{# The credits screen (`ui/credits.rs`): a modal over the main menu listing the third-party
+   assets the game uses — the same entries as `assets/CREDITS.md`. Asset titles and authors are
+   names (not translated); everything else is Fluent. #}
+{% include "components.html" %}
+<html class="credits-root">
+<div class="panel credits-panel">
+  <h1 data-l10n-id="credits-title">Credits</h1>
+  <p class="credits-intro" data-l10n-id="credits-intro">Third-party assets, all dedicated to the public domain (CC0 1.0). Thank you to their authors.</p>
+  {% for credit in credits %}
+  <div class="credits-entry" id="credit-{{ credit.id }}">
+    <p class="credits-asset">{{ credit.title }}</p>
+    <p class="credits-author" data-l10n-id="credits-by" data-l10n-args='{"author": "{{ credit.author }}"}'>by {{ credit.author }}</p>
+    <p class="credits-use" data-l10n-id="credits-use-{{ credit.id }}">{{ credit.id }}</p>
+    <p class="credits-source">{{ credit.url }} · CC0 1.0</p>
+  </div>
+  {% endfor %}
+  <p class="credits-outro" data-l10n-id="credits-original">Everything else was made for this game.</p>
+  {{ <ui.button id="credits-back" class="primary" autofocus={true} signal="credits.back"
+                key="credits-back" label="Back" /> }}
+</div>
+</html>

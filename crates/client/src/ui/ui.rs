@@ -4,6 +4,7 @@
 
 use crate::assets::collections::CommonAssets;
 use crate::events::Connect;
+use crate::ui::credits;
 use crate::ui::hud::HudPlugin;
 use crate::ui::markup::{self, menu_controls};
 use crate::ui::quad_panel::quad_panel;
@@ -45,7 +46,7 @@ pub struct PrototypeUiPlugin;
 impl Plugin for PrototypeUiPlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "html/main_menu.html");
-        app.add_plugins((HudPlugin, selector::SelectorPlugin));
+        app.add_plugins((HudPlugin, selector::SelectorPlugin, credits::CreditsPlugin));
         app.add_systems(OnEnter(GameState::MainMenu), spawn_menu_controls);
         app.on_html_click(
             "main-menu.connect",
@@ -53,9 +54,6 @@ impl Plugin for PrototypeUiPlugin {
                 commands.trigger(Connect);
             },
         )
-        .on_html_click("main-menu.credits", |_: In<ElementSignal>| {
-            info!("credits: not implemented yet");
-        })
         .on_html_click(
             "main-menu.quit",
             |_: In<ElementSignal>, mut commands: Commands| {

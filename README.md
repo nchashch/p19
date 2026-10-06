@@ -125,7 +125,8 @@ most of this project's own dependencies.
 This does **not** cover the assets (`assets/client/`, `assets/server/`), which are in this
 repository for running the game but are not licensed for reuse: the original content (models,
 levels, translations, shaders) has no license decided yet, so treat it as
-unlicensed/all-rights-reserved. The third-party content in it is public domain (CC0):
+unlicensed/all-rights-reserved. The third-party content in it is public domain (CC0); see
+[`assets/CREDITS.md`](./assets/CREDITS.md) for full attribution:
 
 - input-prompt glyph sheets (`textures/input_prompts/`): Kenney,
   [Input Prompts](https://kenney.nl/assets/input-prompts);

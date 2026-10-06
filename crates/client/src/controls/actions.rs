@@ -56,3 +56,9 @@ pub struct UiNavigate;
 #[derive(InputAction)]
 #[action_output(bool)]
 pub struct UiConfirm;
+
+/// "Close this screen" — Escape or gamepad East, bound only while a closable screen is open (the
+/// credits, see `ui::credits`'s `CreditsControls`).
+#[derive(InputAction)]
+#[action_output(bool)]
+pub struct UiCancel;
