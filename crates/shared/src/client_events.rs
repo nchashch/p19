@@ -2,8 +2,14 @@ use bevy::prelude::*;
 use bevy::{asset::AssetPath, ecs::entity::MapEntities};
 use serde::{Deserialize, Serialize};
 
+/// Spawn the sender's player character and put it in the game.
 #[derive(Event, Serialize, Deserialize, Clone)]
-pub struct InGameRequest;
+pub struct InGameRequest {
+    /// Whether the sender predicts its own character (the client's Options → Client-side
+    /// prediction). The server scopes the character's `PredictionTarget` to the owner only if
+    /// set; otherwise the owner interpolates the server's state like any remote body.
+    pub predict: bool,
+}
 
 /// Join the game room (receive replicated world state) **without** spawning a player
 /// character. Sent by observer clients (e.g. a `--headless-render` agent host) that want

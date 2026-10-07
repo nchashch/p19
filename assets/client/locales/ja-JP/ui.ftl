@@ -30,3 +30,8 @@ credits-original = それ以外はすべてこのゲームのために制作し�
 menu-screen-back = 戻る
 options-title = オプション
 options-language-tooltip = ゲーム内テキストの言語。
+options-prediction = クライアント側予測：{ $enabled ->
+        [true] オン
+       *[other] オフ
+    }
+options-prediction-tooltip = オン：操作がすぐ反映され、サーバーが補正します。オフ：サーバーの結果だけが通信の遅延つきで表示されます。次のプレイから適用されます。

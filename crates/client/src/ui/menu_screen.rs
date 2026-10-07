@@ -42,7 +42,7 @@ pub struct MenuScreen {
 struct MenuScreenControls;
 
 /// Opens the screen `template` (an embedded `credits.html`, …) with `context`, unless a screen is
-/// already open. `return_focus` is the `id` of the opening button.
+/// already open. `return_focus` is the `id` of the opening button. Returns the screen's root.
 pub fn open_menu_screen(
     commands: &mut Commands,
     asset_server: &AssetServer,
@@ -50,18 +50,20 @@ pub fn open_menu_screen(
     template_name: &str,
     context: TemplateContext,
     return_focus: &'static str,
-) {
+) -> Option<Entity> {
     if !open.is_empty() {
-        return;
+        return None;
     }
-    commands.spawn((
-        MenuScreen { return_focus },
-        template(asset_server, template_name),
-        context,
-        // Focus stays inside while it's open; the main menu underneath can't be reached.
-        HtmlModal,
-        DespawnOnExit(GameState::MainMenu),
-    ));
+    let root = commands
+        .spawn((
+            MenuScreen { return_focus },
+            template(asset_server, template_name),
+            context,
+            // Focus stays inside while it's open; the main menu underneath can't be reached.
+            HtmlModal,
+            DespawnOnExit(GameState::MainMenu),
+        ))
+        .id();
     // A separate entity, not a child of the root: an `HtmlUi` root's children belong to
     // bevy_markup, which removes anything it didn't build.
     commands.spawn((
@@ -75,6 +77,7 @@ pub fn open_menu_screen(
             )]
         ),
     ));
+    Some(root)
 }
 
 /// The open screens; [`open_menu_screen`] opens nothing while there is one.

@@ -4,6 +4,17 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0042` — Client-Side Prediction Toggle
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-07 02:22 – 02:25 +0400 |
+| **Commit** | `3a58f16` "Move language select to options menu" + uncommitted prediction toggle |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0042.md`](playtest_0042.md) |
+
+Verifies the Options screen's Client-side prediction toggle end to end: with it on the own character is `Predicted` and runs the client KCC (motion within 0.1 s); with it off the server skips `PredictionTarget`, the character is `Interpolated` with no client KCC and still moves and turns (motion one tick later on localhost). Toggle works by mouse and keyboard and is translated.
+
 ### `playtest_0041` — Options Screen
 
 | Field | Value |

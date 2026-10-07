@@ -492,6 +492,7 @@ pub(crate) fn apply_in_game_request(
     in_game_root: Entity,
     game_room: &GameRoom,
     remote_ids: &Query<&RemoteId>,
+    request: &InGameRequest,
     commands: &mut Commands,
 ) {
     if let Ok(player_spawner_transform) = player_spawner.single() {
@@ -505,13 +506,15 @@ pub(crate) fn apply_in_game_request(
         let at = player_spawner_transform.translation;
         let room = game_room.0;
         commands.entity(entity).insert(Rooms::single(room));
-        // The owning client predicts this entity (its local ahoy sim becomes the
-        // prediction, reconciled by lightyear's rollback); `PredictionTarget`
-        // materializes as `Predicted` on that client's received entity. Other
-        // clients currently just get the plain replicated entity (their Transform
-        // follows the replicated `Position` via lightyear_avian's sync).
+        // If it asked to (`InGameRequest::predict`), the owning client predicts this entity
+        // (its local ahoy sim becomes the prediction, reconciled by lightyear's rollback);
+        // `PredictionTarget` materializes as `Predicted` on that client's received entity.
+        // Everyone else — and the owner with prediction off — gets the plain replicated
+        // entity, which the client interpolates (`interpolated_remotes`).
         let own_client = remote_ids
             .get(entity)
+            .ok()
+            .filter(|_| request.predict)
             .map(|remote| NetworkTarget::Single(remote.0))
             .unwrap_or(NetworkTarget::None);
         commands.spawn((
@@ -541,13 +544,13 @@ fn in_game_request(
     mut recorder: Option<ResMut<ReplayRecorder>>,
 ) {
     for (entity, mut receiver) in receivers {
-        for _request in receiver.receive() {
+        for request in receiver.receive() {
             if let Some(recorder) = recorder.as_deref_mut() {
                 recorder.record_message(
                     timeline.tick(),
                     &remote_ids,
                     entity,
-                    RecordedMessage::InGame(InGameRequest),
+                    RecordedMessage::InGame(request.clone()),
                 );
             }
             apply_in_game_request(
@@ -560,6 +563,7 @@ fn in_game_request(
                 *in_game_root,
                 &game_room,
                 &remote_ids,
+                &request,
                 &mut commands,
             );
         }

@@ -1799,15 +1799,18 @@ fn trigger_method(params: In<Option<serde_json::Value>>, mut world: &mut World) 
             Ok(json!({"triggered": "disconnect"}).into())
         }
         "play" => {
-            // The lobby Play button's exact behavior: `InGameRequest` over the client's own
-            // message sender.
+            // The lobby Play button's exact behavior: `InGameRequest` (with this client's
+            // `ClientPrediction`) over the client's own message sender.
+            let predict = world
+                .resource::<crate::gameplay::player_character::ClientPrediction>()
+                .0;
             let mut sender = world
                 .query::<&mut lightyear::prelude::MessageSender<InGameRequest>>()
                 .iter_mut(world)
                 .next()
                 .ok_or_else(|| BrpError::internal("no MessageSender<InGameRequest> (not connected?)"))?;
-            sender.send::<p19_shared::replication::OrderedReliable>(InGameRequest);
-            Ok(json!({"triggered": "play", "sent": "InGameRequest"}).into())
+            sender.send::<p19_shared::replication::OrderedReliable>(InGameRequest { predict });
+            Ok(json!({"triggered": "play", "sent": "InGameRequest", "predict": predict}).into())
         }
         "observe" => {
             // The observer's counterpart to `play` (`--headless-render` clients): joins the

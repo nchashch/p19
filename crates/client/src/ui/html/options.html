@@ -1,5 +1,6 @@
 {# The options screen (`ui/ui.rs`): a modal over the main menu (`ui/menu_screen.rs`) holding the
-   settings. Only Language so far; its popup opens beside the toggle. #}
+   settings: Language (its popup opens beside the toggle) and the client-side prediction toggle
+   (`prediction`: `ClientPrediction`). #}
 {% include "components.html" %}
 <html class="menu-screen-root">
 <div class="panel menu-screen-panel">
@@ -7,6 +8,10 @@
   {{ <ui.selector_toggle id="language" selector="main-menu.language" key="main-menu-language" label="Language"
                          tooltip="options-language-tooltip"
                          placement="above" /> }}
+  <div class="button" id="prediction" data-on-click="options.prediction"
+       data-tooltip="options-prediction-tooltip" data-tooltip-placement="above">
+    <p data-l10n-id="options-prediction" data-l10n-args='{"enabled": "{{ prediction }}"}'>Client-side prediction: {% if prediction %}On{% else %}Off{% endif %}</p>
+  </div>
   {{ <ui.button id="options-back" class="primary" autofocus={true} signal="menu-screen.back"
                 key="menu-screen-back" label="Back" /> }}
 </div>

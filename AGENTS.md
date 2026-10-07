@@ -60,7 +60,10 @@ Key facts to internalize:
   connection is a member of.
 - **Movement is server-authoritative and client-predicted** with `bevy_ahoy`'s kinematic character
   controller running on both binaries over lightyear-replicated `bevy_enhanced_input` (BEI) action
-  state; lightyear rollback reconciles the prediction. Remote bodies are interpolated.
+  state; lightyear rollback reconciles the prediction. Remote bodies are interpolated. Prediction
+  is a per-client choice (Options → Client-side prediction, `ClientPrediction`, default on) sent
+  in `InGameRequest { predict }`; with it off the own character is interpolated too and the
+  client runs no KCC.
 
 ## Known gaps
 
@@ -278,7 +281,8 @@ overlaying `InGame`), `ServerState` (server-only). `InputDeviceState`
    fingerprint on first use (`assets/client/network/token-tls-fingerprint.txt`; delete to re-trust).
    The netcode private key never reaches the client.
 4. `On<Add, Connected>` (`on_connected`) → `Lobby`.
-5. Lobby: the level picker sends `LoadLevelRequest`; Play sends `InGameRequest`.
+5. Lobby: the level picker sends `LoadLevelRequest`; Play sends `InGameRequest { predict }`
+   (from `ClientPrediction`).
 6. `On<Add, ClientInGame>` with `Controlled` (`on_in_game`) → `InGame`; `On<Remove, Controlled>`
    (`on_out_of_game`) → `Lobby`.
 7. `On<Add, Disconnected>` (`on_disconnected`) → `MainMenu`, except during `AssetLoading`
@@ -294,7 +298,10 @@ systems.
 
 - **`gameplay/player_character.rs`** — `on_player_spawned` is a **polling** `Update` system
   (`Added<Controlled>` on `PlayerCharacter`) that sets `LocalPlayer` and adds the local player's
-  controls and camera rig. `decorate_other_players` gives other players a model. It also registers
+  controls and camera rig, plus ahoy's `CharacterController` (the client-side KCC) only if the
+  character is `Predicted`. Without prediction the character has no `CharacterControllerState`
+  (the data frame shows grounded "—"). `ClientPrediction` (resource, reflected, default `true`,
+  not persisted) is the Options setting; it applies from the next Play. `decorate_other_players` gives other players a model. It also registers
   `CharacterControllerState` for local rollback (`app.component::<CharacterControllerState>().local_rollback()`,
   which needs `PredictionRegistry` from `ClientPlugins` to exist first). `AccumulatedInput` is
   deliberately not registered.
@@ -385,7 +392,8 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
     the viewport, renders on its UI camera, despawned with it).
 - **`ui/ui.rs`** — main menu (`main_menu.html`): Connect, Options, Credits, Quit. Options opens
   the options screen (`options.html`): the Language selector (`en-US`/`ru-RU`/`ja-JP`, labels in
-  their own script) and Back. The same main-menu template (`wrist = true`) is the VR wrist panel:
+  their own script), the Client-side prediction toggle (`options.prediction`, flips
+  `ClientPrediction`; the label follows it every frame via `update_options_screen`) and Back. The same main-menu template (`wrist = true`) is the VR wrist panel:
   Connect, Language (the selector itself), Quit — no Options/Credits, since screen-space modals
   don't show in a headset. Registers `HudPlugin`, `SelectorPlugin`, `MenuScreenPlugin` and
   `CreditsPlugin`.
@@ -550,7 +558,8 @@ reflects every component). The GLTF/Skein/world-serialization pipeline needs no 
     `LevelState::LevelLoaded`.
   - `in_game_request` (only while `ServerState::InGame`; otherwise silently dropped): spawns
     `player(...)` with `Replicate::to_clients(All)`, `PredictionTarget` scoped to the owner's
-    `RemoteId`, `ControlledBy { owner, lifetime: Persistent }`, `ClientInGame`,
+    `RemoteId` if the request's `predict` is set (else to nobody: the owner interpolates its
+    character), `ControlledBy { owner, lifetime: Persistent }`, `ClientInGame`,
     `ChildOf(InGameRoot)`; moves the connection to the game room.
   - `owned_players(connection)` resolves a connection's characters.
 - **`rooms.rs`** — allocates `GameRoom`/`LobbyRoom` and spawns the two roots at `Startup`.

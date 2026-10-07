@@ -1,6 +1,7 @@
 //! The lobby menu (`lobby.html`): Play, the Level selector (options from the replicated
 //! `p19_shared::level::Levels`) and Main Menu.
 
+use crate::gameplay::player_character::ClientPrediction;
 use bevy::{asset::AssetPath, asset::embedded_asset, prelude::*};
 use bevy_markup::prelude::*;
 use lightyear::prelude::MessageSender;
@@ -88,10 +89,16 @@ fn sync_level_options(
 }
 
 /// `lobby.play`: ask the server to put this client in the game.
-fn play(_: In<ElementSignal>, mut in_game: Query<&mut MessageSender<InGameRequest>>) {
+fn play(
+    _: In<ElementSignal>,
+    prediction: Res<ClientPrediction>,
+    mut in_game: Query<&mut MessageSender<InGameRequest>>,
+) {
     if let Ok(mut sender) = in_game.single_mut() {
-        info!("InGameRequest sent");
-        sender.send::<OrderedReliable>(InGameRequest);
+        info!(predict = prediction.0, "InGameRequest sent");
+        sender.send::<OrderedReliable>(InGameRequest {
+            predict: prediction.0,
+        });
     }
 }
 

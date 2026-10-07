@@ -30,3 +30,8 @@ credits-original = Everything else was made for this game.
 menu-screen-back = Back
 options-title = Options
 options-language-tooltip = The language of the game's text.
+options-prediction = Client-side prediction: { $enabled ->
+        [true] On
+       *[other] Off
+    }
+options-prediction-tooltip = On: your movement responds immediately and is corrected by the server. Off: you see only the server's result, delayed by your connection. Applies from the next Play.

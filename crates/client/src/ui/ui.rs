@@ -4,6 +4,7 @@
 
 use crate::assets::collections::CommonAssets;
 use crate::events::Connect;
+use crate::gameplay::player_character::ClientPrediction;
 use crate::ui::credits;
 use crate::ui::hud::HudPlugin;
 use crate::ui::markup::{self, menu_controls};
@@ -52,6 +53,7 @@ impl Plugin for PrototypeUiPlugin {
             },
         )
         .on_html_click("main-menu.options", open_options)
+        .on_html_click("options.prediction", toggle_prediction)
         .on_html_click(
             "main-menu.quit",
             |_: In<ElementSignal>, mut commands: Commands| {
@@ -62,6 +64,7 @@ impl Plugin for PrototypeUiPlugin {
             Update,
             (
                 handle_main_menu_picks,
+                update_options_screen,
                 spawn_vr_main_menu_wrist_panel
                     .run_if(in_state(GameState::MainMenu).and_then(in_state(VRState::VR))),
             ),
@@ -102,26 +105,58 @@ pub fn spawn_main_menu(
     ));
 }
 
-/// `main-menu.options`: the options screen (`options.html`), holding the language picker.
+/// The options screen's root (`options.html`).
+#[derive(Component)]
+struct OptionsScreen;
+
+/// `main-menu.options`: the options screen — the language picker and the client-side
+/// prediction toggle.
 fn open_options(
     _: In<ElementSignal>,
     open: OpenMenuScreens,
+    prediction: Res<ClientPrediction>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
-    open_menu_screen(
+    if let Some(root) = open_menu_screen(
         &mut commands,
         &asset_server,
         &open,
         "options.html",
-        TemplateContext::new(),
+        options_context(*prediction),
         "options",
-    );
+    ) {
+        commands.entity(root).insert(OptionsScreen);
+    }
+}
+
+fn options_context(prediction: ClientPrediction) -> TemplateContext {
+    TemplateContext::new().with("prediction", &prediction.0)
+}
+
+/// `options.prediction`: flips [`ClientPrediction`] (applies from the next Play).
+fn toggle_prediction(_: In<ElementSignal>, mut prediction: ResMut<ClientPrediction>) {
+    prediction.0 = !prediction.0;
+    info!(enabled = prediction.0, "client-side prediction");
+}
+
+/// Keeps the options screen showing the current settings (written every frame; an identical
+/// render does nothing).
+fn update_options_screen(
+    prediction: Res<ClientPrediction>,
+    mut screens: Query<&mut TemplateContext, With<OptionsScreen>>,
+) {
+    for mut context in &mut screens {
+        *context = options_context(*prediction);
+    }
 }
 
 /// Language picks (the options screen and the VR wrist panel alike).
 fn handle_main_menu_picks(mut picked: MessageReader<SelectorPicked>, mut locale: ResMut<Locale>) {
-    for pick in picked.read().filter(|pick| pick.selector == LANGUAGE_SELECTOR) {
+    for pick in picked
+        .read()
+        .filter(|pick| pick.selector == LANGUAGE_SELECTOR)
+    {
         match pick.value.parse::<LanguageIdentifier>() {
             Ok(language) if locale.requested != language => locale.requested = language,
             Ok(_) => {}

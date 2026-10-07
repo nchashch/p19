@@ -637,7 +637,7 @@ fn replay_networking(
                     &mut level_state,
                 )?;
             }
-            RecordedMessage::InGame(_) => {
+            RecordedMessage::InGame(request) => {
                 apply_in_game_request(
                     connection,
                     timeline.tick().0 ^ connection.to_bits() as u32,
@@ -646,6 +646,7 @@ fn replay_networking(
                     *in_game_root,
                     &game_room,
                     &remote_ids,
+                    request,
                     &mut commands,
                 );
             }

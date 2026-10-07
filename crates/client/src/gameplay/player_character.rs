@@ -9,7 +9,7 @@ use bevy::prelude::*;
 use bevy_ahoy::CharacterControllerState;
 use bevy_ahoy::CharacterLook;
 use bevy_ahoy::prelude::CharacterController as AhoyCharacterController;
-use lightyear::prelude::Controlled;
+use lightyear::prelude::{Controlled, Predicted};
 use lightyear::prelude::{AppComponentExt, PredictionBuilderExt};
 use p19_shared::cube_spawner::CubeSpawner;
 use p19_shared::game_state::GameState;
@@ -21,6 +21,8 @@ pub struct PlayerCharacterPlugin;
 impl Plugin for PlayerCharacterPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((CombatPlugin, PlayerControlsPlugin, PlayerCameraPlugin));
+        app.init_resource::<ClientPrediction>()
+            .register_type::<ClientPrediction>();
 
         // Rollback for the KCC's decision state (bug_0004): only the four physics components
         // were rollback-registered, so a server correction rewound `Position`/`Velocity` while
@@ -57,6 +59,22 @@ impl Plugin for PlayerCharacterPlugin {
 #[derive(Component, Reflect, Default)]
 #[reflect(Component)]
 pub struct PlayerModel;
+
+/// Options → Client-side prediction: whether this client predicts its own character. Sent with
+/// the next `InGameRequest` (the server attaches `PredictionTarget` only if set), so a change
+/// applies from the next Play. On: movement responds immediately and rollback reconciles it
+/// with the server. Off: the character moves only when the server's state arrives, interpolated
+/// like every remote body (input-to-motion latency ≈ round trip + interpolation delay).
+/// Reflected, so BRP's `world.insert_resources` can set it too. Not persisted.
+#[derive(Resource, Reflect, Clone, Copy, Debug, PartialEq, Eq)]
+#[reflect(Resource)]
+pub struct ClientPrediction(pub bool);
+
+impl Default for ClientPrediction {
+    fn default() -> Self {
+        Self(true)
+    }
+}
 
 #[derive(Component, Reflect, Default)]
 pub struct OtherPlayer;
@@ -111,32 +129,34 @@ pub struct LocalPlayer(pub Option<Entity>);
 /// `decorate_other_players` right below needs it: with no `Single`/state gate of its own, this
 /// now starts running from app startup — before `GameState::AssetLoading` finishes and inserts
 /// `CommonAssets` — same as that system's own doc comment already explains.
+///
+/// The client-side KCC goes only on a `Predicted` character (prediction on, see
+/// [`ClientPrediction`]): without prediction the server's replicated state is the only motion,
+/// and a local sim would fight it. `Predicted` lands in the same receive pass as `Controlled`
+/// (the same assumption `interpolated_remotes` makes).
 fn on_player_spawned(
-    spawned: Query<Entity, (With<PlayerCharacter>, Added<Controlled>)>,
+    spawned: Query<(Entity, Has<Predicted>), (With<PlayerCharacter>, Added<Controlled>)>,
     mut commands: Commands,
     common_assets: Option<Res<CommonAssets>>,
 ) {
     let Some(common_assets) = common_assets else {
         return;
     };
-    for entity in spawned {
+    for (entity, predicted) in spawned {
         commands.insert_resource(LocalPlayer(Some(entity)));
+        info!(predicted, "local player character spawned");
+        if predicted {
+            commands.entity(entity).insert(
+                // Ahoy's KCC predicts the local player; lightyear's rollback reconciles it with
+                // the server. The `#[require]`d support components (`AccumulatedInput`,
+                // `CustomPositionIntegration`, …) insert automatically.
+                AhoyCharacterController::default(),
+            );
+        }
         commands
             .entity(entity)
             .insert((
                 DespawnOnExit(GameState::InGame),
-                // Ahoy's KCC runs client-side on the local player (M1: local-first movement —
-                // the server's own player is inert, its static `Position` never replicates
-                // corrections, so these local writes are what the player sees until M3's
-                // prediction makes the local sim authoritative-and-reconciled). The
-                // `#[require]`d support components (`AccumulatedInput`, `RigidBody` (absent
-                // client-side — it's not replicated — so this inserts `RigidBody::Kinematic`,
-                // whose own requires add `LinearVelocity`/`Position`/`Rotation`),
-                // `CustomPositionIntegration`, …) insert automatically. Aliased
-                // `AhoyCharacterController` — `p19_shared::character_controller::CharacterController`
-                // is still in the server-authored bundle on this same entity until M4 deletes
-                // the gutted controller.
-                AhoyCharacterController::default(),
                 // Fed from the FPS camera every frame (`controls::update_character_look`) —
                 // ahoy derives movement direction from the look yaw.
                 CharacterLook::default(),

@@ -61,7 +61,7 @@ fn open_credits(
             json!({ "id": credit.id, "title": credit.title, "author": credit.author, "url": credit.url })
         })
         .collect();
-    open_menu_screen(
+    let _ = open_menu_screen(
         &mut commands,
         &asset_server,
         &open,

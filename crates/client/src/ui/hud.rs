@@ -114,7 +114,7 @@ const HOTBAR_ENABLED: bool = false;
 
 /// Spawns the HUD roots on entering `GameState::InGame`.
 pub fn spawn_in_game_scene(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let values = data_frame_values((0, 0), false, Value::Null, Value::Null);
+    let values = data_frame_values((0, 0), Some(false), Value::Null, Value::Null);
     commands.spawn((
         markup::template(&asset_server, "data_frame.html"),
         template_context(&values),
@@ -288,14 +288,23 @@ fn update_crosshair_gcd(
 /// The data frame's template variables: one Fluent args map per line (`*_args`), `hovered`/
 /// `selected` `null` when there's nothing to show. Floats are pre-formatted as displayed, so an
 /// unchanged panel renders identical HTML and bevy_markup skips the rebuild.
-fn data_frame_values(hp: (i32, i32), grounded: bool, hovered: Value, selected: Value) -> Value {
+fn data_frame_values(
+    hp: (i32, i32),
+    grounded: Option<bool>,
+    hovered: Value,
+    selected: Value,
+) -> Value {
     json!({
         "hp_args": { "hp": hp.0, "max_hp": hp.1 },
         "damage_args": { "damage": DAMAGE },
         "attack_range_args": { "range": ATTACK_RANGE },
         "select_range_args": { "range": SELECT_RANGE },
         "gcd_args": { "seconds": GCD_DURATION },
-        "grounded_args": { "grounded": if grounded { "true" } else { "false" } },
+        "grounded_args": { "grounded": match grounded {
+            Some(true) => "true",
+            Some(false) => "false",
+            None => "—",
+        } },
         "hovered": hovered,
         "selected": selected,
     })
@@ -310,10 +319,11 @@ fn update_data_frame(
     mut frames: Query<&mut TemplateContext, With<DataFrame>>,
     hovered: Res<Hovered>,
     selected: Res<Selected>,
+    // No `CharacterControllerState` without prediction (no client-side KCC): grounded unknown.
     player: Query<(
         &HitPoints,
         &GlobalTransform,
-        &bevy_ahoy::CharacterControllerState,
+        Option<&bevy_ahoy::CharacterControllerState>,
     )>,
     global_transforms: Query<&GlobalTransform>,
     hit_points: Query<&HitPoints>,
@@ -366,7 +376,7 @@ fn update_data_frame(
             player_hit_points.hit_points,
             player_hit_points.max_hit_points,
         ),
-        state.grounded.is_some(),
+        state.map(|state| state.grounded.is_some()),
         hovered,
         selected,
     );

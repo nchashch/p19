@@ -30,3 +30,8 @@ credits-original = Всё остальное создано для этой иг
 menu-screen-back = Назад
 options-title = Настройки
 options-language-tooltip = Язык текста в игре.
+options-prediction = Предсказание на клиенте: { $enabled ->
+        [true] Вкл.
+       *[other] Выкл.
+    }
+options-prediction-tooltip = Вкл.: движение отзывается сразу, сервер его поправляет. Выкл.: виден только результат сервера, с задержкой соединения. Применяется со следующего «Играть».
