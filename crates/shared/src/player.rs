@@ -1,6 +1,6 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
-use bevy_ahoy::input::{Jump, Movement, RotateCamera};
+use bevy_ahoy::input::{Jump, Movement};
 use bevy_ahoy::prelude::CharacterController as AhoyCharacterController;
 use bevy_ahoy::CharacterLook;
 use bevy::ecs::spawn::SpawnWith;
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::character_controller::{Character, GameLayer, Idle};
 use crate::combat::{Gcd, HitPoints};
-use crate::inputs::{MouseLook, PlayerInputContext, StickLook};
+use crate::inputs::{Look, LookDirection, PlayerInputContext};
 
 #[derive(Component, Reflect, Default, Serialize, Deserialize)]
 #[reflect(Component)]
@@ -154,21 +154,16 @@ pub fn player(player_name: String, position: Vec3) -> impl Bundle {
         // Aliased `AhoyCharacterController` — the gutted shared `CharacterController` above
         // is still in this bundle until M4 deletes it.
         AhoyCharacterController::default(),
-        // Server-side look is accumulated from the replicated ahoy `RotateCamera` action (see
-        // `p19_server::input`); the client overwrites its own `CharacterLook` from its camera
-        // every frame.
+        // Both set from the owning client's `Look` input every tick (`inputs::apply_look`):
+        // `CharacterLook` steers ahoy's KCC, `LookDirection` is replicated facing.
         CharacterLook::default(),
+        LookDirection::default(),
         PlayerInputContext,
         Actions::<PlayerInputContext>::spawn(SpawnWith(|context: &mut ActionSpawner<_>| {
             context.spawn(Action::<Movement>::new());
             context.spawn(Action::<Jump>::new());
-            // Look input — TWO action entities (mouse + stick), because each device needs
-            // different action-level scaling (radians/pixel vs radians/second×dt) and BEI
-            // applies action-level modifiers to all of an action's bindings. The owning
-            // client binds each per its marker (see `controls.rs`'s binding observers); the
-            // server-side accumulator treats both identically (see `p19_server::input`).
-            context.spawn((Action::<RotateCamera>::new(), MouseLook));
-            context.spawn((Action::<RotateCamera>::new(), StickLook));
+            // Absolute look, set by the owning client from its camera (see `inputs::Look`).
+            context.spawn(Action::<Look>::new());
         })),
     )
 }

@@ -1,5 +1,5 @@
 //! Server-side session recording + deterministic replay ("debug-replay"): capture every
-//! client→server gameplay message and every tick's resolved Movement/Jump/RotateCamera action
+//! client→server gameplay message and every tick's resolved Movement/Jump/Look action
 //! state to a log file, then re-derive the server-side simulation from that log later —
 //! headlessly, no real client, no real network — so a bug reported after release can be stepped
 //! through with a debugger instead of guessed at from logs.
@@ -22,8 +22,8 @@
 //!   it) or `ObserveRequest` (only ever inserts a `Rooms` component on the connection — pure
 //!   replication-targeting bookkeeping with no effect on authoritative simulation state, which
 //!   is all replay ever tries to reproduce).
-//! - The resolved `ActionValue` for each player's `Movement`/`Jump`/`RotateCamera` (×2: mouse and
-//!   stick) action entities, every tick — this is what actually drives movement; without it,
+//! - The resolved `ActionValue` for each player's `Movement`/`Jump`/`Look` action entities, every
+//!   tick — this is what actually drives movement; without it,
 //!   replay could reproduce combat/spawn events but never player positions.
 //!
 //! # What's confirmed working vs. still open
@@ -67,7 +67,7 @@
 
 use bevy::ecs::relationship::Relationship;
 use bevy::prelude::*;
-use bevy_ahoy::input::{Jump, Movement, RotateCamera};
+use bevy_ahoy::input::{Jump, Movement};
 use bevy_enhanced_input::prelude::{Action, ActionOf, ActionValue, Fire, TriggerState};
 use lightyear::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -76,7 +76,7 @@ use p19_shared::client_events::{
     SpawnNpcRequest,
 };
 use p19_shared::combat::Dead;
-use p19_shared::inputs::{MouseLook, PlayerInputContext, StickLook};
+use p19_shared::inputs::{Look, PlayerInputContext};
 use p19_shared::game_state::ServerState;
 use std::time::Duration;
 use std::fs::File;
@@ -90,8 +90,8 @@ use std::path::Path;
 pub enum RecordedAction {
     Movement(ActionValue),
     Jump(ActionValue),
-    RotateCameraMouse(ActionValue),
-    RotateCameraStick(ActionValue),
+    /// The client's absolute look, `Axis2D(yaw, pitch)` (`p19_shared::inputs::Look`).
+    Look(ActionValue),
 }
 
 /// One client→server gameplay message, verbatim — every one of these types already derives
@@ -226,7 +226,7 @@ fn record_disconnect(
     });
 }
 
-/// Records every player's resolved Movement/Jump/RotateCamera(×2) `ActionValue` every tick —
+/// Records every player's resolved Movement/Jump/Look `ActionValue` every tick —
 /// `FixedUpdate`, same schedule `LocalTimeline`'s tick counter advances in (see `combat.rs`'s
 /// matching comment on `tick_gcd`/`tick_dead`), so `timeline.tick()` here is the exact tick this
 /// action state applies to, not a frame later or earlier. Correlates an action entity back to a
@@ -236,14 +236,7 @@ fn record_disconnect(
 fn record_actions(
     movement: Query<(&ActionValue, &ActionOf<PlayerInputContext>), With<Action<Movement>>>,
     jump: Query<(&ActionValue, &ActionOf<PlayerInputContext>), With<Action<Jump>>>,
-    rotate_mouse: Query<
-        (&ActionValue, &ActionOf<PlayerInputContext>),
-        (With<Action<RotateCamera>>, With<MouseLook>),
-    >,
-    rotate_stick: Query<
-        (&ActionValue, &ActionOf<PlayerInputContext>),
-        (With<Action<RotateCamera>>, With<StickLook>),
-    >,
+    look: Query<(&ActionValue, &ActionOf<PlayerInputContext>), With<Action<Look>>>,
     controlled: Query<&ControlledBy>,
     remote_ids: Query<&RemoteId>,
     timeline: Res<LocalTimeline>,
@@ -272,21 +265,12 @@ fn record_actions(
             });
         }
     }
-    for (value, action_of) in &rotate_mouse {
+    for (value, action_of) in &look {
         if let Some(client) = resolve(action_of.get()) {
             recorder.record(RecordedEvent::Action {
                 tick,
                 client,
-                action: RecordedAction::RotateCameraMouse(*value),
-            });
-        }
-    }
-    for (value, action_of) in &rotate_stick {
-        if let Some(client) = resolve(action_of.get()) {
-            recorder.record(RecordedEvent::Action {
-                tick,
-                client,
-                action: RecordedAction::RotateCameraStick(*value),
+                action: RecordedAction::Look(*value),
             });
         }
     }
@@ -390,7 +374,7 @@ fn replay_connections(
     }
 }
 
-/// Re-fires each recorded tick's resolved Movement/Jump/RotateCamera value as the exact
+/// Re-fires each recorded tick's resolved Movement/Jump/Look value as the exact
 /// `Fire<A>` event BEI would have triggered for it, directly — **not** via [`ActionMock`].
 ///
 /// `ActionMock` was the first approach here and is the documented mechanism
@@ -410,8 +394,8 @@ fn replay_connections(
 /// buffered network input to mock during replay for it to consume regardless.
 ///
 /// The fix: skip both of those pipelines and trigger the `Fire<A>` event *directly* —
-/// `apply_movement`/`apply_jump` (`bevy_ahoy::input`) and `accumulate_look`
-/// (`p19_server::input::accumulate_look`) all read straight from the event's own `value` field, not
+/// `apply_movement`/`apply_jump` (`bevy_ahoy::input`) and `apply_look`
+/// (`p19_shared::inputs`) all read straight from the event's own `value` field, not
 /// by re-querying `ActionValue`/`Action<A>` — so this is a complete, correct substitute for
 /// those three consumers specifically (confirmed by reading each observer's body — none of them
 /// touch any other action-entity component). Does **not** update `ActionValue`/`Action<A>`
@@ -423,14 +407,7 @@ fn replay_inject_actions(
     player_of: Query<(Entity, &ControlledBy)>,
     movement: Query<(Entity, &ActionOf<PlayerInputContext>), With<Action<Movement>>>,
     jump: Query<(Entity, &ActionOf<PlayerInputContext>), With<Action<Jump>>>,
-    rotate_mouse: Query<
-        (Entity, &ActionOf<PlayerInputContext>),
-        (With<Action<RotateCamera>>, With<MouseLook>),
-    >,
-    rotate_stick: Query<
-        (Entity, &ActionOf<PlayerInputContext>),
-        (With<Action<RotateCamera>>, With<StickLook>),
-    >,
+    look: Query<(Entity, &ActionOf<PlayerInputContext>), With<Action<Look>>>,
     mut commands: Commands,
 ) {
     fn axis2d(value: &ActionValue) -> Vec2 {
@@ -488,29 +465,15 @@ fn replay_inject_actions(
                     });
                 }
             }
-            RecordedAction::RotateCameraMouse(value) => {
+            RecordedAction::Look(value) => {
+                // Recorded as the client sent it: a `Fired` absolute look every tick.
                 let value = axis2d(value);
-                if let Some((action_entity, _)) = rotate_mouse.iter().find(|(_, ao)| ao.get() == player) {
-                    let state = if value != Vec2::ZERO { TriggerState::Fired } else { TriggerState::None };
-                    commands.trigger(Fire::<RotateCamera> {
+                if let Some((action_entity, _)) = look.iter().find(|(_, ao)| ao.get() == player) {
+                    commands.trigger(Fire::<Look> {
                         context: player,
                         action: action_entity,
                         value,
-                        state,
-                        fired_secs: 0.0,
-                        elapsed_secs: 0.0,
-                    });
-                }
-            }
-            RecordedAction::RotateCameraStick(value) => {
-                let value = axis2d(value);
-                if let Some((action_entity, _)) = rotate_stick.iter().find(|(_, ao)| ao.get() == player) {
-                    let state = if value != Vec2::ZERO { TriggerState::Fired } else { TriggerState::None };
-                    commands.trigger(Fire::<RotateCamera> {
-                        context: player,
-                        action: action_entity,
-                        value,
-                        state,
+                        state: TriggerState::Fired,
                         fired_secs: 0.0,
                         elapsed_secs: 0.0,
                     });
@@ -801,8 +764,9 @@ pub fn run_replay(path: &Path) {
         let position = entity_ref.get::<Transform>().map(|t| t.translation);
         let hit_points = entity_ref.get::<p19_shared::combat::HitPoints>().map(|h| h.hit_points);
         let owner = entity_ref.get::<ControlledBy>().map(|c| c.owner);
+        let look = entity_ref.get::<p19_shared::inputs::LookDirection>();
         println!(
-            "replay: final state — player {entity}: position {position:?}, {hit_points:?} hp, owning connection {owner:?}"
+            "replay: final state — player {entity}: position {position:?}, look {look:?}, {hit_points:?} hp, owning connection {owner:?}"
         );
     }
     println!("replay: finished");

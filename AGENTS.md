@@ -93,8 +93,9 @@ Current, confirmed gaps. Don't assume these work.
   Benign and self-healing; deliberately not fixed.
 - **VR**: `bevy_xr_utils` 0.6.0 (crates.io) has `suggest_action_bindings` commented out in
   `tracking_utils.rs`, so controller grip poses likely never track (both stay at identity). Not
-  re-verified on a headset. VR locomotion mocks the replicated actions with `ActionMock` each frame,
-  which overrides keyboard input while in VR.
+  re-verified on a headset. VR locomotion mocks the replicated `Movement` action with `ActionMock`
+  each frame, which overrides keyboard movement while in VR; look comes from the headset through
+  `FpsCamera`.
 - **Netcode posture is dev-grade**: TOFU-pinned self-signed TLS for the token endpoint; production
   needs a CA-signed certificate on a real backend.
 - **Dead or unused code**: `GameState::Loading`/`Paused` (never entered), `lifecycle/loading.rs`'s
@@ -301,7 +302,8 @@ systems.
   controls and camera rig, plus ahoy's `CharacterController` (the client-side KCC) only if the
   character is `Predicted`. Without prediction the character has no `CharacterControllerState`
   (the data frame shows grounded "—"). `ClientPrediction` (resource, reflected, default `false`,
-  not persisted) is the Options setting; it applies from the next Play. `decorate_other_players` gives other players a model. It also registers
+  not persisted) is the Options setting; it applies from the next Play. `decorate_other_players` gives other players a model, and `face_look_direction` turns it to
+  their replicated `LookDirection` yaw (+π: the rig's front faces +Z). It also registers
   `CharacterControllerState` for local rollback (`app.component::<CharacterControllerState>().local_rollback()`,
   which needs `PredictionRegistry` from `ClientPlugins` to exist first). `AccumulatedInput` is
   deliberately not registered.
@@ -316,15 +318,25 @@ systems.
 - **`controls/controls.rs`** — `bind_replicated_ahoy_actions`: a **polling** system that binds real
   inputs to the server-spawned replicated action entities once this client has `Controlled` on
   them (self-terminating via `Without<Bindings>`); inserting `Bindings` starts the replicated input
-  stream. The right-stick look binding has a radial `DeadZone` (0.15). Hotkey observers send
+  stream. The replicated `Look` action gets no bindings: it gets an enabled `ActionMock`
+  (`MockSpan::Manual`) plus lightyear's `InputMarker` (what makes an action send; bindings add it
+  automatically, a mock doesn't), and `write_look_input` (`FixedPreUpdate`, before BEI's update)
+  writes the `FpsCamera` direction into that mock every tick. Every BEI action already carries a
+  disabled default `ActionMock`, so never filter on `Without<ActionMock>`. Mouse and right-stick
+  look are client-local `RotateCamera` actions in `PlayerControls` (the stick with a radial
+  `DeadZone` 0.15); `rotate_camera` turns `FpsCamera` and is gated with the other gameplay
+  observers. Hotkey observers send
   `AttackAttempt`/`KillAttempt` (target = `Selected`) and spawn requests via
   `MessageSender<T>::send::<OrderedReliable>`. `return_to_main_menu` (Escape / gamepad Start /
   pause menu) triggers `Disconnect` and sets `MainMenu`. Registers `TargetingPlugin`.
 - **`controls/targeting.rs`** — `raycast_from_center` raycasts against `Selectable` entities each
   frame into `Hovered`/`Selected` (needs a window).
-- **`controls/camera.rs`** — FPS camera driven by the same `RotateCamera` action the server
-  consumes; in `--mcp` mode, `OffscreenRenderTarget` (1280×800) and the headless camera
-  maintenance (see below).
+- **`controls/fps_controller.rs`** — `FpsCamera { yaw, pitch }`: the client's source of truth for
+  look, in ahoy's `CharacterLook` convention (yaw 0 faces −Z, pitch positive looks up).
+  `orient_fps_camera` derives the rig's `Transform` from it. VR (`vr_controllers.rs`) sets it from
+  the headset's global rotation each frame.
+- **`controls/camera.rs`** — the player camera bundle; in `--mcp` mode, `OffscreenRenderTarget`
+  (1280×800) and the headless camera maintenance (see below).
 - **`events.rs`** — client-local events (`Connect`, `Disconnect`, `SpawnCube`, `SpawnNpc`,
   animation triggers, `AttackSelected`/`KillSelected`).
 - **`lifecycle/networking.rs`** — connection, token fetch, and every `GameState` transition above.
@@ -491,7 +503,8 @@ documents the full CSS subset and pipeline):
 
 ## Architecture: shared (`crates/shared/src/`)
 
-- **`replication.rs`** — `SharedReplicationPlugin` and the `OrderedReliable` channel.
+- **`replication.rs`** — `SharedReplicationPlugin` and the `OrderedReliable` channel
+  (`LookDirection` is registered in `inputs.rs`, next to the input protocol).
   - Replicated components: `ClientWorldAsset`, `InGameRoot`, `Levels`, `ClientInGame`,
     `ClientInLobby`, `PlayerCharacter`, `Character`, `Name`, `HitPoints`, `Gcd`, `Collider`,
     `RigidBody`, `LockedAxes`, `ModelOffset`, `CollisionLayers`, `Selectable`, `Npc`, `Idle`,
@@ -506,12 +519,16 @@ documents the full CSS subset and pipeline):
     (server→client, entity-mapped). Movement input is not a message.
 - **`inputs.rs`** — `SharedInputsPlugin`: lightyear BEI input replication for `PlayerInputContext`,
   with a 2-tick minimum input delay (`balanced()` preset) so tick-N input reaches the server
-  before it simulates tick N.
+  before it simulates tick N. Defines the `Look` action (absolute `Vec2(yaw, pitch)`) and the
+  replicated `LookDirection` component, and registers `apply_look`, the `Fire<Look>` observer
+  both binaries run: it validates the input (`LookDirection::from_input`: finite, yaw wrapped,
+  pitch clamped to `MAX_LOOK_PITCH`) and writes `LookDirection` and ahoy's `CharacterLook`
+  (skipping `Dead` characters).
 - **`player.rs`** — `PlayerCharacter`, `Selectable`, `PlayerCharacterSpawner`; `player(name,
   position)` bundle: capsule `Collider::capsule(0.4, 1.0)`, `RigidBody::Kinematic`, collision
   layers, `HitPoints {100,100}`, `Gcd`, ahoy `CharacterController` + `CharacterLook`, the
-  `PlayerInputContext`, and unbound action entities (`Movement`, `Jump`, two `RotateCamera`s
-  marked `MouseLook`/`StickLook`). `generate_player_name` makes unique "Adjective Noun" names
+  `PlayerInputContext`, `LookDirection`, and unbound action entities (`Movement`, `Jump`,
+  `Look`). `generate_player_name` makes unique "Adjective Noun" names
   (deterministic seed, `#2`/`#3` suffixes).
 - **`character_controller.rs`** — `Character`/`Idle` (animation markers) and `GameLayer`.
   Grounded state comes from ahoy's `CharacterControllerState::grounded`; there is no marker.
@@ -568,8 +585,6 @@ reflects every component). The GLTF/Skein/world-serialization pipeline needs no 
   room.
 - **`level_state.rs`** — `LevelState`: `Idle` → `Loading(path)` → `LevelLoaded(path)`; any
   `LoadLevelRequest` outside `Idle` is rejected and logged.
-- **`input.rs`** — `accumulate_look` (`Without<Dead>`) turns the replicated rotate actions into
-  `CharacterLook`.
 - **`combat.rs`** — `apply_attack`/`apply_kill` resolve the sender's **living** player character
   (dead players can't attack), check `Gcd` and range, apply damage, and broadcast `Attack`/`Kill`
   with the player character as attacker. `kill_zero_hp` broadcasts `EntityDied`, inserts `Dead`,
@@ -596,7 +611,8 @@ Full playbook: `docs/agents/skills/playtest.md`. Design: ADRs 0009–0012.
   15710 (`--brp-port`/`--mcp-port` for fleets; a non-default BRP port also isolates screenshot
   storage). Bevy 0.19 builtin BRP methods are `world.*`.
 - Custom methods: `game/state`, `game/client_info`, `game/trigger`, `game/select`, `game/levels`,
-  `game/select_level`, `game/input` (action-level `ActionMock`; bypasses modifiers), `game/gamepad`
+  `game/select_level`, `game/input` (action-level `ActionMock`; bypasses modifiers; `rotate`
+  mocks the client-local camera action), `game/gamepad`
   / `game/keyboard` / `game/mouse` (device-level mocks through real bindings), `game/ui`,
   `game/cameras`, `game/screenshot` + `game/screenshot/get`.
 - `game/ui` marks a node `clickable` iff it has a bevy_markup `data-on-click` hook
@@ -652,11 +668,14 @@ Full playbook: `docs/agents/skills/playtest.md`. Design: ADRs 0009–0012.
   `controls.rs`'s `gate_replicated_input_context`, which deactivates the local player's
   `PlayerInputContext` via BEI's `ContextActivity` while the dev console or pause modal is
   open (without it, BEI's binding readers keep streaming WASD/Space to the server while the
-  player types — bug_0007). The context switches off in `Update`, after the fixed tick in which
-  the menu opened, so that tick's input still reaches the server: observers mirroring a
-  continuous replicated action (`rotate_camera`) must stay **ungated**, or the camera misses
-  input the server applies (bug_0009). Lifecycle/spawn observers stay ungated (a gated one-shot
-  trigger is lost forever).
+  player types — bug_0007). Lifecycle/spawn observers stay ungated (a gated one-shot trigger is
+  lost forever).
+- **Look is client-owned input, never accumulated** (ADR 0017). The client sends its absolute
+  camera direction as the `Look` action every tick; both sides apply it with
+  `p19_shared::inputs::apply_look`. Don't send look deltas or derive look from a transform:
+  two accumulators of one delta stream drift apart permanently whenever either misses or alters
+  a step (bug_0009, bug_0010), and ahoy's `spin_character_look` rotates `CharacterLook` with a
+  spinning floor. Read where a character looks from `LookDirection`, not `CharacterLook`.
 - **Inputs** are `#[derive(InputAction)]` markers in `controls/actions.rs`, handled by observers
   (`On<Fire<T>>`, `On<Start<T>>`, `On<Complete<T>>`).
 - **`EntityEvent`** supports one target; for two-entity events (`Attack`), the scoped side is

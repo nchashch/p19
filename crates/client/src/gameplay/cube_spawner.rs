@@ -27,7 +27,7 @@ fn request_spawn_cube(
     let Ok(fps_camera) = fps_camera.single() else {
         return;
     };
-    let aim_direction = Vec3::Z.rotate_x(fps_camera.pitch).rotate_y(fps_camera.yaw);
+    let aim_direction = fps_camera.forward();
     sender.send::<OrderedReliable>(SpawnCubeRequest {
         transform: cube_spawner.compute_transform(),
         aim_direction,

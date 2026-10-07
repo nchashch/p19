@@ -20,9 +20,18 @@
 //! network state both sides must agree on. Each binary enables its own `client`/`server`
 //! feature on the `lightyear_inputs_bei` dependency; feature unification applies whichever
 //! subset is active to this crate's build.
+//!
+//! **Look is client-owned input** (ADR 0017): the owning client sends its absolute camera
+//! direction as the [`Look`] action every tick, in the same input stream as movement. Both
+//! sides apply it with [`apply_look`], which writes the character's ahoy `CharacterLook` (what
+//! the KCC steers by) and the replicated [`LookDirection`] (where other clients see the
+//! character facing). Nothing accumulates look deltas, so a lost or altered tick is corrected
+//! by the next one instead of becoming a permanent offset.
 
+use crate::combat::Dead;
 use bevy::prelude::*;
-use bevy_ahoy::input::{Jump, Movement, RotateCamera};
+use bevy_ahoy::CharacterLook;
+use bevy_ahoy::input::{Jump, Movement};
 use lightyear::prelude::client::InputDelayConfig;
 use lightyear::prelude::{AppComponentExt, InputTimelineConfig};
 use lightyear_inputs_bei::prelude::*;
@@ -40,17 +49,64 @@ use serde::{Deserialize, Serialize};
 #[derive(Component, TypePath, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PlayerInputContext;
 
-/// Marks the mouse-look `RotateCamera` action entity (per-replicated-entity device distinction,
-/// same idea as the legacy `GamepadLook` marker): the mouse binding scales by radians-per-pixel,
-/// the stick binding by radians-per-second — different per-device scaling is why look input is
-/// TWO action entities (action-level modifiers hit all of an action's bindings uniformly, and
-/// BEI presets like `Axial` can't be nested inside per-binding `Spawn(...)`).
-#[derive(Component, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct MouseLook;
+/// The owning client's absolute look direction as `Vec2(yaw, pitch)` in radians, in ahoy's
+/// `CharacterLook` convention: yaw about +Y, 0 facing −Z, positive turning left; pitch positive
+/// looking up. Not bound to any device: the client sets it every tick from its camera through
+/// a persistent `ActionMock` (`p19_client::controls`), so it rides the replicated input stream
+/// (tick-aligned, input-delayed and rolled back exactly like `Movement`).
+#[derive(Debug, InputAction)]
+#[action_output(Vec2)]
+pub struct Look;
 
-/// Marks the gamepad-stick-look `RotateCamera` action entity — see [`MouseLook`].
-#[derive(Component, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct StickLook;
+/// Where a character is looking — the last [`Look`] input the server accepted. Replicated, so
+/// other clients can orient the character's model (and later aim, animation). Written only by
+/// [`apply_look`]; unlike ahoy's `CharacterLook`, nothing in the physics stack touches it.
+#[derive(Component, Reflect, Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[reflect(Component)]
+pub struct LookDirection {
+    /// Radians about +Y, wrapped to `[-π, π)`; 0 faces −Z.
+    pub yaw: f32,
+    /// Radians, clamped to `±`[`MAX_LOOK_PITCH`]; positive looks up.
+    pub pitch: f32,
+}
+
+/// Pitch limit, just short of straight up/down (ahoy's own camera uses the same margin).
+pub const MAX_LOOK_PITCH: f32 = core::f32::consts::FRAC_PI_2 - 0.01;
+
+impl LookDirection {
+    /// Validates a client-sent `(yaw, pitch)`: `None` if either is not finite, otherwise yaw
+    /// wrapped and pitch clamped. The server never trusts client input beyond this shape.
+    pub fn from_input(value: Vec2) -> Option<Self> {
+        if !value.is_finite() {
+            return None;
+        }
+        let tau = core::f32::consts::TAU;
+        Some(Self {
+            yaw: (value.x + core::f32::consts::PI).rem_euclid(tau) - core::f32::consts::PI,
+            pitch: value.y.clamp(-MAX_LOOK_PITCH, MAX_LOOK_PITCH),
+        })
+    }
+}
+
+/// Applies the owning client's [`Look`] input to its character (server: every player; client:
+/// its own, which is what the predicted KCC and its rollback replay steer by). The KCC reads
+/// `CharacterLook` in `FixedPostUpdate`, after this runs in `FixedPreUpdate`'s input phase.
+/// ahoy's `spin_character_look` (rotating the look with a spinning floor) still edits
+/// `CharacterLook` between ticks; the next tick's input overwrites it.
+fn apply_look(
+    look: On<Fire<Look>>,
+    mut characters: Query<(&mut LookDirection, &mut CharacterLook), Without<Dead>>,
+) {
+    let Ok((mut direction, mut character_look)) = characters.get_mut(look.context) else {
+        return;
+    };
+    let Some(new_direction) = LookDirection::from_input(look.value) else {
+        return;
+    };
+    direction.set_if_neq(new_direction);
+    character_look.yaw = new_direction.yaw;
+    character_look.pitch = new_direction.pitch;
+}
 
 /// Registers the [`lightyear_inputs_bei`] input protocol (context + action types) on both
 /// binaries, next to [`SharedReplicationPlugin`](crate::replication::SharedReplicationPlugin)
@@ -66,12 +122,9 @@ impl Plugin for SharedInputsPlugin {
             // this registration).
             .register_input_action::<Movement>()
             .register_input_action::<Jump>()
-            .register_input_action::<RotateCamera>();
-        // The look-device markers ride the same replicated action entities so the owning
-        // client's binding observers can tell them apart. (Separate statements — `.replicate()`
-        // returns a registration builder, not the `App`.)
-        app.component::<MouseLook>().replicate();
-        app.component::<StickLook>().replicate();
+            .register_input_action::<Look>()
+            .add_observer(apply_look);
+        app.component::<LookDirection>().replicate();
         // The client must LEAD the server's timeline by enough ticks that its tick-N input
         // arrives before the server simulates tick N — `InputTimelineConfig::default()` is
         // `no_input_delay()`, which made every input arrive ~3 ticks after the server had

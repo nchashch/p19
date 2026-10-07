@@ -50,6 +50,13 @@ pub struct SpawnNpcAction;
 #[action_output(Vec2)]
 pub struct UiNavigate;
 
+/// Mouse / right-stick look deltas, radians per update after the bindings' modifiers (`x` turns
+/// right, `y` looks down). Client-local, in `PlayerControls`: it turns the `FpsCamera`, and the
+/// camera's absolute direction is what the server receives (`p19_shared::inputs::Look`).
+#[derive(InputAction)]
+#[action_output(Vec2)]
+pub struct RotateCamera;
+
 /// "Activate the focused UI element" — gamepad South or Enter, see `ui::markup`'s
 /// `MenuControls`. Emits the focused element's `data-on-click` signal, the same message a
 /// pointer click produces.

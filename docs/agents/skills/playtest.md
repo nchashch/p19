@@ -148,7 +148,7 @@ Custom `game/*` methods (see `crates/client/src/dev/tool_api.rs`):
 
 | Method | Params | Effect |
 |---|---|---|
-| `game/state` | — | Structured dump: `connected`, `game_state`, `name` (the generated player name), `position`, `velocity`, `look_yaw`, `look_pitch`, `grounded`, `crouching`, `dead`, `hit_points`, `max_hit_points`, `gcd_remaining_secs`, `player_entity`, `selected` (current attack target, when set) |
+| `game/state` | — | Structured dump: `connected`, `game_state`, `name` (the generated player name), `position`, `velocity`, `camera_yaw`/`camera_pitch` (the `FpsCamera` direction being sent), `look_yaw`/`look_pitch` (the look the KCC steers by: the sent look after the input delay), `grounded`, `crouching`, `dead`, `hit_points`, `max_hit_points`, `gcd_remaining_secs`, `player_entity`, `selected` (current attack target, when set) |
 | `game/trigger` | `{"event":"connect"\|"play"\|"observe"\|"disconnect"\|"spawn_cube"\|"spawn_npc"\|"attack"\|"kill"}` | Fires the app's own client-local events — the same ones the menu buttons / hotkeys fire. `connect` opens the netcode connection, `play` sends `InGameRequest` (with the client's `ClientPrediction`; default `false`; set it first with `world.insert_resources` on `p19_client::gameplay::player_character::ClientPrediction` to play predicted), `attack`/`kill` send `AttackAttempt`/`KillAttempt` for whatever `game/select` targeted |
 | `game/select` | `{"entity": <u64 id this client reports>}` or `{"nearest": true}` or `{"name": "<string>"}` | Injects crosshair targeting headlessly (`Selected` = that entity, validated `Selectable`). `nearest` picks the closest *other* player; `name` matches a player's generated unique name (e.g. `"Brisk Falcon"`, suffixed `#2`/`#3` on collision). Pair with `game/trigger attack\|kill` for combat QA — the crosshair raycast itself needs a real window |
 | `game/levels` | — | Lists the server-replicated `Levels` singleton (`asset_path` + `name`). Lobby only |
@@ -244,8 +244,10 @@ those devices (e.g. verifying a real mouse click on a button, or a keyboard
 binding) — §5b documents their extra gotchas.
 
 `game/input` mocks the server-spawned **replicated** BEI action entities
-(`Movement`/`Jump`/`RotateCamera`) with `ActionMock` — the exact pipeline a real
-gamepad drives, including prediction/reconciliation. All actions take `ticks`
+(`Movement`/`Jump`) with `ActionMock` — the exact pipeline a real gamepad drives,
+including prediction/reconciliation. `rotate` instead mocks the client-local
+camera action: the server only ever receives the camera's resulting absolute
+direction (the replicated `Look` action, ADR 0017). All actions take `ticks`
 (1 tick ≈ 16.7 ms; `MockSpan::Updates(n)` — the mock fires on *every* tick it is
 active).
 
@@ -258,12 +260,10 @@ active).
 {"action":"jump","ticks":2}
 
 # turn: yaw_delta/pitch_delta are RADIANS TOTAL for the call, spread across ticks
-# (the method divides by ticks because BEI re-fires per tick). Calibrate signs by
-# injecting a small amount and reading look_yaw/look_pitch in game/state — the
-# conventions are empirically inverted relative to intuition:
-#   negative yaw_delta → look_yaw increases (view rotates toward −X from +Z)
-#   negative pitch_delta → look_pitch increases → looks UP (look_pitch positive = UP;
-#   positive pitch_delta = look DOWN — verified visually against a known scene)
+# (the method divides by ticks because BEI re-fires per update). Positive yaw_delta
+# turns RIGHT (camera_yaw decreases), positive pitch_delta looks DOWN (camera_pitch
+# decreases). Yaw/pitch follow ahoy's CharacterLook: yaw 0 faces −Z, pitch + is up.
+# Measured: yaw_delta 0.5, pitch_delta 0.2 → camera and server both (−0.5, −0.2).
 {"action":"rotate","yaw_delta":-1.5708,"ticks":30}
 ```
 

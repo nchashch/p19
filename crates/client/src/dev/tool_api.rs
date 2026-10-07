@@ -174,6 +174,14 @@ fn game_state_snapshot(world: &mut World) -> serde_json::Value {
     };
     out.insert("connected".into(), json!(true));
     out.insert("player_entity".into(), json!(player));
+    if let Some(camera) = world
+        .query::<&crate::controls::fps_controller::FpsCamera>()
+        .iter(world)
+        .next()
+    {
+        out.insert("camera_yaw".into(), json!(camera.yaw));
+        out.insert("camera_pitch".into(), json!(camera.pitch));
+    }
 
     let Ok(player_entity) = world.get_entity(player) else {
         out.insert("player_despawned".into(), json!(true));
@@ -189,6 +197,8 @@ fn game_state_snapshot(world: &mut World) -> serde_json::Value {
     if let Some(velocity) = player_entity.get::<LinearVelocity>() {
         out.insert("velocity".into(), json!(velocity.0));
     }
+    // `look_*`: the look the KCC steers by (`CharacterLook`, set from this client's `Look`
+    // input after the input delay). `camera_*`: the `FpsCamera` direction being sent now.
     if let Some(look) = player_entity.get::<CharacterLook>() {
         out.insert("look_yaw".into(), json!(look.yaw));
         out.insert("look_pitch".into(), json!(look.pitch));
@@ -244,14 +254,14 @@ fn game_state_snapshot(world: &mut World) -> serde_json::Value {
             "bound": bound, "context_is_local": Some(action_of.get()) == local,
         }));
     }
-    for (entity, action_of, bound, mouse_look, stick_look) in world
-        .query_filtered::<(Entity, &bevy_enhanced_input::prelude::ActionOf<PlayerInputContext>, Has<bevy_enhanced_input::prelude::Bindings>, Has<p19_shared::inputs::MouseLook>, Has<p19_shared::inputs::StickLook>), With<bevy_enhanced_input::prelude::Action<bevy_ahoy::input::RotateCamera>>>()
+    // `Look` has no bindings: "bound" means the client drives it (lightyear's `InputMarker`).
+    for (entity, action_of, mocked) in world
+        .query_filtered::<(Entity, &bevy_enhanced_input::prelude::ActionOf<PlayerInputContext>, Has<lightyear_inputs_bei::prelude::InputMarker<PlayerInputContext>>), With<bevy_enhanced_input::prelude::Action<p19_shared::inputs::Look>>>()
         .iter(world)
     {
-        let name = if mouse_look { "rotate_mouse" } else if stick_look { "rotate_stick" } else { "rotate?" };
         bindings_rows.push(json!({
-            "action": name, "entity": entity, "context": action_of.get(),
-            "bound": bound, "context_is_local": Some(action_of.get()) == local,
+            "action": "look", "entity": entity, "context": action_of.get(),
+            "bound": mocked, "context_is_local": Some(action_of.get()) == local,
         }));
     }
     out.insert("bindings".into(), json!(bindings_rows));
@@ -1124,10 +1134,12 @@ fn direct_text(
 /// Params:
 /// - `action`: `"movement"` (`x` = strafe right, `y` = forward, both −1..1, like a stick),
 ///   `"jump"` (`down` = press-hold, releases on tick expiry), or `"rotate"` (`yaw_delta` /
-///   `pitch_delta` in **radians** per tick — pre-scales into the mouse binding's pixels)
-/// - `ticks`: how many fixed ticks (16.7ms each) the input stays active
+///   `pitch_delta`: total **radians**, positive turns right / looks down, spread over `ticks`)
+/// - `ticks`: how many fixed ticks (16.7ms each) the input stays active. `rotate` mocks the
+///   client-local camera action instead (the server only ever receives the resulting camera
+///   direction, ADR 0017), which BEI evaluates per frame — at `--mcp`'s 60 Hz the same count.
 fn input_method(params: In<Option<serde_json::Value>>, world: &mut World) -> BrpResult {
-    use bevy_ahoy::input::{Jump as AhoyJump, Movement as AhoyMovement, RotateCamera as AhoyRotate};
+    use bevy_ahoy::input::{Jump as AhoyJump, Movement as AhoyMovement};
 
     let Some(params) = params.0 else {
         return Err(BrpError::internal("missing params"));
@@ -1141,6 +1153,26 @@ fn input_method(params: In<Option<serde_json::Value>>, world: &mut World) -> Brp
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(1)
         .clamp(1, 600) as u32;
+
+    if action == "rotate" {
+        let yaw_delta = params.get("yaw_delta").and_then(serde_json::Value::as_f64).unwrap_or(0.0) as f32;
+        let pitch_delta = params.get("pitch_delta").and_then(serde_json::Value::as_f64).unwrap_or(0.0) as f32;
+        let Some(entity) = world
+            .query_filtered::<Entity, With<Action<crate::controls::actions::RotateCamera>>>()
+            .iter(world)
+            .next()
+        else {
+            return Err(BrpError::internal("no camera RotateCamera action (not in game?)"));
+        };
+        // The mock bypasses the binding's `Scale`, so the value is radians directly; BEI fires
+        // it every update the mock lasts, so the total is divided across them.
+        world.entity_mut(entity).insert(ActionMock::new(
+            TriggerState::Fired,
+            ActionValue::Axis2D(Vec2::new(yaw_delta / ticks as f32, pitch_delta / ticks as f32)),
+            MockSpan::Updates(ticks),
+        ));
+        return Ok(json!({"mocked_action_entity": entity, "ticks": ticks}).into());
+    }
 
     let Some(player) = world.get_resource::<LocalPlayer>().and_then(|lp| lp.0) else {
         return Err(BrpError::internal("no local player connected"));
@@ -1183,29 +1215,6 @@ fn input_method(params: In<Option<serde_json::Value>>, world: &mut World) -> Brp
                     action_entity_mut.insert(ActionMock::new(
                         TriggerState::Fired,
                         ActionValue::Bool(down),
-                        MockSpan::Updates(ticks),
-                    ));
-                    mocked = Some(action_entity);
-                }
-            }
-            "rotate" => {
-                if action_entity_mut.get::<Action<AhoyRotate>>().is_some() {
-                    let yaw_delta = params.get("yaw_delta").and_then(serde_json::Value::as_f64).unwrap_or(0.0) as f32;
-                    let pitch_delta = params.get("pitch_delta").and_then(serde_json::Value::as_f64).unwrap_or(0.0) as f32;
-                    // The mock BYPASSES the binding's `Scale` modifier (mocks replace the
-                    // whole binding-evaluation step), so the value is radians DIRECTLY — no
-                    // pixel-equivalent pre-scaling. And BEI fires the action on EVERY tick the
-                    // mock is active, so the value is a PER-TICK RATE: `ticks` total is
-                    // `ticks * value`. Divide the requested total turn by the tick count.
-                    // `rotate_camera`'s `delta_yaw = -value.x` makes positive yaw_delta turn
-                    // right (Bevy yaw decreases clockwise); positive pitch_delta looks DOWN
-                    // (look_pitch reads positive when looking up — verified visually).
-                    action_entity_mut.insert(ActionMock::new(
-                        TriggerState::Fired,
-                        ActionValue::Axis2D(Vec2::new(
-                            yaw_delta / ticks as f32,
-                            pitch_delta / ticks as f32,
-                        )),
                         MockSpan::Updates(ticks),
                     ));
                     mocked = Some(action_entity);

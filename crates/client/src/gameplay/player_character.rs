@@ -14,6 +14,7 @@ use lightyear::prelude::{AppComponentExt, PredictionBuilderExt};
 use p19_shared::cube_spawner::CubeSpawner;
 use p19_shared::game_state::GameState;
 use p19_shared::npc_spawner::NpcSpawner;
+use p19_shared::inputs::LookDirection;
 use p19_shared::player::PlayerCharacter;
 
 pub struct PlayerCharacterPlugin;
@@ -51,6 +52,7 @@ impl Plugin for PlayerCharacterPlugin {
                 decorate_other_players.run_if(not(resource_exists::<
                     crate::controls::camera::NoRenderMode,
                 >)),
+                face_look_direction,
             ),
         );
     }
@@ -72,6 +74,28 @@ pub struct ClientPrediction(pub bool);
 
 #[derive(Component, Reflect, Default)]
 pub struct OtherPlayer;
+
+/// Turns other players' models to their replicated `LookDirection` yaw (their own client's look,
+/// as the server last accepted it). Pitch isn't shown: the rig has no head/aim bones driven yet.
+fn face_look_direction(
+    // `Changed<Children>` covers the model being attached after the last look change.
+    players: Query<
+        (&LookDirection, &Children),
+        (
+            With<OtherPlayer>,
+            Or<(Changed<LookDirection>, Changed<Children>)>,
+        ),
+    >,
+    mut models: Query<&mut Transform, With<PlayerModel>>,
+) {
+    for (look, children) in &players {
+        let mut models = models.iter_many_mut(children);
+        while let Some(mut transform) = models.fetch_next() {
+            // The rig's front faces +Z (glTF's forward), a look yaw of 0 faces −Z.
+            transform.rotation = Quat::from_rotation_y(look.yaw + core::f32::consts::PI);
+        }
+    }
+}
 
 pub fn decorate_other_players(
     players: Query<Entity, (With<PlayerCharacter>, Without<OtherPlayer>)>,
@@ -166,7 +190,7 @@ fn on_player_spawned(
                     .spawn((Transform::from_xyz(0., 0.5, 0.), Visibility::default()))
                     .with_children(|parent| {
                         parent
-                            .spawn((FpsCamera::new(), Transform::IDENTITY, Visibility::default()))
+                            .spawn((FpsCamera::default(), Transform::IDENTITY, Visibility::default()))
                             .with_children(|parent| {
                                 parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), CubeSpawner));
                                 parent.spawn((Transform::from_xyz(0.0, 0.0, -4.0), NpcSpawner));

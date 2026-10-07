@@ -22,6 +22,8 @@ the same class of bug quick to recognize next time.
 | [bug_0007](bug_0007.md) | Dev console / pause modal doesn't lock movement: WASD/Space reach the server while typing | Fixed (uncommitted at filing) |
 | [bug_0008](bug_0008.md) | `--no-common-assets` client panics when the pause modal opens (missing icon atlas) | Fixed (uncommitted at filing) |
 | [bug_0009](bug_0009.md) | Walking at an angle: look input in the tick a menu opens turns the server's look but not the camera | Fixed (uncommitted at filing) |
+| [bug_0010](bug_0010.md) | Standing on a spinning cube turns the server's look but not the camera, so W walks at an angle | Fixed (uncommitted at filing) |
+| [bug_0011](bug_0011.md) | The server's look pitch is the mirror of the client's | Fixed (uncommitted at filing) |
 
 Each report's own `Status` row is authoritative. Update this table when you file or close a bug.
 

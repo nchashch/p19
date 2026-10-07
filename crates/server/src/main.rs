@@ -18,7 +18,6 @@ use p19_shared::mesh_primitive::SharedMeshPrimitivePlugin;
 use p19_shared::replication::SharedReplicationPlugin;
 
 mod combat;
-mod input;
 mod level_state;
 mod lobby;
 mod networking;
@@ -28,7 +27,6 @@ mod spawn;
 mod tools;
 
 use combat::ServerCombatPlugin;
-use input::ServerInputPlugin;
 use level_state::LevelStatePlugin;
 use lobby::LobbyPlugin;
 use rooms::GameRoomPlugin;
@@ -181,9 +179,6 @@ pub(crate) fn build_app<M>(networking_plugin: impl bevy::app::Plugins<M>) -> App
                 // BEI's raw-input systems on server-only builds, and the camera plugin's
                 // observers simply never fire without camera entities.
                 bevy_ahoy::prelude::AhoyPlugins::default(),
-                // Accumulates the replicated `RotateCamera` action into the server-side
-                // `CharacterLook` (see `input.rs`).
-                ServerInputPlugin,
                 LevelStatePlugin,
                 GameRoomPlugin,
                 LobbyPlugin,

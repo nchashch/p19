@@ -19,14 +19,12 @@ use crate::ui::hud::HudVisible;
 use crate::ui::localization::localized;
 use crate::ui::nameplate::NameplatesVisible;
 use bevy::time::Stopwatch;
-use bevy_ahoy::input::{
-    AccumulatedInput, Jump as AhoyJump, Movement as AhoyMovement, RotateCamera as AhoyRotate,
-};
+use bevy_ahoy::input::{AccumulatedInput, Jump as AhoyJump, Movement as AhoyMovement};
 use bevy_ahoy::prelude::CharacterController as AhoyCharacterController;
 use bevy_ahoy::{CharacterControllerState, CharacterLook};
-use bevy_enhanced_input::prelude::{Action, Actions, Bindings, TriggerState};
+use bevy_enhanced_input::prelude::{Action, ActionMock, Actions, Bindings, TriggerState};
 use p19_shared::cube_spawner::Cube;
-use p19_shared::inputs::PlayerInputContext;
+use p19_shared::inputs::{Look, PlayerInputContext};
 use p19_shared::npc_spawner::Npc;
 
 /// The command name strings passed to `ConsoleCommand::new` (and its `help` usage line, a
@@ -350,9 +348,9 @@ fn kcc_debug_cmd(
         Entity,
         Option<(&Action<AhoyMovement>, &TriggerState, Has<Bindings>)>,
         Option<(&Action<AhoyJump>, &TriggerState, Has<Bindings>)>,
-        Option<(&Action<AhoyRotate>, &TriggerState, Has<Bindings>)>,
+        Option<(&Action<Look>, &TriggerState, &ActionMock)>,
     )>,
-    camera: Query<&GlobalTransform, With<FpsCamera>>,
+    camera: Query<(&GlobalTransform, &FpsCamera)>,
 ) -> String {
     let Some(player) = local_player.0 else {
         return "no local player (not connected / not in game)".to_string();
@@ -425,7 +423,7 @@ fn kcc_debug_cmd(
             actions.iter().count()
         );
         for action_entity in actions.iter() {
-            let Ok((_, movement, jump, rotate)) = action_kinds.get(action_entity) else {
+            let Ok((_, movement, jump, look)) = action_kinds.get(action_entity) else {
                 continue;
             };
             if let Some((movement, trigger, bound)) = movement {
@@ -438,10 +436,10 @@ fn kcc_debug_cmd(
                     "    {action_entity}: AhoyJump value={:?} trigger={trigger:?} bound={bound}\n",
                     **jump
                 );
-            } else if let Some((rotate, trigger, bound)) = rotate {
+            } else if let Some((look, trigger, mock)) = look {
                 out += &format!(
-                    "    {action_entity}: RotateCamera value={:?} trigger={trigger:?} bound={bound}\n",
-                    **rotate
+                    "    {action_entity}: Look value={:?} trigger={trigger:?} mocked={}\n",
+                    **look, mock.enabled
                 );
             } else {
                 out += &format!("    {action_entity}: (no ahoy action — unexpected)\n");
@@ -450,10 +448,12 @@ fn kcc_debug_cmd(
     } else {
         out += "  action entities: MISSING (no Actions<PlayerInputContext> on the player)\n";
     }
-    if let Ok(camera) = camera.single() {
+    if let Ok((camera_transform, camera)) = camera.single() {
         out += &format!(
-            "  fps camera global translation: {:?}\n",
-            camera.translation()
+            "  fps camera: yaw={:.3} pitch={:.3} global translation {:?}\n",
+            camera.yaw,
+            camera.pitch,
+            camera_transform.translation()
         );
     } else {
         out += "  fps camera: NOT FOUND (look feeding is broken)\n";

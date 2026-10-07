@@ -4,6 +4,17 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0044` — Client-Owned Look (ADR 0017)
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-07 07:10 – 07:50 +0400 |
+| **Commit** | `4892d4d` "Fix mouse look bug" + uncommitted look rework |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0044.md`](playtest_0044.md) |
+
+Verifies the switch to client-sent absolute look: before it, a spinning cube drifted the server's yaw (bug_0010) and pitch was mirrored (bug_0011); after it, camera and server look match exactly (Δ 0.0000) through cube launches, menu toggles, 40 ± 15 ms lag with 2% loss, `game/input`, the right stick and replay, in both prediction modes, and other clients see the replicated facing on the model.
+
 ### `playtest_0043` — Look Divergence After Opening a Menu (bug_0009)
 
 | Field | Value |

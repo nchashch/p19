@@ -13,11 +13,10 @@ use bevy_xr_utils::tracking_utils::{
     TrackingUtilitiesPlugin, XrTrackedLeftGrip, XrTrackedRightGrip, XrTrackedView,
 };
 use lightyear::prelude::*;
-use bevy_ahoy::input::RotateCamera as AhoyRotate;
-use p19_shared::inputs::{MouseLook, PlayerInputContext};
+use p19_shared::inputs::PlayerInputContext;
 use p19_shared::player::{PlayerCharacter, Selectable};
-use std::f32::consts::PI;
 
+use crate::controls::fps_controller::FpsCamera;
 use crate::controls::targeting::{Hovered, SELECT_RANGE, Selected};
 use crate::gameplay::player_character::LocalPlayer;
 use p19_shared::game_state::ModalMenuState;
@@ -412,11 +411,12 @@ fn radial_dead_zone(value: Vec2, lower: f32, upper: f32) -> Vec2 {
 }
 
 /// Left stick moves the player via the **replicated ahoy `Movement` action** (mocked — see
-/// below), relative to the character's look orientation (which the head/rig rotation feeds —
-/// see `vr_look_bridge`); right stick snap-turns that yaw by `SNAP_TURN_ANGLE` per push,
-/// edge-triggered (`snap_turn_active`) so holding the stick past the threshold doesn't spin
-/// continuously. The snap-turn itself feeds the look stream too: it rotates the rig, which is
-/// an ancestor of the tracked head, so the head's *global* rotation deltas carry it.
+/// below), relative to the character's look orientation; right stick snap-turns by
+/// `SNAP_TURN_ANGLE` per push, edge-triggered (`snap_turn_active`) so holding the stick past
+/// the threshold doesn't spin continuously. The look is the head's global direction, written
+/// into `FpsCamera` every frame — the desktop path's source of truth, which the server
+/// receives as the `Look` input (ADR 0017). The snap-turn rotates the rig, an ancestor of the
+/// tracked head, so the head's global rotation carries it.
 ///
 /// The stick is written as a **local** (character-relative) `Vec2` now, not a world-space
 /// direction: ahoy's wish direction is `orientation × local move`, and the orientation comes
@@ -442,36 +442,21 @@ fn vr_locomotion(
     local_player: Res<LocalPlayer>,
     contexts: Query<&Actions<PlayerInputContext>, With<PlayerCharacter>>,
     movement_actions: Query<(), With<Action<AhoyMovement>>>,
-    rotate_mouse: Query<(), (With<Action<AhoyRotate>>, With<MouseLook>)>,
-    mut look_state: Local<Option<(f32, f32)>>,
+    mut fps_camera: Query<&mut FpsCamera>,
     mut snap_turn_active: Local<bool>,
     mut commands: Commands,
 ) {
     let (mut rig_transform, mut rig) = rig.into_inner();
 
-    // Head look → the replicated rotate action, as per-frame deltas. The client camera
-    // observer (`rotate_camera`) and the server's look accumulator both consume this — same
-    // stream as desktop mouse deltas. The euler wraps at ±π, so the yaw delta is wrapped back
-    // into (−π, π] before accumulating.
     let (yaw, pitch, _) = head_global.rotation().to_euler(EulerRot::YXZ);
-    let Some((last_yaw, last_pitch)) = *look_state else {
-        *look_state = Some((yaw, pitch));
-        return;
-    };
-    let yaw_delta = (yaw - last_yaw + PI).rem_euclid(2.0 * PI) - PI;
-    let pitch_delta = pitch - last_pitch;
-    *look_state = Some((yaw, pitch));
+    if let Ok(mut camera) = fps_camera.single_mut() {
+        camera.set(yaw, pitch);
+    }
 
     if let Some(player) = local_player.0 {
         if let Ok(actions) = contexts.get(player) {
             for action_entity in actions.iter() {
-                if rotate_mouse.contains(action_entity) {
-                    commands.entity(action_entity).insert(ActionMock::new(
-                        TriggerState::Fired,
-                        ActionValue::Axis2D(Vec2::new(-yaw_delta, pitch_delta)),
-                        MockSpan::once(),
-                    ));
-                } else if movement_actions.contains(action_entity) {
+                if movement_actions.contains(action_entity) {
                     // Dead-zoned *local* stick — the character's look orientation supplies the
                     // world-space rotation. Mocked as Fired even at zero (the value zeroes the
                     // movement), so releasing the stick stops the character the same way a
