@@ -412,7 +412,6 @@ pub(crate) fn apply_load_level_request(
         info!("failed to load metadata for level {asset_path}");
         return Ok(());
     };
-    dbg!(&level);
     // TODO: Add a script or some other kind of step/stage to the assets pipeline that would
     // strip .glb files of all meshes, textures, materials -- anything visual and not
     // strictly necessary for server side logic -- for the .glb files in the server assets.

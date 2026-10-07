@@ -149,7 +149,7 @@ Custom `game/*` methods (see `crates/client/src/dev/tool_api.rs`):
 | Method | Params | Effect |
 |---|---|---|
 | `game/state` | — | Structured dump: `connected`, `game_state`, `name` (the generated player name), `position`, `velocity`, `look_yaw`, `look_pitch`, `grounded`, `crouching`, `dead`, `hit_points`, `max_hit_points`, `gcd_remaining_secs`, `player_entity`, `selected` (current attack target, when set) |
-| `game/trigger` | `{"event":"connect"\|"play"\|"observe"\|"disconnect"\|"spawn_cube"\|"spawn_npc"\|"attack"\|"kill"}` | Fires the app's own client-local events — the same ones the menu buttons / hotkeys fire. `connect` opens the netcode connection, `play` sends `InGameRequest` (with the client's `ClientPrediction`; set it first with `world.insert_resources` on `p19_client::gameplay::player_character::ClientPrediction` to play unpredicted), `attack`/`kill` send `AttackAttempt`/`KillAttempt` for whatever `game/select` targeted |
+| `game/trigger` | `{"event":"connect"\|"play"\|"observe"\|"disconnect"\|"spawn_cube"\|"spawn_npc"\|"attack"\|"kill"}` | Fires the app's own client-local events — the same ones the menu buttons / hotkeys fire. `connect` opens the netcode connection, `play` sends `InGameRequest` (with the client's `ClientPrediction`; default `false`; set it first with `world.insert_resources` on `p19_client::gameplay::player_character::ClientPrediction` to play predicted), `attack`/`kill` send `AttackAttempt`/`KillAttempt` for whatever `game/select` targeted |
 | `game/select` | `{"entity": <u64 id this client reports>}` or `{"nearest": true}` or `{"name": "<string>"}` | Injects crosshair targeting headlessly (`Selected` = that entity, validated `Selectable`). `nearest` picks the closest *other* player; `name` matches a player's generated unique name (e.g. `"Brisk Falcon"`, suffixed `#2`/`#3` on collision). Pair with `game/trigger attack\|kill` for combat QA — the crosshair raycast itself needs a real window |
 | `game/levels` | — | Lists the server-replicated `Levels` singleton (`asset_path` + `name`). Lobby only |
 | `game/select_level` | `{"asset_path":"levels/minimal.level.ron"}` | Sends `LoadLevelRequest` (the lobby level-picker's exact message) |
@@ -664,6 +664,7 @@ mechanics"; the investigations are playtests 0003 and 0004):
 | Test results look impossible / old behavior | Stale binary from a failed build | Rebuild, `grep -cE "^error"` must be 0 |
 | Server floods `server_late_input_mismatch` when a second client joins | Join-burst replication hitch blows the 2-tick input-delay headroom; self-heals in ~10 ticks | Benign — don't fix (`AGENTS.md` "Known gaps") |
 | `pkill -f` kills your own test command | `-f` matches your shell's own command line | Use `pkill -x` |
+| Client (windowed or rendered `--mcp`) hangs at startup: log stops after `SystemInfo`, no `AdapterInfo`, no window | NVIDIA's Vulkan ICD calls `XOpenDisplay` during instance creation whenever `DISPLAY` is set; a wedged or never-started Xwayland leaves that `connect` blocked forever (main thread in `unix_wait_for_peer`; `ss -xl` shows `/tmp/.X11-unix/X0` with a full backlog, `LISTEN 1 1`) | Launch with `env -u DISPLAY` (winit uses Wayland anyway); restarting the compositor restores Xwayland. Not a game bug |
 
 ## 9. Multi-client testing
 

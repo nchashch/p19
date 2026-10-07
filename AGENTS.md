@@ -61,7 +61,7 @@ Key facts to internalize:
 - **Movement is server-authoritative and client-predicted** with `bevy_ahoy`'s kinematic character
   controller running on both binaries over lightyear-replicated `bevy_enhanced_input` (BEI) action
   state; lightyear rollback reconciles the prediction. Remote bodies are interpolated. Prediction
-  is a per-client choice (Options → Client-side prediction, `ClientPrediction`, default on) sent
+  is a per-client choice (Options → Client-side prediction, `ClientPrediction`, default off) sent
   in `InGameRequest { predict }`; with it off the own character is interpolated too and the
   client runs no KCC.
 
@@ -300,7 +300,7 @@ systems.
   (`Added<Controlled>` on `PlayerCharacter`) that sets `LocalPlayer` and adds the local player's
   controls and camera rig, plus ahoy's `CharacterController` (the client-side KCC) only if the
   character is `Predicted`. Without prediction the character has no `CharacterControllerState`
-  (the data frame shows grounded "—"). `ClientPrediction` (resource, reflected, default `true`,
+  (the data frame shows grounded "—"). `ClientPrediction` (resource, reflected, default `false`,
   not persisted) is the Options setting; it applies from the next Play. `decorate_other_players` gives other players a model. It also registers
   `CharacterControllerState` for local rollback (`app.component::<CharacterControllerState>().local_rollback()`,
   which needs `PredictionRegistry` from `ClientPlugins` to exist first). `AccumulatedInput` is
@@ -652,8 +652,11 @@ Full playbook: `docs/agents/skills/playtest.md`. Design: ADRs 0009–0012.
   `controls.rs`'s `gate_replicated_input_context`, which deactivates the local player's
   `PlayerInputContext` via BEI's `ContextActivity` while the dev console or pause modal is
   open (without it, BEI's binding readers keep streaming WASD/Space to the server while the
-  player types — bug_0007). Lifecycle/spawn observers stay ungated (a gated one-shot trigger
-  is lost forever).
+  player types — bug_0007). The context switches off in `Update`, after the fixed tick in which
+  the menu opened, so that tick's input still reaches the server: observers mirroring a
+  continuous replicated action (`rotate_camera`) must stay **ungated**, or the camera misses
+  input the server applies (bug_0009). Lifecycle/spawn observers stay ungated (a gated one-shot
+  trigger is lost forever).
 - **Inputs** are `#[derive(InputAction)]` markers in `controls/actions.rs`, handled by observers
   (`On<Fire<T>>`, `On<Start<T>>`, `On<Complete<T>>`).
 - **`EntityEvent`** supports one target; for two-entity events (`Attack`), the scoped side is

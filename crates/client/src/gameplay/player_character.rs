@@ -65,16 +65,10 @@ pub struct PlayerModel;
 /// applies from the next Play. On: movement responds immediately and rollback reconciles it
 /// with the server. Off: the character moves only when the server's state arrives, interpolated
 /// like every remote body (input-to-motion latency ≈ round trip + interpolation delay).
-/// Reflected, so BRP's `world.insert_resources` can set it too. Not persisted.
-#[derive(Resource, Reflect, Clone, Copy, Debug, PartialEq, Eq)]
+/// Off by default. Reflected, so BRP's `world.insert_resources` can set it too. Not persisted.
+#[derive(Resource, Reflect, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[reflect(Resource)]
 pub struct ClientPrediction(pub bool);
-
-impl Default for ClientPrediction {
-    fn default() -> Self {
-        Self(true)
-    }
-}
 
 #[derive(Component, Reflect, Default)]
 pub struct OtherPlayer;

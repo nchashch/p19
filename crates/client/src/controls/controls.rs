@@ -62,13 +62,20 @@ impl Plugin for PlayerControlsPlugin {
             kill,
             send_attack,
             send_kill,
-            rotate_camera,
             select,
             deselect,
             shoot,
             spawn_npc,
             toggle_data_frame,
         );
+
+        // Ungated on purpose (bug_0009): the camera must apply exactly the `RotateCamera` fires
+        // the server receives. Those stop only when `gate_replicated_input_context` deactivates
+        // the context, which happens in `Update` — after the fixed tick in which the console or
+        // pause menu opened. A state-gated observer skipped that tick's fire while the server
+        // still applied it, leaving the server's look permanently offset from the camera
+        // (walking at an angle).
+        app.add_observer(rotate_camera);
 
         // Not an observer — a continuous feed (ahoy's KCC reads `CharacterLook` every fixed
         // tick, so it must track the camera even when no look input fires this frame).
@@ -97,41 +104,12 @@ impl Plugin for PlayerControlsPlugin {
 fn update_character_look(
     local_player: Res<LocalPlayer>,
     mut looks: Query<&mut CharacterLook>,
-    cameras: Query<(&GlobalTransform, &FpsCamera), With<FpsCamera>>,
-    // TEMP desync instrumentation (playtest 0011 follow-up) — remove after diagnosis:
-    // player entity's global transform (the server-replicated `Rotation` lands here) to
-    // compare against the camera-anchor's euler, plus a one-shot divergence marker.
-    player_transforms: Query<&GlobalTransform>,
-    mut logged_divergence: Local<bool>,
+    cameras: Query<&GlobalTransform, With<FpsCamera>>,
 ) {
-    let (Some(player), Ok((camera, fps))) = (local_player.0, cameras.single()) else {
+    let (Some(player), Ok(camera)) = (local_player.0, cameras.single()) else {
         return;
     };
-    // TEMP desync instrumentation: camera-anchor euler vs FpsCamera fields vs player rotation.
-    let camera_rot = camera.rotation();
-    let (cam_yaw, cam_pitch, _) = camera_rot.to_euler(EulerRot::YXZ);
-    let diverged =
-        (cam_yaw - fps.yaw).abs() > 0.02 || (cam_pitch - fps.pitch).abs() > 0.02;
-    if diverged && !*logged_divergence {
-        *logged_divergence = true;
-        let player_rot = player_transforms
-            .get(player)
-            .map(|gt| gt.rotation())
-            .ok()
-            .map(|r| [r.x, r.y, r.z, r.w]);
-        let player_pos = player_transforms
-            .get(player)
-            .map(|gt| [gt.translation().x, gt.translation().y, gt.translation().z])
-            .unwrap_or([0.0; 3]);
-        warn!(
-            "LOOK-DIVERGENCE first: camera euler yaw={cam_yaw:.3} pitch={cam_pitch:.3} | \
-             fps yaw={:.3} pitch={:.3} | player rot {player_rot:?} | player pos {player_pos:?}",
-            fps.yaw, fps.pitch,
-        );
-    } else if !diverged && *logged_divergence {
-        *logged_divergence = false;
-        info!("LOOK-DIVERGENCE recovered: camera euler matches FpsCamera again");
-    }
+    let (cam_yaw, cam_pitch, _) = camera.rotation().to_euler(EulerRot::YXZ);
     let Ok(mut look) = looks.get_mut(player) else {
         return;
     };
@@ -241,24 +219,8 @@ fn rotate_camera(
     rotate: On<Fire<AhoyRotate>>,
     mut fps_camera: Query<(&mut FpsCamera, &mut Transform)>,
 ) {
-    // TEMP desync instrumentation (playtest 0011 follow-up) — remove after diagnosis:
-    // every non-zero Fire, so a client whose mouse never moved but that still receives
-    // fires (remote players' replicated action state) is immediately visible. This
-    // observer is deliberately UNKEYED — it rotates `fps_camera.single_mut()` for any
-    // AhoyRotate fire, local or remote.
-    if rotate.value.x.abs() > 0.0001 || rotate.value.y.abs() > 0.0001 {
-        let before = fps_camera
-            .single()
-            .ok()
-            .map(|(fps, _)| (fps.yaw, fps.pitch));
-        info!(
-            "ROTATE-FIRE: x={:.4} y={:.4} (fps before: yaw={:.3} pitch={:.3})",
-            rotate.value.x,
-            rotate.value.y,
-            before.map(|b| b.0).unwrap_or(f32::NAN),
-            before.map(|b| b.1).unwrap_or(f32::NAN),
-        );
-    }
+    // Unkeyed on purpose: only the local player's actions fire on this client (remote players'
+    // action entities have no bindings here, and no `Fire` reaches them — playtest 0012).
     if let Ok((mut fps_camera, mut camera_transform)) = fps_camera.single_mut() {
         let delta_pitch = rotate.value.y;
         let delta_yaw = -rotate.value.x;
