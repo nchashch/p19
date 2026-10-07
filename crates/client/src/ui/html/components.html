@@ -15,3 +15,17 @@
 {% component ui.selector_toggle(id: string, selector: string, key: string, label: string, tooltip: string = "", placement: string = "") %}
 {{ <ui.button id signal="selector.toggle" key label tooltip placement selector /> }}
 {% endcomponent ui.selector_toggle %}
+
+{# The mouse sensitivity slider (`ui/slider.rs`), shared by the options screen and the pause menu.
+   `value`/`percent` are `ui::ui::mouse_sensitivity_context`'s `mouse_sensitivity` and
+   `mouse_sensitivity_percent`. #}
+{% component ui.mouse_sensitivity(value: string, percent: string, class: string = "") %}
+<div class="slider-field{% if class %} {{ class }}{% endif %}" data-tooltip="options-mouse-sensitivity-tooltip" data-tooltip-placement="above">
+  <p class="slider-label" data-l10n-id="options-mouse-sensitivity" data-l10n-args='{"value": "{{ value }}"}'>Mouse sensitivity: {{ value }}×</p>
+  <div class="slider" id="mouse-sensitivity" is="slider" data-slider="options.mouse-sensitivity"
+       data-on-click="slider.activate">
+    <div class="slider-fill" style="width: {{ percent }}%"></div>
+    <div class="slider-thumb" style="left: {{ percent }}%"></div>
+  </div>
+</div>
+{% endcomponent ui.mouse_sensitivity %}

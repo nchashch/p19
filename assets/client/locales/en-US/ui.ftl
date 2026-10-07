@@ -30,6 +30,8 @@ credits-original = Everything else was made for this game.
 menu-screen-back = Back
 options-title = Options
 options-language-tooltip = The language of the game's text.
+options-mouse-sensitivity = Mouse sensitivity: { $value }×
+options-mouse-sensitivity-tooltip = How far the view turns per mouse movement. Applies immediately.
 options-prediction = Client-side prediction: { $enabled ->
         [true] On
        *[other] Off

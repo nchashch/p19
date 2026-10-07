@@ -1,8 +1,9 @@
-use crate::controls::controls::return_to_main_menu;
+use crate::controls::controls::{MouseSensitivity, return_to_main_menu};
 use crate::controls::input_device::InputDeviceState;
 use crate::ui::input_icons::{InputIcon, InputIconAtlases};
 use crate::ui::markup::{menu_controls, template};
 use crate::ui::quad_panel::quad_panel;
+use crate::ui::ui::mouse_sensitivity_context;
 use bevy::asset::embedded_asset;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions};
@@ -47,6 +48,7 @@ impl Plugin for ModalMenuPlugin {
             Update,
             (
                 refresh_controls_tips.run_if(state_changed::<InputDeviceState>),
+                update_pause_menu,
                 spawn_vr_in_game_wrist_panel
                     .run_if(in_state(GameState::InGame).and_then(in_state(VRState::VR))),
             ),
@@ -75,9 +77,12 @@ fn spawn_modal_menu(
     asset_server: Res<AssetServer>,
     input_device: Res<State<InputDeviceState>>,
     atlases: Option<Res<InputIconAtlases>>,
+    mouse_sensitivity: Res<MouseSensitivity>,
 ) {
     commands.spawn((
+        PauseMenu,
         template(&asset_server, "pause_menu.html"),
+        mouse_sensitivity_context(TemplateContext::new(), *mouse_sensitivity),
         HtmlModal,
         DespawnOnExit(ModalMenuState::Open),
     ));
@@ -87,6 +92,21 @@ fn spawn_modal_menu(
         controls_tips_context(*input_device.get(), atlases.as_deref()),
         DespawnOnExit(ModalMenuState::Open),
     ));
+}
+
+/// The pause menu's root (`pause_menu.html`).
+#[derive(Component)]
+struct PauseMenu;
+
+/// Keeps the pause menu's mouse sensitivity slider showing the current value (written every
+/// frame; an identical render does nothing).
+fn update_pause_menu(
+    mouse_sensitivity: Res<MouseSensitivity>,
+    mut menus: Query<&mut TemplateContext, With<PauseMenu>>,
+) {
+    for mut context in &mut menus {
+        *context = mouse_sensitivity_context(TemplateContext::new(), *mouse_sensitivity);
+    }
 }
 
 /// Every button of this module's surfaces. "Resume" closes the modal and hands control back to

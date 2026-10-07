@@ -45,6 +45,9 @@ impl Plugin for PlayerControlsPlugin {
             app.add_plugins(EnhancedInputPlugin);
         }
         app.add_input_context::<PlayerControls>();
+        app.init_resource::<MouseSensitivity>()
+            .register_type::<MouseSensitivity>()
+            .add_systems(Update, apply_mouse_sensitivity);
         app.add_systems(OnEnter(GameState::MainMenu), unlock_cursor);
         app.add_systems(OnEnter(GameState::InGame), lock_cursor);
 
@@ -315,6 +318,8 @@ pub fn player_controls() -> impl Bundle {
             // the camera's absolute direction (`write_look_input`), not these deltas.
             context.spawn((
                 Action::<RotateCamera>::new(),
+                MouseLookAction,
+                // Kept at `MOUSE_LOOK_SENSITIVITY × MouseSensitivity` by `apply_mouse_sensitivity`.
                 Scale::splat(MOUSE_LOOK_SENSITIVITY),
                 Bindings::spawn(Spawn(Binding::mouse_motion())),
             ));
@@ -336,8 +341,40 @@ pub fn player_controls() -> impl Bundle {
     )
 }
 
-/// Mouse-look sensitivity in radians/pixel — the mouse `RotateCamera` binding's `Scale`.
+/// Mouse-look sensitivity at 1× in radians/pixel — the mouse `RotateCamera` binding's `Scale`,
+/// times [`MouseSensitivity`].
 const MOUSE_LOOK_SENSITIVITY: f32 = 0.005;
+
+/// Options → Mouse sensitivity: a multiplier on [`MOUSE_LOOK_SENSITIVITY`] (default 1×). Applies
+/// immediately. Reflected, so BRP's `world.insert_resources` can set it too. Not persisted.
+#[derive(Resource, Reflect, Clone, Copy, Debug, PartialEq)]
+#[reflect(Resource)]
+pub struct MouseSensitivity(pub f32);
+
+impl Default for MouseSensitivity {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
+
+/// Marks the mouse `RotateCamera` action (the stick has its own, unaffected by
+/// [`MouseSensitivity`]).
+#[derive(Component)]
+struct MouseLookAction;
+
+/// Keeps the mouse look action's `Scale` at the current [`MouseSensitivity`], including on a
+/// freshly spawned `PlayerControls` context.
+fn apply_mouse_sensitivity(
+    sensitivity: Res<MouseSensitivity>,
+    mut scales: Query<&mut Scale, With<MouseLookAction>>,
+) {
+    let factor = Vec3::splat(MOUSE_LOOK_SENSITIVITY * sensitivity.0);
+    for mut scale in &mut scales {
+        if scale.factor != factor {
+            scale.factor = factor;
+        }
+    }
+}
 
 /// Adds local-only bindings to the **server-authored, replicated** ahoy action entities (M2
 /// input flow: `player()` spawns the context + bare actions server-side; they replicate via

@@ -5,5 +5,7 @@
                 key="modal-menu-main-menu" label="Main Menu" /> }}
   {{ <ui.button id="pause-resume" class="pause-menu-button" autofocus={true} signal="pause.resume"
                 key="modal-menu-resume" label="Resume" /> }}
+  {# `ui::ui::mouse_sensitivity_context`, refreshed every frame by `modal_menu.rs`. #}
+  {{ <ui.mouse_sensitivity class="pause-menu-slider" value={mouse_sensitivity} percent={mouse_sensitivity_percent} /> }}
 </div>
 </html>

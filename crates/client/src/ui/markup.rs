@@ -31,6 +31,7 @@
 
 use crate::add_observers_run_if;
 use crate::controls::actions::{UiConfirm, UiNavigate};
+use crate::ui::slider::{self, Slider, SliderInput};
 use bevy::asset::embedded_asset;
 use bevy::{math::CompassOctant, platform::collections::HashMap, prelude::*};
 use bevy_enhanced_input::prelude::{Press, *};
@@ -189,14 +190,33 @@ fn on_ui_navigate(
     navigate: On<Start<UiNavigate>>,
     mut focus: HtmlFocus,
     mut hold: ResMut<UiNavigateHold>,
+    sliders: Query<&Slider>,
+    mut slider_input: MessageWriter<SliderInput>,
 ) {
     let Ok(direction) = Dir2::new(navigate.value) else {
         return;
     };
     let octant = CompassOctant::from(direction);
-    focus.navigate(octant);
+    navigate_or_step(&mut focus, octant, &sliders, &mut slider_input);
     hold.direction = Some(octant);
     hold.next_repeat = UI_NAVIGATE_HOLD_DELAY;
+}
+
+/// Left/right on a focused slider steps it (`ui/slider.rs`); anything else moves focus.
+fn navigate_or_step(
+    focus: &mut HtmlFocus,
+    octant: CompassOctant,
+    sliders: &Query<&Slider>,
+    slider_input: &mut MessageWriter<SliderInput>,
+) {
+    match slider::step_for(focus.focused(), octant, sliders) {
+        Some(step) => {
+            slider_input.write(step);
+        }
+        None => {
+            focus.navigate(octant);
+        }
+    }
 }
 
 fn on_ui_navigate_complete(_complete: On<Complete<UiNavigate>>, mut hold: ResMut<UiNavigateHold>) {
@@ -207,6 +227,8 @@ fn repeat_ui_navigate_while_held(
     time: Res<Time>,
     mut hold: ResMut<UiNavigateHold>,
     mut focus: HtmlFocus,
+    sliders: Query<&Slider>,
+    mut slider_input: MessageWriter<SliderInput>,
 ) {
     let Some(octant) = hold.direction else {
         return;
@@ -215,7 +237,7 @@ fn repeat_ui_navigate_while_held(
     if hold.next_repeat > 0.0 {
         return;
     }
-    focus.navigate(octant);
+    navigate_or_step(&mut focus, octant, &sliders, &mut slider_input);
     hold.next_repeat = UI_NAVIGATE_REPEAT_INTERVAL;
 }
 

@@ -4,6 +4,39 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0047` — Mouse Sensitivity in the Pause Menu
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-07 08:20 – 08:25 +0400 |
+| **Commit** | acdb56f "Decouple look replication from physics" + uncommitted slider and its pause-menu copy |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0047.md`](playtest_0047.md) |
+
+Verifies the Mouse sensitivity slider in the in-game pause menu (shared component with Options): dragging and arrow keys change the shared value, the camera doesn't turn while dragging under the menu, and after resuming 100 px turns camera and server by exactly 0.005 × 100 × the value.
+
+### `playtest_0046` — Mouse Sensitivity Slider
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-07 08:10 – 08:20 +0400 |
+| **Commit** | acdb56f "Decouple look replication from physics" + uncommitted slider |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0046.md`](playtest_0046.md) |
+
+Verifies the continuous Mouse sensitivity slider (0.1×–3.0×, new `ui/slider.rs`): click and drag set the exact mapped value (also past the ends and off the track), left/right and the d-pad step by 0.05 with auto-repeat while up/down still navigate, and 100 px of mouse motion in game turns camera and server by exactly 0.005 × 100 × the value.
+
+### `playtest_0045` — Mouse Sensitivity Option
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-07 08:00 – 08:05 +0400 |
+| **Commit** | `acdb56f` "Decouple look replication from physics" + uncommitted mouse sensitivity option |
+| **Agent** | omp session, Claude Opus 5.5 (Anthropic) |
+| **Report** | [`playtest_0045.md`](playtest_0045.md) |
+
+Verifies the Options screen's Mouse sensitivity selector (0.25×–3×): picking by mouse and keyboard updates the label (also translated), and 100 px of mouse motion turns the camera and the server by exactly 0.005 × 100 × the multiplier, including after a mid-game change.
+
 ### `playtest_0044` — Client-Owned Look (ADR 0017)
 
 | Field | Value |

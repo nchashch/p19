@@ -30,6 +30,8 @@ credits-original = Всё остальное создано для этой иг
 menu-screen-back = Назад
 options-title = Настройки
 options-language-tooltip = Язык текста в игре.
+options-mouse-sensitivity = Чувствительность мыши: { $value }×
+options-mouse-sensitivity-tooltip = Насколько поворачивается взгляд при движении мыши. Применяется сразу.
 options-prediction = Предсказание на клиенте: { $enabled ->
         [true] Вкл.
        *[other] Выкл.

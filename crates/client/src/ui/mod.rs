@@ -10,5 +10,6 @@ pub mod nameplate;
 pub mod npc_ui_quad;
 pub mod quad_panel;
 pub mod selector;
+pub mod slider;
 pub mod tui_panel;
 pub mod ui;

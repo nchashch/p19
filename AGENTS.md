@@ -324,7 +324,9 @@ systems.
   writes the `FpsCamera` direction into that mock every tick. Every BEI action already carries a
   disabled default `ActionMock`, so never filter on `Without<ActionMock>`. Mouse and right-stick
   look are client-local `RotateCamera` actions in `PlayerControls` (the stick with a radial
-  `DeadZone` 0.15); `rotate_camera` turns `FpsCamera` and is gated with the other gameplay
+  `DeadZone` 0.15; the mouse action's `Scale` is kept at `MOUSE_LOOK_SENSITIVITY` (0.005 rad/px)
+  × `MouseSensitivity` by `apply_mouse_sensitivity` — resource, reflected, default 1, not
+  persisted, applies immediately); `rotate_camera` turns `FpsCamera` and is gated with the other gameplay
   observers. Hotkey observers send
   `AttackAttempt`/`KillAttempt` (target = `Selected`) and spawn requests via
   `MessageSender<T>::send::<OrderedReliable>`. `return_to_main_menu` (Escape / gamepad Start /
@@ -396,7 +398,8 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
     moves focus). This module only binds input: `MenuControls` (`markup::menu_controls()`,
     spawned per UI state: main menu, lobby, pause menu) → `HtmlFocus::navigate` (d-pad, arrows,
     left stick; auto-repeat after 0.4 s, then every 0.08 s) and `HtmlFocus::activate` (South /
-    Enter). A dead-end move fires bevy_markup's `FocusEdge` (the selector pages on it).
+    Enter). Left/right on a focused slider step it instead of moving focus (`navigate_or_step`).
+    A dead-end move fires bevy_markup's `FocusEdge` (the selector pages on it).
   - **Tooltips** are bevy_markup's `data-tooltip="key"` (optional `data-tooltip-args='{…}'`,
     `data-tooltip-placement="above"`): `markup.rs` inserts `HtmlTooltips(tooltip.html)`, and
     hovering shows a `tooltip.html` root
@@ -404,7 +407,9 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
     the viewport, renders on its UI camera, despawned with it).
 - **`ui/ui.rs`** — main menu (`main_menu.html`): Connect, Options, Credits, Quit. Options opens
   the options screen (`options.html`): the Language selector (`en-US`/`ru-RU`/`ja-JP`, labels in
-  their own script), the Client-side prediction toggle (`options.prediction`, flips
+  their own script), the Mouse sensitivity slider (continuous 0.1×–3.0×, keyboard/gamepad step
+  0.05, values kept at 0.01; `apply_slider_input` writes `MouseSensitivity`), the
+  Client-side prediction toggle (`options.prediction`, flips
   `ClientPrediction`; the label follows it every frame via `update_options_screen`) and Back. The same main-menu template (`wrist = true`) is the VR wrist panel:
   Connect, Language (the selector itself), Quit — no Options/Credits, since screen-space modals
   don't show in a headset. Registers `HudPlugin`, `SelectorPlugin`, `MenuScreenPlugin` and
@@ -417,6 +422,14 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
 - **`ui/credits.rs`** — the credits screen (`credits.html`): the third-party assets from its
   `CREDITS` table, which mirrors `assets/CREDITS.md` — **add an asset to both**, plus its
   `credits-use-<id>` Fluent key in every locale.
+- **`ui/slider.rs`** — the horizontal slider bevy_markup lacks: `<div is="slider"
+  data-slider="key" data-on-click="slider.activate">` with `.slider-fill` / `.slider-thumb`
+  children whose `width` / `left` percentages come from the template context (keep `data-*`
+  constant: a changed dataset respawns the element and would break a drag). Pointer press and
+  `Pointer<Drag>` observers on the element report `SliderInput { key, change:
+  SliderChange::Set(fraction) }`; left/right `UiNavigate` on the focused slider report
+  `Step(±1)`. The app owns value, range and step. Agents drive it with `game/mouse` (`move_to`,
+  `button` press, `move_to`, release); in `game/ui` it is the clickable node without text.
 - **`ui/selector.rs`** — generic popup (ADR 0001's behavior): a `Selector { key, options }`
   entity per picker; a toggle element (`data-on-click="selector.toggle"`,
   `data-selector="key"`) opens a `selector.html` root (`HtmlModal`) anchored right of it
@@ -428,7 +441,9 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
   replicated `Levels`, re-seeded on change; labels are Fluent keys; a pick sends
   `LoadLevelRequest`), Main Menu (`Disconnect` + `MainMenu`).
 - **`ui/modal_menu.rs`** — pause menu (`pause_menu.html`, `HtmlModal`, Main Menu above Resume,
-  Resume auto-focused), the controls tips (`controls_tips.html`, keyboard/mouse vs Steam Deck rows
+  Resume auto-focused, then the mouse sensitivity slider — the shared `ui.mouse_sensitivity`
+  component from `components.html`, the same one the options screen uses; its context comes from
+  `ui::ui::mouse_sensitivity_context`, rewritten every frame by `update_pause_menu`), the controls tips (`controls_tips.html`, keyboard/mouse vs Steam Deck rows
   by `InputDeviceState`; glyphs are `is="input-icon" data-icon="<name>"`) and the VR in-game
   wrist panel (`wrist_game.html`).
 - **`ui/hud.rs`** — crosshair (dot, or the `CrosshairGcdMaterial` ring while the GCD runs;

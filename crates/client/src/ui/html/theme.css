@@ -253,6 +253,53 @@ h2 {
   align-items: flex-start;
 }
 
+/* === Slider (`ui/slider.rs`) === */
+
+/* A labelled slider row, styled like a button. */
+.slider-field {
+  background-color: #33363f;
+  padding: 10px 20px;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.slider-label {
+  align-self: center;
+}
+
+.slider {
+  height: 12px;
+  margin: 6px 11px;
+  background-color: #1d1f25;
+  border-radius: 6px;
+}
+
+.slider:hover {
+  background-color: #24262d;
+}
+
+.slider:focus-visible {
+  outline: 2px solid #fac74d;
+  outline-offset: 6px;
+}
+
+.slider-fill {
+  height: 100%;
+  background-color: #2c5fb8;
+  border-radius: 6px;
+}
+
+/* Centered on the fill's end: `left` is the same percentage, the margin pulls it back by half. */
+.slider-thumb {
+  position: absolute;
+  top: -5px;
+  width: 22px;
+  height: 22px;
+  margin-left: -11px;
+  background-color: #e8e6df;
+  border-radius: 11px;
+}
+
 /* === Main-menu screens === */
 
 .menu-screen-panel {
@@ -303,6 +350,12 @@ h2 {
 .pause-menu {
   gap: 20px;
   align-items: center;
+}
+
+/* Same width as the buttons above it. */
+.pause-menu-slider {
+  box-sizing: border-box;
+  width: 320px;
 }
 
 .pause-menu-button {

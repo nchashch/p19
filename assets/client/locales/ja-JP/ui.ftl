@@ -30,6 +30,8 @@ credits-original = それ以外はすべてこのゲームのために制作し�
 menu-screen-back = 戻る
 options-title = オプション
 options-language-tooltip = ゲーム内テキストの言語。
+options-mouse-sensitivity = マウス感度：{ $value }×
+options-mouse-sensitivity-tooltip = マウスを動かしたときの視点の回転量。すぐに反映されます。
 options-prediction = クライアント側予測：{ $enabled ->
         [true] オン
        *[other] オフ

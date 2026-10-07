@@ -3,6 +3,7 @@
 //! signals from both are handled by [`handle_main_menu_signals`].
 
 use crate::assets::collections::CommonAssets;
+use crate::controls::controls::MouseSensitivity;
 use crate::events::Connect;
 use crate::gameplay::player_character::ClientPrediction;
 use crate::ui::credits;
@@ -11,6 +12,7 @@ use crate::ui::markup::{self, menu_controls};
 use crate::ui::menu_screen::{self, OpenMenuScreens, open_menu_screen};
 use crate::ui::quad_panel::quad_panel;
 use crate::ui::selector::{self, Selector, SelectorOption, SelectorPicked};
+use crate::ui::slider::{self, SliderChange, SliderInput};
 use bevy::{asset::embedded_asset, prelude::*};
 use bevy_fluent::prelude::Locale;
 use bevy_markup::prelude::*;
@@ -33,6 +35,16 @@ const LANGUAGES: [(&str, &str); 3] = [
     ("ja-JP", "日本語"),
 ];
 
+/// The mouse sensitivity slider's key (`options.html`'s `data-slider`).
+const MOUSE_SENSITIVITY_SLIDER: &str = "options.mouse-sensitivity";
+
+/// The mouse sensitivity slider's range (multipliers of the base mouse-look speed), its
+/// keyboard/gamepad step, and the precision values are kept at.
+const MOUSE_SENSITIVITY_MIN: f32 = 0.1;
+const MOUSE_SENSITIVITY_MAX: f32 = 3.0;
+const MOUSE_SENSITIVITY_STEP: f32 = 0.05;
+const MOUSE_SENSITIVITY_PRECISION: f32 = 0.01;
+
 pub struct PrototypeUiPlugin;
 
 impl Plugin for PrototypeUiPlugin {
@@ -42,6 +54,7 @@ impl Plugin for PrototypeUiPlugin {
         app.add_plugins((
             HudPlugin,
             selector::SelectorPlugin,
+            slider::SliderPlugin,
             menu_screen::MenuScreenPlugin,
             credits::CreditsPlugin,
         ));
@@ -64,6 +77,7 @@ impl Plugin for PrototypeUiPlugin {
             Update,
             (
                 handle_main_menu_picks,
+                apply_slider_input,
                 update_options_screen,
                 spawn_vr_main_menu_wrist_panel
                     .run_if(in_state(GameState::MainMenu).and_then(in_state(VRState::VR))),
@@ -109,12 +123,13 @@ pub fn spawn_main_menu(
 #[derive(Component)]
 struct OptionsScreen;
 
-/// `main-menu.options`: the options screen — the language picker and the client-side
-/// prediction toggle.
+/// `main-menu.options`: the options screen — the language picker, the mouse sensitivity slider
+/// and the client-side prediction toggle.
 fn open_options(
     _: In<ElementSignal>,
     open: OpenMenuScreens,
     prediction: Res<ClientPrediction>,
+    mouse_sensitivity: Res<MouseSensitivity>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
@@ -123,15 +138,63 @@ fn open_options(
         &asset_server,
         &open,
         "options.html",
-        options_context(*prediction),
+        options_context(*prediction, *mouse_sensitivity),
         "options",
     ) {
         commands.entity(root).insert(OptionsScreen);
     }
 }
 
-fn options_context(prediction: ClientPrediction) -> TemplateContext {
-    TemplateContext::new().with("prediction", &prediction.0)
+fn options_context(
+    prediction: ClientPrediction,
+    mouse_sensitivity: MouseSensitivity,
+) -> TemplateContext {
+    mouse_sensitivity_context(TemplateContext::new(), mouse_sensitivity)
+        .with("prediction", &prediction.0)
+}
+
+/// Adds what the `ui.mouse_sensitivity` slider component renders (options screen, pause menu):
+/// `mouse_sensitivity`, the value as shown, and `mouse_sensitivity_percent`, its position on the
+/// slider — rounded to a tenth of a percent: finer is invisible, and an identical render is free.
+pub fn mouse_sensitivity_context(
+    context: TemplateContext,
+    mouse_sensitivity: MouseSensitivity,
+) -> TemplateContext {
+    let fraction = (mouse_sensitivity.0 - MOUSE_SENSITIVITY_MIN)
+        / (MOUSE_SENSITIVITY_MAX - MOUSE_SENSITIVITY_MIN);
+    context
+        .with("mouse_sensitivity", &format!("{:.2}", mouse_sensitivity.0))
+        .with(
+            "mouse_sensitivity_percent",
+            &format!("{:.1}", fraction.clamp(0.0, 1.0) * 100.0),
+        )
+}
+
+/// Applies the mouse sensitivity slider's input (options screen and pause menu alike): a pointer position maps linearly onto
+/// `MOUSE_SENSITIVITY_MIN..=MAX`, a step moves by `MOUSE_SENSITIVITY_STEP`; both are clamped
+/// and kept at `MOUSE_SENSITIVITY_PRECISION`.
+fn apply_slider_input(
+    mut input: MessageReader<SliderInput>,
+    mut mouse_sensitivity: ResMut<MouseSensitivity>,
+) {
+    for input in input
+        .read()
+        .filter(|input| input.key == MOUSE_SENSITIVITY_SLIDER)
+    {
+        let value = match input.change {
+            SliderChange::Set(fraction) => {
+                MOUSE_SENSITIVITY_MIN + fraction * (MOUSE_SENSITIVITY_MAX - MOUSE_SENSITIVITY_MIN)
+            }
+            SliderChange::Step(steps) => {
+                mouse_sensitivity.0 + steps as f32 * MOUSE_SENSITIVITY_STEP
+            }
+        };
+        let value = (value.clamp(MOUSE_SENSITIVITY_MIN, MOUSE_SENSITIVITY_MAX)
+            / MOUSE_SENSITIVITY_PRECISION)
+            .round()
+            * MOUSE_SENSITIVITY_PRECISION;
+        mouse_sensitivity.set_if_neq(MouseSensitivity(value));
+    }
 }
 
 /// `options.prediction`: flips [`ClientPrediction`] (applies from the next Play).
@@ -144,10 +207,11 @@ fn toggle_prediction(_: In<ElementSignal>, mut prediction: ResMut<ClientPredicti
 /// render does nothing).
 fn update_options_screen(
     prediction: Res<ClientPrediction>,
+    mouse_sensitivity: Res<MouseSensitivity>,
     mut screens: Query<&mut TemplateContext, With<OptionsScreen>>,
 ) {
     for mut context in &mut screens {
-        *context = options_context(*prediction);
+        *context = options_context(*prediction, *mouse_sensitivity);
     }
 }
 
