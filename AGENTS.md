@@ -622,6 +622,13 @@ reflects every component). The GLTF/Skein/world-serialization pipeline needs no 
 
 Full playbook: `docs/agents/skills/playtest.md`. Design: ADRs 0009–0012.
 
+- Implemented by the **`bevy_mcp_harness`** crate (path dependency, `../../../../PROTOTYPE_23/
+  bevy_mcp_harness`) for everything generic — the BRP server, `game/client_info`,
+  `game/gamepad`/`game/keyboard`/`game/mouse`, `game/ui`, `game/cameras`,
+  `game/screenshot` + `game/screenshot/get`, the MCP server and its built-in tools, and the
+  bundled agent guides (`read_guide`). p19's game-specific methods live in
+  `crates/client/src/dev/tool_api.rs` and attach through the harness's extension points
+  (custom BRP methods + the `game/state` snapshot hook + one `extra_tools` MCP tool).
 - Behind the `dev-tools` cargo feature (works in dev and release). BRP on `127.0.0.1:15702`, MCP on
   15710 (`--brp-port`/`--mcp-port` for fleets; a non-default BRP port also isolates screenshot
   storage). Bevy 0.19 builtin BRP methods are `world.*`.

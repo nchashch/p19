@@ -62,21 +62,12 @@ sha2.workspace = true
 bevy_asset_loader.workspace = true
 bevy_common_assets.workspace = true
 
-# Agent tool API: in-process MCP server (rmcp, Streamable HTTP) whose tools proxy to the
-# server's own BRP over loopback — the same shape as the client's `dev::tool_api`, minus
-# everything client-specific (input mocking, screenshots, UI dumps).
-rmcp = { version = "3.4", features = [
-	"server",
-	"macros",
-	"schemars",
-	"transport-streamable-http-server",
-] }
-axum = "0.8"
-tokio = { version = "1", features = ["rt-multi-thread", "net", "time"] }
-reqwest = { version = "0.12", default-features = false, features = [
-	"json",
-	"rustls-tls",
-] }
+# Agent tool API: bevy_mcp_harness (BRP + MCP server + built-in tools, including the bundled
+# agent guides) serving this server's authoritative state via the `state_snapshot` hook — the
+# same shape the client's `dev/tool_api.rs` uses, minus everything client-specific (input
+# mocking, screenshots, UI dumps — the surfaces exist but are meaningless without a world
+# render/window; they error or report empty harmlessly).
+bevy_mcp_harness = { path = "../../../../PROTOTYPE_23/bevy_mcp_harness" }
 serde_json = "1"
 serde.workspace = true
 
