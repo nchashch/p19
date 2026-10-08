@@ -24,31 +24,33 @@ pub struct ServerToolsPlugin;
 
 impl Plugin for ServerToolsPlugin {
     fn build(&self, app: &mut App) {
-        let brp_port = port_flag("--brp-port").unwrap_or(BRP_PORT_DEFAULT);
-        let mcp_port = port_flag("--mcp-port").unwrap_or(MCP_PORT_DEFAULT);
-
         // Skein's `SkeinPlugin` is explicitly given `handle_brp: false` in `main.rs` (it
         // defaults to `cfg!(debug_assertions)`, which would otherwise double-add `RemotePlugin`
         // here and panic — confirmed live). The harness re-checks `is_plugin_added` itself, so
         // ordering is safe either way.
         app.add_plugins(bevy_mcp_harness::BevyMcpHarnessPlugin {
-            config: bevy_mcp_harness::McpHarnessConfig {
-                brp_port,
-                mcp_port,
-                state_snapshot: Some(Arc::new(server_state_snapshot)),
-                ..Default::default()
+            config: {
+                let mut config = bevy_mcp_harness::McpHarnessConfig::from_env_with_defaults(
+                    BRP_PORT_DEFAULT,
+                    MCP_PORT_DEFAULT,
+                );
+                // The server's surface is state inspection, not gameplay driving: prefix the
+                // methods `server/*` (so `game/state` on the client and `server/state` on the
+                // server read as the two sides they are) and hide the tools that are
+                // meaningless without a world render/window.
+                config.method_prefix = "server".to_owned();
+                config.disabled_tools = vec![
+                    "screenshot".to_owned(),
+                    "ui_tree".to_owned(),
+                    "keyboard_input".to_owned(),
+                    "gamepad_input".to_owned(),
+                    "mouse_input".to_owned(),
+                ];
+                config.state_snapshot = Some(Arc::new(server_state_snapshot));
+                config
             },
         });
     }
-}
-
-/// Reads `<flag> N` out of the process args. `None` when absent or malformed.
-fn port_flag(flag: &str) -> Option<u16> {
-    let args: Vec<String> = std::env::args().collect();
-    args.iter()
-        .position(|arg| arg == flag)
-        .and_then(|i| args.get(i + 1))
-        .and_then(|value| value.parse().ok())
 }
 
 /// The `game/state` payload — the authoritative view: app state, every connected client, every

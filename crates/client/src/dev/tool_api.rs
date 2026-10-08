@@ -62,33 +62,31 @@ impl Plugin for DevToolsPlugin {
             brp_port: crate::config::brp_port_presync(),
             mcp_port: crate::config::mcp_port_presync(),
             screenshots_dir: p19_screenshots_dir(),
-            offscreen_size: None,
-            offscreen_target,
+            // p19 owns its headless camera machinery (feature-independent — see the module
+            // docs); it hands the harness its offscreen handle and the harness adds only the
+            // cursor overlay (no public resource of its own).
+            offscreen: match offscreen_target {
+                Some(handle) => bevy_mcp_harness::OffscreenMode::HostManaged(handle),
+                None => bevy_mcp_harness::OffscreenMode::Windowed,
+            },
             no_render: crate::config::is_no_render_presync(),
             state_snapshot: Some(Arc::new(game_state_snapshot)),
+            client_info_host: Some(Arc::new(client_info_launch)),
+            // bevy_markup UI declares clicks via `data-on-click` element signals, not
+            // `bevy_ui::Interaction` — without this hook `game/ui` would never report the
+            // menu buttons `clickable`.
+            clickable: Some(Arc::new(markup_clickable)),
             extra_tools: vec![inject_input_tool()],
+            ..Default::default()
         };
         app.add_plugins(bevy_mcp_harness::BevyMcpHarnessPlugin { config });
 
-        // p19-specific BRP methods attach post-build via the `RemoteMethods` resource (the
-        // harness added `RemotePlugin` above, so the resource exists here).
-        let input_method_id = app.register_system(input_method);
-        let trigger_method = app.register_system(trigger_method);
-        let select_method = app.register_system(select_method);
-        let levels_method = app.register_system(levels_method);
-        let select_level_method = app.register_system(select_level_method);
-        let mut methods = app
-            .world_mut()
-            .resource_mut::<bevy::remote::RemoteMethods>();
-        let instant = bevy::remote::RemoteMethodSystemId::Instant;
-        methods.insert("game/input", instant(input_method_id));
-        methods.insert("game/trigger", instant(trigger_method));
-        methods.insert("game/select", instant(select_method));
-        methods.insert("game/levels", instant(levels_method));
-        methods.insert(
-            "game/select_level",
-            instant(select_level_method),
-        );
+        // p19-specific BRP methods attach any time after the harness plugin.
+        bevy_mcp_harness::register_game_method(app, "game/input", input_method);
+        bevy_mcp_harness::register_game_method(app, "game/trigger", trigger_method);
+        bevy_mcp_harness::register_game_method(app, "game/select", select_method);
+        bevy_mcp_harness::register_game_method(app, "game/levels", levels_method);
+        bevy_mcp_harness::register_game_method(app, "game/select_level", select_level_method);
     }
 }
 
@@ -123,20 +121,6 @@ fn game_state_snapshot(world: &mut World) -> serde_json::Value {
     if let Some(state) = world.get_resource::<State<GameState>>() {
         out.insert("game_state".into(), json!(format!("{:?}", state.get())));
     }
-
-    // p19's launch-configuration extras, reported with every snapshot (the harness's own
-    // `game/client_info` covers the generic half: ports, no_render, target size). The effective
-    // flags, including implications (`--no-render` implies `--mcp` and `--no-common-assets`).
-    let no_render = crate::config::is_no_render_presync();
-    out.insert(
-        "launch".into(),
-        json!({
-            "mcp": crate::config::is_mcp_mode_presync() || no_render,
-            "no_common_assets": crate::config::is_no_common_assets_presync() || no_render,
-            "vr": crate::config::is_vr_enabled_presync(),
-            "headless_render": crate::config::is_headless_render_presync() && !no_render,
-        }),
-    );
 
     let Some(player) = world.get_resource::<LocalPlayer>().and_then(|lp| lp.0) else {
         out.insert("connected".into(), json!(false));
@@ -237,6 +221,34 @@ fn game_state_snapshot(world: &mut World) -> serde_json::Value {
     out.insert("bindings".into(), json!(bindings_rows));
 
     serde_json::Value::Object(out)
+}
+
+/// The host half of `game/client_info` (served under the `"host"` key; the harness's own
+/// payload covers ports, `no_render`, and the target size). p19's launch-configuration extras,
+/// reported with the *effective* flags including implications (`--no-render` implies `--mcp`
+/// and `--no-common-assets`).
+fn client_info_launch(_world: &mut World) -> serde_json::Value {
+    let no_render = crate::config::is_no_render_presync();
+    json!({
+        "mcp": crate::config::is_mcp_mode_presync() || no_render,
+        "no_common_assets": crate::config::is_no_common_assets_presync() || no_render,
+        "vr": crate::config::is_vr_enabled_presync(),
+        "headless_render": crate::config::is_headless_render_presync() && !no_render,
+    })
+}
+
+/// The `clickable` convention for `game/ui`: bevy_markup UI declares clicks via `data-on-click`
+/// element signals instead of `bevy_ui::Interaction` — without this hook the dump would never
+/// report the menu buttons clickable.
+fn markup_clickable(world: &World, entity: Entity) -> bool {
+    world
+        .get::<bevy_markup::prelude::ElementSignals>(entity)
+        .is_some_and(|signals| {
+            signals
+                .0
+                .iter()
+                .any(|binding| binding.trigger == bevy_markup::prelude::SignalTrigger::Click)
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -583,7 +595,8 @@ fn select_level_method(params: In<Option<serde_json::Value>>, mut world: &mut Wo
 // ---------------------------------------------------------------------------
 
 /// The `inject_input` MCP tool's parameters — the harness generates the tool's JSON schema
-/// from these derives (schemars), so the agent sees the documented shapes.
+/// from these derives (the host keeps a direct `schemars` dependency for the derive; see
+/// `docs/agents/api-friction.md` #6), so the agent sees the documented shapes.
 #[derive(serde::Deserialize, schemars::JsonSchema)]
 pub struct InjectInputParams {
     /// Which action to mock: `movement`, `jump`, or `rotate`.

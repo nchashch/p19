@@ -78,7 +78,9 @@ lightyear_inputs_bei = { workspace = true, features = ["client"] }
 # game-agnostic `game/*` methods, the MCP server + built-in tools, the bundled agent guides)
 # lives in bevy_mcp_harness; `dev/tool_api.rs` adds p19's game-specific methods/tools on top.
 bevy_mcp_harness = { path = "../../../../PROTOTYPE_23/bevy_mcp_harness", optional = true }
-# `inject_input`'s MCP-tool argument schema is generated from its derives.
+# `inject_input`'s MCP-tool argument schema derives from schemars (the harness re-exports the
+# crate for non-derive use, but derive macros expand to `schemars::` paths, so the host needs
+# the dep itself).
 schemars = { version = "1.0", optional = true }
 # `bevy_markup`'s `ElementSignal` payloads (`data-with`) are `serde_json::Value`s.
 serde_json = "1"
