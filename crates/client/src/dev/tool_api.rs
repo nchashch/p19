@@ -81,12 +81,162 @@ impl Plugin for DevToolsPlugin {
         };
         app.add_plugins(bevy_mcp_harness::BevyMcpHarnessPlugin { config });
 
-        // p19-specific BRP methods attach any time after the harness plugin.
-        bevy_mcp_harness::register_game_method(app, "game/input", input_method);
-        bevy_mcp_harness::register_game_method(app, "game/trigger", trigger_method);
-        bevy_mcp_harness::register_game_method(app, "game/select", select_method);
-        bevy_mcp_harness::register_game_method(app, "game/levels", levels_method);
-        bevy_mcp_harness::register_game_method(app, "game/select_level", select_level_method);
+        // p19-specific BRP methods attach any time after the harness plugin, with declared
+        // preconditions so `plan_check` can pre-flight an intended call sequence.
+        bevy_mcp_harness::register_game_method_with_precondition(
+            app,
+            "game/input",
+            Some(Arc::new(input_precondition)),
+            input_method,
+        );
+        bevy_mcp_harness::register_game_method_with_precondition(
+            app,
+            "game/trigger",
+            Some(Arc::new(trigger_precondition)),
+            trigger_method,
+        );
+        bevy_mcp_harness::register_game_method_with_precondition(
+            app,
+            "game/select",
+            Some(Arc::new(select_precondition)),
+            select_method,
+        );
+        bevy_mcp_harness::register_game_method_with_precondition(
+            app,
+            "game/levels",
+            Some(Arc::new(levels_precondition)),
+            levels_method,
+        );
+        bevy_mcp_harness::register_game_method_with_precondition(
+            app,
+            "game/select_level",
+            Some(Arc::new(select_level_precondition)),
+            select_level_method,
+        );
+    }
+}
+
+// --- declared preconditions (advisory; the methods' own checks remain authoritative) ---------
+
+fn require_local_player(world: &World) -> Result<(), String> {
+    match world
+        .get_resource::<LocalPlayer>()
+        .and_then(|lp| lp.0)
+    {
+        Some(player) => {
+            if world.get::<Actions<PlayerInputContext>>(player).is_some() {
+                Ok(())
+            } else {
+                Err("local player has no replicated input context yet".to_owned())
+            }
+        }
+        None => Err("no local player connected (connect + play first)".to_owned()),
+    }
+}
+
+fn input_precondition(world: &World, _params: Option<&serde_json::Value>) -> Result<(), String> {
+    require_local_player(world)
+}
+
+/// `game/trigger`'s requirements are per-event: `play`/`observe` need the connection's message
+/// senders, `attack`/`kill` need a selected target, `spawn_*` needs the in-game player;
+/// `connect`/`disconnect` are always available.
+fn trigger_precondition(world: &World, params: Option<&serde_json::Value>) -> Result<(), String> {
+    let event = params
+        .and_then(|params| params.get("event"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    match event {
+        "play" => require(
+            &|entity| {
+                entity
+                    .get::<lightyear::prelude::MessageSender<p19_shared::client_events::InGameRequest>>()
+                    .is_some()
+            },
+            "InGameRequest",
+            world,
+        ),
+        "observe" => require(
+            &|entity| {
+                entity
+                    .get::<lightyear::prelude::MessageSender<p19_shared::client_events::ObserveRequest>>()
+                    .is_some()
+            },
+            "ObserveRequest",
+            world,
+        ),
+        "attack" | "kill" => {
+            if world
+                .get_resource::<Selected>()
+                .and_then(|selected| selected.0)
+                .is_none()
+            {
+                return Err(
+                    "no target selected — game/select first (the crosshair raycast needs a window)"
+                        .to_owned(),
+                );
+            }
+            Ok(())
+        }
+        "spawn_cube" | "spawn_npc" => require_local_player(world),
+        "connect" | "disconnect" => Ok(()),
+        _ => Ok(()),
+    }
+}
+
+/// `game/select`: only `{"nearest": true}` depends on the local player (it excludes it and
+/// measures distances); entity/name selection targets other entities and is always available.
+fn select_precondition(world: &World, params: Option<&serde_json::Value>) -> Result<(), String> {
+    let wants_nearest = params
+        .and_then(|params| params.get("nearest"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    if wants_nearest {
+        return require_local_player(world);
+    }
+    Ok(())
+}
+
+fn levels_precondition(world: &World, _params: Option<&serde_json::Value>) -> Result<(), String> {
+    let has_levels = world
+        .iter_entities()
+        .any(|entity| entity.get::<p19_shared::level::Levels>().is_some());
+    if has_levels {
+        Ok(())
+    } else {
+        Err("no Levels entity replicated yet (not in the lobby?)".to_owned())
+    }
+}
+
+fn select_level_precondition(
+    world: &World,
+    _params: Option<&serde_json::Value>,
+) -> Result<(), String> {
+    require(
+        &|entity| {
+            entity
+                .get::<lightyear::prelude::MessageSender<
+                    p19_shared::client_events::LoadLevelRequest,
+                >>()
+                .is_some()
+        },
+        "LoadLevelRequest",
+        world,
+    )
+}
+
+/// `ok` when any entity carries the component the closure checks for — the connected-app
+/// shape of a message-sender precondition, kept concrete (lightyear's `MessageSender<M>` is
+/// a component whose `M` carries no component bound of its own).
+fn require(
+    has: &dyn Fn(EntityRef<'_>) -> bool,
+    what: &str,
+    world: &World,
+) -> Result<(), String> {
+    if world.iter_entities().any(has) {
+        Ok(())
+    } else {
+        Err(format!("no MessageSender<{what}> (not connected?)"))
     }
 }
 

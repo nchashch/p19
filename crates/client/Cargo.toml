@@ -77,7 +77,7 @@ lightyear_inputs_bei = { workspace = true, features = ["client"] }
 # --- agent tool API (dev-tools feature, ADR 0009): the generic half (BRP server, the
 # game-agnostic `game/*` methods, the MCP server + built-in tools, the bundled agent guides)
 # lives in bevy_mcp_harness; `dev/tool_api.rs` adds p19's game-specific methods/tools on top.
-bevy_mcp_harness = { version = "0.1.0", optional = true }
+bevy_mcp_harness = { version = "0.2.0", optional = true }
 # `inject_input`'s MCP-tool argument schema derives from schemars (the harness re-exports the
 # crate for non-derive use, but derive macros expand to `schemars::` paths, so the host needs
 # the dep itself).
