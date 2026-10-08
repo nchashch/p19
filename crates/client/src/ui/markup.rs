@@ -11,7 +11,7 @@
 //!   generics `serif` / `sans-serif` / `monospace` to the host's families (Bevy's
 //!   `system_font_discovery`; no font files ship with the game). `ActiveLocale` follows
 //!   bevy_fluent's `Locale` resource (the language picker writes `Locale`), loading
-//!   `locales/<id>/main.ftl.yml`.
+//!   `locales/<id>/main.ftl.ron`.
 //! - **Interaction.** Pointer clicks on `data-on-click` elements arrive as `ElementSignal`
 //!   messages (bevy_markup), and so does gamepad South / Enter ([`UiConfirm`] → bevy_markup's
 //!   `HtmlFocus::activate` on the focused element), so every surface handles one input path: a
@@ -106,7 +106,7 @@ fn register_ui_fonts(mut fonts: ResMut<FontFamilies>) {
 
 /// Loaded locale bundles by language id, kept alive so switching back is instant.
 #[derive(Resource, Default)]
-struct LocaleBundles(HashMap<String, Handle<BundleAsset>>);
+struct LocaleBundles(HashMap<String, Handle<LocaleBundle>>);
 
 /// Points `ActiveLocale` at `Locale::requested`'s bundle whenever the requested language
 /// changes (and once at startup).
@@ -123,7 +123,7 @@ fn sync_active_locale(
     let handle = bundles
         .0
         .entry(id.clone())
-        .or_insert_with(|| asset_server.load(format!("locales/{id}/main.ftl.yml")))
+        .or_insert_with(|| asset_server.load(format!("locales/{id}/main.ftl.ron")))
         .clone();
     if active.0.as_ref() != Some(&handle) {
         active.set(handle);

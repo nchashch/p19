@@ -377,7 +377,7 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
 - **`ui/markup.rs`** (`MarkupPlugin`) — the shared layer: `BevyMarkupPlugin`, `DefaultStylesheet`
   = `theme.css`, the system's fonts in `FontFamilies` (`register_ui_fonts`, at `Startup`: CSS
   `serif` / `sans-serif` / `monospace`), `ActiveLocale`
-  following bevy_fluent's `Locale` (bundle `locales/<id>/main.ftl.yml`; the language picker writes
+  following bevy_fluent's `Locale` (bundle `locales/<id>/main.ftl.ron`; the language picker writes
   `Locale`), and the interaction layer:
   - **One input path.** Primary-button clicks on `data-on-click` elements arrive as bevy_markup
     `ElementSignal` messages (right/middle clicks are `data-on-auxclick`, unused here); `UiConfirm`

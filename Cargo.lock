@@ -1739,19 +1739,19 @@ dependencies = [
 
 [[package]]
 name = "bevy_markup"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1114a33ab6782bb1b1c67a088062ddb9e1738a006a8e072a5096ef3b2ff70d4"
+checksum = "0e4169a034a620f77d891433be76b004046362c4768dbb20f5738c121d1a4d29"
 dependencies = [
  "astral-tl",
  "bevy",
- "bevy_fluent",
  "fluent",
  "lightningcss",
  "ron 0.12.2",
  "serde",
  "serde_json",
  "tera",
+ "unic-langid",
 ]
 
 [[package]]

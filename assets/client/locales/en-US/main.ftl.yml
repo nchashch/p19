@@ -1,5 +1,0 @@
-locale: en-US
-resources:
-  - ui.ftl
-  - hud.ftl
-  - console.ftl
