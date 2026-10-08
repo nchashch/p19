@@ -10,8 +10,7 @@
 //! - **Fonts / locale.** The UI uses the system's fonts: [`register_ui_fonts`] maps the CSS
 //!   generics `serif` / `sans-serif` / `monospace` to the host's families (Bevy's
 //!   `system_font_discovery`; no font files ship with the game). `ActiveLocale` follows
-//!   bevy_fluent's `Locale` resource (the language picker writes `Locale`), loading
-//!   `locales/<id>/main.ftl.ron`.
+//!   [`LocaleSelection`] (the language picker writes it), loading `locales/<id>/main.ftl.ron`.
 //! - **Interaction.** Pointer clicks on `data-on-click` elements arrive as `ElementSignal`
 //!   messages (bevy_markup), and so does gamepad South / Enter ([`UiConfirm`] → bevy_markup's
 //!   `HtmlFocus::activate` on the focused element), so every surface handles one input path: a
@@ -35,7 +34,6 @@ use crate::ui::slider::{self, Slider, SliderInput};
 use bevy::asset::embedded_asset;
 use bevy::{math::CompassOctant, platform::collections::HashMap, prelude::*};
 use bevy_enhanced_input::prelude::{Press, *};
-use bevy_fluent::prelude::Locale;
 use bevy_markup::prelude::*;
 use chill_bevy_console::console_closed;
 
@@ -44,6 +42,8 @@ pub struct MarkupPlugin;
 impl Plugin for MarkupPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(BevyMarkupPlugin);
+        app.insert_resource(LocaleSelection::default())
+            .register_type::<LocaleSelection>();
         embedded_asset!(app, "html/theme.css");
         // Shared `{% component %}`s, included by the templates that use them.
         embedded_asset!(app, "html/components.html");
@@ -104,14 +104,31 @@ fn register_ui_fonts(mut fonts: ResMut<FontFamilies>) {
         .set_generic(GenericFamily::Monospace, "System Mono");
 }
 
+/// The selected UI language id (`"en-US"`, …): written by the language picker (`ui.rs`), read by
+/// [`sync_active_locale`] to point bevy_markup's `ActiveLocale` at the matching bundle. The only
+/// locale state in the app; every translated string resolves through bevy_markup's
+/// `data-l10n-id` against the bundle `ActiveLocale` names. Reflected, so BRP can inspect it.
+#[derive(Resource, Reflect, Debug, Clone, PartialEq, Eq)]
+#[reflect(Resource)]
+pub struct LocaleSelection(pub String);
+
+/// The UI language at startup (the language picker's first option, `ui.rs`'s `LANGUAGES`).
+const DEFAULT_LOCALE: &str = "en-US";
+
+impl Default for LocaleSelection {
+    fn default() -> Self {
+        Self(DEFAULT_LOCALE.to_string())
+    }
+}
+
 /// Loaded locale bundles by language id, kept alive so switching back is instant.
 #[derive(Resource, Default)]
 struct LocaleBundles(HashMap<String, Handle<LocaleBundle>>);
 
-/// Points `ActiveLocale` at `Locale::requested`'s bundle whenever the requested language
-/// changes (and once at startup).
+/// Points `ActiveLocale` at [`LocaleSelection`]'s bundle whenever the selected language changes
+/// (and once at startup).
 fn sync_active_locale(
-    locale: Res<Locale>,
+    locale: Res<LocaleSelection>,
     asset_server: Res<AssetServer>,
     mut bundles: ResMut<LocaleBundles>,
     mut active: ResMut<ActiveLocale>,
@@ -119,7 +136,7 @@ fn sync_active_locale(
     if !locale.is_changed() {
         return;
     }
-    let id = locale.requested.to_string();
+    let id = locale.0.clone();
     let handle = bundles
         .0
         .entry(id.clone())

@@ -354,8 +354,8 @@ systems.
   material), `particles.rs` (`bevy_hanabi`).
 - **`dev/console.rs`** — `chill_bevy_console` commands: `fps`, `physics_debug`, `respawn`,
   `despawn_cubes`, `despawn_npcs`, `play_animation`, `load_level`, `controls`, `nameplates`, `hud`,
-  `kcc_debug` (dumps the local player's input → movement chain). Its output is localized through
-  `ui/localization.rs`'s `localized()` (bevy_fluent `Localization`), not bevy_markup.
+  `kcc_debug` (dumps the local player's input → movement chain). Its output is plain English —
+  the one surface deliberately not localized through bevy_markup.
 - **`dev/tool_api.rs`** — the agent tool API (see below).
 - **`assets/collections.rs`** — `CommonAssets`: five world-asset handles plus optional "furniture"
   (`#[asset(key = "…", optional)]` `Option<Handle<T>>` — sounds, skybox, icon atlases; no
@@ -377,8 +377,8 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
 - **`ui/markup.rs`** (`MarkupPlugin`) — the shared layer: `BevyMarkupPlugin`, `DefaultStylesheet`
   = `theme.css`, the system's fonts in `FontFamilies` (`register_ui_fonts`, at `Startup`: CSS
   `serif` / `sans-serif` / `monospace`), `ActiveLocale`
-  following bevy_fluent's `Locale` (bundle `locales/<id>/main.ftl.ron`; the language picker writes
-  `Locale`), and the interaction layer:
+  following `LocaleSelection` (`markup.rs`'s minimal `String` resource; the language picker writes
+  it; bundle `locales/<id>/main.ftl.ron`), and the interaction layer:
   - **One input path.** Primary-button clicks on `data-on-click` elements arrive as bevy_markup
     `ElementSignal` messages (right/middle clicks are `data-on-auxclick`, unused here); `UiConfirm`
     (gamepad South or Enter, `MenuControls`) emits the same message for the focused element.
@@ -467,7 +467,6 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
   elapsed seconds and the gauge (`style="width: …%"`) are template values written every frame.
 - **`ui/input_icons.rs`** — Kenney keyboard/mouse and Steam Deck glyph atlases
   (`InputIconAtlases::image_node(name)`, `None` when a pack is absent).
-- **`ui/localization.rs`** — the `Locale` resource and the console's `Localization`.
 
 bevy_markup rules that bite (the crate's own `AGENTS.md`, in its repository
 `github.com/nchashch/bevy_markup` — not in the crates.io package —

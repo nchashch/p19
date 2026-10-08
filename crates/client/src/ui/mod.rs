@@ -2,7 +2,6 @@ pub mod credits;
 pub mod hud;
 pub mod input_icons;
 pub mod lobby;
-pub mod localization;
 pub mod markup;
 pub mod menu_screen;
 pub mod modal_menu;

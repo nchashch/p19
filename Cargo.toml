@@ -15,10 +15,6 @@ license = "MIT OR Apache-2.0"
 debug = true
 
 [workspace.dependencies]
-bevy_fluent = "0.15"
-fluent = "0.16.0"
-fluent_content = "0.0.5"
-unic-langid = { version = "0.9.6", features = ["macros"] }
 noiz = "0.5.0"
 bevy = { version = "0.19.1", default-features = true, features = [
 	"serialize",
@@ -124,6 +120,7 @@ bevy_mcp_harness = "0.2.1"
 # references them as workspace-local path dependencies, not crates.io ones.
 [patch.crates-io]
 gltf = { git = "https://github.com/nchashch/gltf", branch = "feat/khr_texture_basisu" }
-# fluent-syntax 0.11 (via bevy_fluent) panics on a broken unicode escape and overflows the stack
-# on deeply nested expressions; bevy_markup's README asks apps to apply its fork's fixes.
+# fluent-syntax 0.11 (pulled in by bevy_markup's Fluent integration) panics on a broken unicode
+# escape and overflows the stack on deeply nested expressions; bevy_markup's README asks apps to
+# apply its fork's fixes.
 fluent-syntax = { git = "https://github.com/nchashch/fluent-rs", branch = "fix/fuzzing-bugs-0.11" }

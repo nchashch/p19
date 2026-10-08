@@ -8,18 +8,16 @@ use crate::events::Connect;
 use crate::gameplay::player_character::ClientPrediction;
 use crate::ui::credits;
 use crate::ui::hud::HudPlugin;
-use crate::ui::markup::{self, menu_controls};
+use crate::ui::markup::{self, menu_controls, LocaleSelection};
 use crate::ui::menu_screen::{self, OpenMenuScreens, open_menu_screen};
 use crate::ui::quad_panel::quad_panel;
 use crate::ui::selector::{self, Selector, SelectorOption, SelectorPicked};
 use crate::ui::slider::{self, SliderChange, SliderInput};
 use bevy::{asset::embedded_asset, prelude::*};
-use bevy_fluent::prelude::Locale;
 use bevy_markup::prelude::*;
 use bevy_xr_utils::tracking_utils::XrTrackedLeftGrip;
 use p19_shared::game_state::{GameState, VRState};
 use std::f32::consts::FRAC_PI_2;
-use unic_langid::LanguageIdentifier;
 
 /// The language selector's key; its toggles (`options.html`, the VR wrist panel's
 /// `main_menu.html`) name it in `data-selector`.
@@ -96,7 +94,7 @@ pub fn spawn_main_menu(
     mut commands: Commands,
     common_assets: Res<CommonAssets>,
     asset_server: Res<AssetServer>,
-    locale: Res<Locale>,
+    locale: Res<LocaleSelection>,
 ) {
     commands.spawn((
         WorldAssetRoot(common_assets.menu_background.clone()),
@@ -107,7 +105,7 @@ pub fn spawn_main_menu(
         TemplateContext::new().with("wrist", &false),
         DespawnOnExit(GameState::MainMenu),
     ));
-    let current = locale.requested.to_string();
+    let current = locale.0.clone();
     let languages = LANGUAGES
         .iter()
         .map(|(id, name)| SelectorOption::literal(*id, *name))
@@ -216,15 +214,20 @@ fn update_options_screen(
 }
 
 /// Language picks (the options screen and the VR wrist panel alike).
-fn handle_main_menu_picks(mut picked: MessageReader<SelectorPicked>, mut locale: ResMut<Locale>) {
+fn handle_main_menu_picks(
+    mut picked: MessageReader<SelectorPicked>,
+    mut locale: ResMut<LocaleSelection>,
+) {
     for pick in picked
         .read()
         .filter(|pick| pick.selector == LANGUAGE_SELECTOR)
     {
-        match pick.value.parse::<LanguageIdentifier>() {
-            Ok(language) if locale.requested != language => locale.requested = language,
-            Ok(_) => {}
-            Err(error) => warn!("language option {:?}: {error}", pick.value),
+        if LANGUAGES.iter().any(|(id, _)| *id == pick.value) {
+            if locale.0 != pick.value {
+                locale.0 = pick.value.clone();
+            }
+        } else {
+            warn!("unknown language option {:?}", pick.value);
         }
     }
 }

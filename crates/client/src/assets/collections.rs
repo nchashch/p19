@@ -29,15 +29,10 @@
 //! `.with_dynamic_assets_file(...)` up front — see that module for the full flow, including why
 //! resolving `LevelAssets.level` doesn't yet mean the level itself is ready to play.
 //!
-//! Deliberately *not* included here: `locales/`'s `.ftl` files. `bevy_fluent`'s
-//! `LocalizationBuilder::build` needs the raw `Handle<LoadedFolder>` itself (to look up the
-//! folder's contents via `Res<Assets<LoadedFolder>>>` and group files by locale subfolder), but
-//! `bevy_asset_loader`'s folder-collection support (`collection(...)` on a `Handle<LoadedFolder>`
-//! field) only ever exposes the folder's *contents* as an exploded `Vec`/`HashMap` of individual
-//! file handles, never the folder handle itself — confirmed directly against the derive macro's
-//! codegen (`bevy_asset_loader_derive::assets::AssetField::Folder`). There's no attribute
-//! combination that produces what `bevy_fluent` actually needs, so `localization.rs` keeps its
-//! own manual `asset_server.load_folder("locales")` + polling instead.
+//! Deliberately *not* included here: `locales/`. The language bundles are bevy_markup's own
+//! asset: `sync_active_locale` (`ui::markup`) loads only the selected language's
+//! `locales/<id>/main.ftl.ron` and swaps it at runtime, so a `CommonAssets` folder entry (which
+//! always loads everything) would be the wrong shape for it.
 
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;

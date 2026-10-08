@@ -4,6 +4,23 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0049` — bevy_fluent Ripped Out: Minimal `LocaleSelection`, bevy_markup-Only Localization
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-08 12:49 – 13:00 +0400 |
+| **Commit** | `3870b8f` "Upgrade bevy_markup to 0.4.0; locale bundles to .ftl.ron" + uncommitted bevy_fluent removal |
+| **Agent** | omp session, GLM 5.3 Flash (Z.ai) |
+| **Report** | [`playtest_0049.md`](playtest_0049.md) |
+
+Verifies the bevy_fluent removal: the language picker now writes a minimal reflected
+`LocaleSelection` resource that `sync_active_locale` mirrors into bevy_markup's `ActiveLocale`,
+and the console output is plain English literals. Driven by gamepad through the selector
+popup, en → ru → ja → en all render correctly (in-place re-render, instant switch-back via the
+bundle cache), `world.list_resources` shows `LocaleSelection` and zero bevy_fluent state, and
+the user manually confirmed the English-only console on a real window (the agent's wtype
+attempt is recorded as an unresolved §5c tooling note).
+
 ### `playtest_0048` — Credits Outro States the Original Assets Are CC0
 
 | Field | Value |

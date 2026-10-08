@@ -57,7 +57,7 @@ use crate::lifecycle::lobby::LobbyPlugin;
 use crate::{
     controls::vr_controllers::VrControllersPlugin, gameplay::npc_spawner::NpcSpawnerPlugin,
     lifecycle::loading::LoadingPlugin, presentation::animation::PAnimationPlugin,
-    ui::input_icons::InputIconsPlugin, ui::localization::LocalizationPlugin,
+    ui::input_icons::InputIconsPlugin,
     ui::modal_menu::ModalMenuPlugin, ui::nameplate::NameplatePlugin,
     ui::npc_ui_quad::NpcUiQuadPlugin, ui::quad_panel::QuadPanelPlugin,
 };
@@ -270,7 +270,6 @@ impl Plugin for Prototype19 {
             PAnimationPlugin,
             PConsolePlugin,
             LoadingPlugin,
-            LocalizationPlugin,
             SeedlingPlugins,
             ParticleEffectsPlugin,
             LobbyPlugin,

@@ -1,4 +1,4 @@
 (
     locale: "ja-JP",
-    resources: ["ui.ftl", "hud.ftl", "console.ftl"],
+    resources: ["ui.ftl", "hud.ftl"],
 )

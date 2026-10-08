@@ -28,7 +28,6 @@ dev-tools = [
 ]
 
 [dependencies]
-fluent.workspace = true
 noiz.workspace = true
 rustls.workspace = true
 sha2.workspace = true
@@ -65,9 +64,6 @@ bevy_mod_xr = "0.6"
 
 bevy_vrm1 = "0.9.2"
 openxr = "0.21.1"
-bevy_fluent.workspace = true
-fluent_content.workspace = true
-unic-langid.workspace = true
 bevy_markup.workspace = true
 quick-xml.workspace = true
 ron.workspace = true

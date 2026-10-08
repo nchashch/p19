@@ -1384,28 +1384,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_fluent"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57bd477d59acb58735359ef3730e7ae34b7e775a6bb3c6b9e0498d7ef912cd4c"
-dependencies = [
- "bevy",
- "fluent",
- "fluent-langneg",
- "fluent_content",
- "futures-lite",
- "indexmap",
- "intl-memoizer",
- "ron 0.12.2",
- "serde",
- "serde_yaml",
- "thiserror 2.0.21",
- "tracing",
- "unic-langid",
- "uuid",
-]
-
-[[package]]
 name = "bevy_gilrs"
 version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4277,20 +4255,6 @@ version = "0.11.1"
 source = "git+https://github.com/nchashch/fluent-rs?branch=fix%2Ffuzzing-bugs-0.11#e31a854596e4c791b8f44381f3111b5e273b08d1"
 dependencies = [
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "fluent_content"
-version = "0.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38dc4630a89c85160410fd062826b505218a0ca68121f92d9fbd9a0e71c1a148"
-dependencies = [
- "fluent",
- "fluent-langneg",
- "intl-memoizer",
- "thiserror 1.0.69",
- "tracing",
- "unic-langid",
 ]
 
 [[package]]
@@ -7462,7 +7426,6 @@ dependencies = [
  "bevy_asset_loader",
  "bevy_common_assets",
  "bevy_enhanced_input",
- "bevy_fluent",
  "bevy_hanabi",
  "bevy_markup",
  "bevy_mcp_harness",
@@ -7476,8 +7439,6 @@ dependencies = [
  "bevy_vrm1",
  "bevy_xr_utils",
  "chill_bevy_console",
- "fluent",
- "fluent_content",
  "futures-lite",
  "lightyear",
  "lightyear_avian3d",
@@ -7493,7 +7454,6 @@ dependencies = [
  "serde_json",
  "sha2",
  "toml 0.9.12+spec-1.1.0",
- "unic-langid",
 ]
 
 [[package]]
@@ -8171,12 +8131,6 @@ dependencies = [
  "quote",
  "syn 3.0.6",
 ]
-
-[[package]]
-name = "proc-macro-hack"
-version = "0.5.20+deprecated"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc375e1527247fe1a97d8b7156678dfe7c1af2fc075c9a4db3690ecd2a148068"
 
 [[package]]
 name = "proc-macro2"
@@ -9344,19 +9298,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_yaml"
-version = "0.9.34+deprecated"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
-dependencies = [
- "indexmap",
- "itoa",
- "ryu",
- "serde",
- "unsafe-libyaml",
-]
-
-[[package]]
 name = "sha1"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9366,12 +9307,6 @@ dependencies = [
  "cpufeatures 0.2.17",
  "digest",
 ]
-
-[[package]]
-name = "sha1_smol"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d"
 
 [[package]]
 name = "sha2"
@@ -10614,7 +10549,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a28ba52c9b05311f4f6e62d5d9d46f094bd6e84cb8df7b3ef952748d752a7d05"
 dependencies = [
  "unic-langid-impl",
- "unic-langid-macros",
 ]
 
 [[package]]
@@ -10625,30 +10559,6 @@ checksum = "dce1bf08044d4b7a94028c93786f8566047edc11110595914de93362559bc658"
 dependencies = [
  "serde",
  "tinystr",
-]
-
-[[package]]
-name = "unic-langid-macros"
-version = "0.9.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5957eb82e346d7add14182a3315a7e298f04e1ba4baac36f7f0dbfedba5fc25"
-dependencies = [
- "proc-macro-hack",
- "tinystr",
- "unic-langid-impl",
- "unic-langid-macros-impl",
-]
-
-[[package]]
-name = "unic-langid-macros-impl"
-version = "0.9.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1249a628de3ad34b821ecb1001355bca3940bcb2f88558f1a8bd82e977f75b5"
-dependencies = [
- "proc-macro-hack",
- "quote",
- "syn 2.0.119",
- "unic-langid-impl",
 ]
 
 [[package]]
@@ -10684,12 +10594,6 @@ dependencies = [
  "crypto-common",
  "subtle",
 ]
-
-[[package]]
-name = "unsafe-libyaml"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "unsynn"
@@ -10747,7 +10651,6 @@ dependencies = [
  "getrandom 0.4.3",
  "js-sys",
  "serde_core",
- "sha1_smol",
  "wasm-bindgen",
 ]
 
