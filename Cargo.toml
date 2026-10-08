@@ -115,7 +115,7 @@ lightyear_inputs_bei = "0.30.0"
 # HTML templates (Tera) + CSS + Fluent → native Bevy UI. Every client UI surface is an `HtmlUi`
 # (`crates/client/src/ui/`); see AGENTS.md "UI".
 bevy_markup = "0.3.0"
-bevy_mcp_harness = { path = "../../PROTOTYPE_23/bevy_mcp_harness/" }
+bevy_mcp_harness = "0.2.0"
 
 # `gltf` (transitive, via `bevy`/`bevy_gltf`) is patched to a vendored fork with
 # https://github.com/gltf-rs/gltf/pull/467 applied, adding support for `KHR_texture_basisu`
@@ -127,6 +127,3 @@ gltf = { git = "https://github.com/nchashch/gltf", branch = "feat/khr_texture_ba
 # fluent-syntax 0.11 (via bevy_fluent) panics on a broken unicode escape and overflows the stack
 # on deeply nested expressions; bevy_markup's README asks apps to apply its fork's fixes.
 fluent-syntax = { git = "https://github.com/nchashch/fluent-rs", branch = "fix/fuzzing-bugs-0.11" }
-# The preflight-precondition APIs (plan_check, register_game_method_with_precondition) landed
-# after 0.1.0; remove this entry once bevy_mcp_harness 0.2.0 is on crates.io.
-bevy_mcp_harness = { path = "../../PROTOTYPE_23/bevy_mcp_harness" }
