@@ -122,11 +122,12 @@ The **code** in `crates/` is dual-licensed under either the
 option — the standard convention across the Rust and Bevy ecosystem, matching the license of
 most of this project's own dependencies.
 
-This does **not** cover the assets (`assets/client/`, `assets/server/`), which are in this
-repository for running the game but are not licensed for reuse: the original content (models,
-levels, translations, shaders) has no license decided yet, so treat it as
-unlicensed/all-rights-reserved. The third-party content in it is public domain (CC0); see
-[`assets/CREDITS.md`](./assets/CREDITS.md) for full attribution:
+The **original assets** (`assets/client/`, `assets/server/` — the models, levels, textures,
+shaders, translations; everything not third-party) are dedicated to the public domain under
+[CC0 1.0](./LICENSE-CC0): reuse, modify and redistribute them for any purpose, no attribution
+required (see [ADR 0018](./docs/agents/adr/0018-cc0-for-original-assets.md) for why). The third-party assets in those directories are also public
+domain (CC0); they're credited here with thanks to their authors — see
+[`assets/CREDITS.md`](./assets/CREDITS.md) for the full list:
 
 - input-prompt glyph sheets (`textures/input_prompts/`): Kenney,
   [Input Prompts](https://kenney.nl/assets/input-prompts);

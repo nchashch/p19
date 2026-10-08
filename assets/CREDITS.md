@@ -13,5 +13,6 @@ attribution; they're credited here with thanks to their authors.
 The game's Credits screen shows the same list (`crates/client/src/ui/credits.rs`'s `CREDITS`);
 keep the two in sync.
 
-Everything else under `assets/` is original work for this project (see the repository README's
-"License" section).
+Everything else under `assets/` is original work for this project and is likewise dedicated to
+the public domain under [CC0 1.0](../LICENSE-CC0) — no attribution required (see the repository
+README's "License" section and ADR 0018).

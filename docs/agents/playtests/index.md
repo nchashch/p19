@@ -4,6 +4,17 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0048` — Credits Outro States the Original Assets Are CC0
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-08 10:02 – 10:07 +0400 |
+| **Commit** | `90b3e2e` "Bump bevy_mcp_harness version" + uncommitted CC0 licensing (ADR 0018) |
+| **Agent** | omp session, GLM 5.3 Flash (Z.ai) |
+| **Report** | [`playtest_0048.md`](playtest_0048.md) |
+
+Verifies the Credits screen after licensing the original assets CC0 (ADR 0018): driven by gamepad through the unchanged main-menu focus path, the outro now reads "Everything else was made for this game and is likewise public domain (CC0 1.0)" in en-US; the ru-RU/ja-JP values are static-checked (locale mechanism per playtest 0040).
+
 ### `playtest_0047` — Mouse Sensitivity in the Pause Menu
 
 | Field | Value |
