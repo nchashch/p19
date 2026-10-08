@@ -1,6 +1,5 @@
 use crate::controls::controls::{MouseSensitivity, return_to_main_menu};
 use crate::controls::input_device::InputDeviceState;
-use crate::dev::console::{FpsOverlayVisible, PhysicsGizmosVisible};
 use crate::gameplay::player_character::ClientPrediction;
 use crate::ui::hud::HudVisible;
 use crate::ui::input_icons::{InputIcon, InputIconAtlases};
@@ -8,6 +7,7 @@ use crate::ui::markup::{LocaleSelection, menu_controls, template};
 use crate::ui::menu_screen::{MenuScreenScope, OpenMenuScreens};
 use crate::ui::nameplate::NameplatesVisible;
 use crate::ui::quad_panel::quad_panel;
+use crate::ui::ui::{FpsOverlayVisible, PhysicsGizmosVisible};
 use crate::ui::ui::{language_selector, open_options_screen, options_context};
 use bevy::asset::embedded_asset;
 use bevy::prelude::*;

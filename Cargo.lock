@@ -3028,15 +3028,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "chill_bevy_console"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bc105253cab2ffcfb3f005972843d14960b0cef921da76407f8edf462418d20"
-dependencies = [
- "bevy",
-]
-
-[[package]]
 name = "chrono"
 version = "0.4.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7438,7 +7429,6 @@ dependencies = [
  "bevy_vello",
  "bevy_vrm1",
  "bevy_xr_utils",
- "chill_bevy_console",
  "futures-lite",
  "lightyear",
  "lightyear_avian3d",

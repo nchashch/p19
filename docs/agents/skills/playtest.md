@@ -269,7 +269,7 @@ active).
 
 The mock **bypasses binding modifiers** (dead zones, `Scale`): values go through
 as-is, which is why rotate is radians-direct rather than mouse-pixels. Exception
-(playtest 0021 F4): while the dev console or pause modal is open,
+(playtest 0021 F4): while the pause modal is open,
 `gate_replicated_input_context` deactivates the whole `PlayerInputContext` via
 BEI's `ContextActivity` — which blocks inputs *and* mocks — so action-level
 mocks freeze too; close the surface first. Device-level mocks
@@ -384,10 +384,11 @@ duration-based — budget a release call, or use `{"reset":true}`.
 **Edge-triggered consumers are unreachable (confirmed playtest 0021 F2):** the
 mock writes land in `RemoteLast` (end of frame), and the next frame's
 `keyboard_input_system` clears `just_pressed`/`just_released` before any `Update`
-system runs — so `just_pressed`-reading consumers (e.g. chill_bevy_console's
-backtick toggle in `handle_toggle_key`) can never fire from this mock. Only
-level-triggered reads (`pressed`) work; console-open state is not drivable
-headlessly.
+system runs — so `just_pressed`-reading consumers can never fire from this
+mock. Only level-triggered reads (`pressed`) work; BEI actions are unaffected
+(their press/release edges are tracked on the action state, not
+`ButtonInput::just_pressed`), which is why `game/keyboard` Escape still toggles
+the pause modal.
 
 `game/mouse` is discriminated by `input`:
 
@@ -455,8 +456,8 @@ need the *other* thing — a real windowed client (`target/debug/p19-client`, no
 `--mcp` flag, still needs `--features dev-tools` built in) driven by genuine
 synthetic OS input (a real uinput/Wayland device, indistinguishable from actual
 hardware to the app) — e.g. to close the loop on something `--mcp` can't test
-(the console's backtick toggle, an edge-triggered `just_pressed` consumer — see
-§5b — is the standing example). BRP/MCP still
+(any edge-triggered `just_pressed` consumer — see §5b — is the standing
+example). BRP/MCP still
 work identically in this mode — `game/state`, `game/screenshot`
 (falls back to `Screenshot::primary_window()` when `OffscreenRenderTarget`
 doesn't exist), `game/keyboard`/`game/gamepad`, `world.query`/
@@ -472,8 +473,8 @@ recur anywhere.
 it's X11/XWayland-only, and this game's window is a native Wayland surface
 (`xdotool search --name ...` finds nothing). `wtype` (the Wayland
 virtual-keyboard-protocol tool) installed and ran with no error, but its key
-events **never reached the app** — no visible effect, not even the dev
-console toggle (backtick) — despite the window holding real compositor
+events **never reached the app** — no visible effect on any bound input —
+despite the window holding real compositor
 keyboard focus (confirmed via `swaymsg -t get_tree`'s `focused: true`). Didn't
 root-cause this (Sway config restricting the virtual-keyboard protocol to
 specific clients is one guess), just confirmed `ydotool` works in its place —

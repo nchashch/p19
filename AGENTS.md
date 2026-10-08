@@ -235,9 +235,8 @@ cargo run -p p19-client --release     # connects when the main menu's Connect bu
 - **Fonts are the system's**: `bevy`'s `system_font_discovery` resolves the CSS generics
   (`serif`, `sans-serif`, `monospace`) to installed fonts and lets `parley` fall back to any
   installed font for missing glyphs (`ja-JP`). No font files ship (ADR 0016); a script renders
-  only if the player's system has a font for it. Exceptions: the dev console (`chill_bevy_console`
-  takes only a path) uses Bevy's built-in FiraMono.
-- `chill_bevy_console` is the in-game dev console (backtick).
+  only if the player's system has a font for it. (The FPS overlay's text, too, uses the
+  system's monospace via `FontSource::Monospace`.)
 - Other crates.io deps of note: `avian3d` 0.7, `bevy_skein`, `bevy_enhanced_input` 0.26,
   `bevy_asset_loader`, `bevy_hanabi`, `bevy_vello`, `bevy_seedling`, `audionimbus`,
   `bevy_mod_openxr`/`bevy_mod_xr`/`bevy_xr_utils` 0.6, `rustls` (aws-lc-rs provider), `rcgen`.
@@ -352,16 +351,12 @@ systems.
 - **`presentation/`** — `animation.rs` (reads `Character`/`Idle` and ahoy's grounded state),
   `mesh_primitive.rs` (polling: turns a replicated `MeshPrimitive` into `Mesh3d` + default
   material), `particles.rs` (`bevy_hanabi`).
-- **`dev/console.rs`** — `chill_bevy_console` commands: `fps`, `physics_debug`, `respawn`,
-  `despawn_cubes`, `despawn_npcs`, `play_animation`, `load_level`, `controls`, `nameplates`, `hud`,
-  `kcc_debug` (dumps the local player's input → movement chain). Its output is plain English —
-  the one surface deliberately not localized through bevy_markup. Its toggle commands flip the
-  same reflected resources the options screens' toggles do (`FpsOverlayVisible`/
-  `PhysicsGizmosVisible`/`NameplatesVisible`/`HudVisible`); `apply_fps_overlay`/
-  `apply_physics_gizmos` copy the first two into Bevy's `FpsOverlayConfig` (absent under
-  `--no-render`, where the overlay plugin is skipped — the toggle still works there) and avian's
-  `PhysicsGizmos` group.
-- **`dev/tool_api.rs`** — the agent tool API (see below).
+- **`dev/tool_api.rs`** — the agent tool API (see below). (There is no dev console anymore — it
+  was removed with `chill_bevy_console`; every former console toggle survives as an options
+  screen row. `ui/ui.rs` owns `FpsOverlayVisible`/`PhysicsGizmosVisible` and their appliers
+  (`apply_fps_overlay` copies into Bevy's `FpsOverlayConfig` — absent under `--no-render`,
+  where the overlay plugin is skipped, the toggle still works — and `apply_physics_gizmos`
+  into avian's `PhysicsGizmos` group, registered by the `PhysicsDebugPlugin` `ui.rs` adds).)
 - **`assets/collections.rs`** — `CommonAssets`: five world-asset handles plus optional "furniture"
   (`#[asset(key = "…", optional)]` `Option<Handle<T>>` — sounds, skybox, icon atlases; no
   fonts, see "Fonts are the system's"); every consumer degrades when absent. No sounds ship at
@@ -417,12 +412,11 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
   writes `MouseSensitivity`), and five toggles: Client-side prediction (`options.prediction`,
   flips `ClientPrediction`) plus FPS overlay, physics debug gizmos, nameplates and HUD
   (`options.fps-overlay`/`options.physics-debug`/`options.nameplates`/`options.hud`, flipping
-  `FpsOverlayVisible`/`PhysicsGizmosVisible`/`NameplatesVisible`/`HudVisible` — the same
-  reflected resources the console's matching commands flip; labels follow every frame via
-  `update_options_screen`) — then Back. The same main-menu template (`wrist = true`) is the VR
-  wrist panel: Connect, Language (the selector itself), Quit — no Options/Credits, since
-  screen-space modals don't show in a headset. Registers `HudPlugin`, `SelectorPlugin`,
-  `MenuScreenPlugin` and `CreditsPlugin`.
+  `FpsOverlayVisible`/`PhysicsGizmosVisible`/`NameplatesVisible`/`HudVisible`; labels follow
+  every frame via `update_options_screen`) — then Back. The same main-menu template
+  (`wrist = true`) is the VR wrist panel: Connect, Language (the selector itself), Quit — no
+  Options/Credits, since screen-space modals don't show in a headset. Registers `HudPlugin`,
+  `SelectorPlugin`, `MenuScreenPlugin` and `CreditsPlugin`.
 - **`ui/menu_screen.rs`** — screens opened over a surface (Options/Credits over the main menu,
   Options over the pause modal): `open_menu_screen` takes a `MenuScreenScope` (main-menu roots
   despawn with `GameState::MainMenu`, pause-scoped with `ModalMenuState::Open`), spawns the
@@ -463,16 +457,16 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
 - **`ui/hud.rs`** — crosshair (dot, or the `CrosshairGcdMaterial` ring while the GCD runs;
   `is="crosshair-dot"`/`"crosshair-gcd-ring"`; hotbar cells `is="gcd-overlay"`), data
   frame (Tab/Select via `DataFrameVisible`; its context is written every frame while shown),
-  hotbar (`HOTBAR_ENABLED = false`); `HudVisible` (console `hud`) hides them. Reads ahoy's
-  `CharacterControllerState::grounded`.
+  hotbar (`HOTBAR_ENABLED = false`); `HudVisible` (the options screens' HUD toggle) hides them.
+  Reads ahoy's `CharacterControllerState::grounded`.
 - **`ui/nameplate.rs`** — one screen-space `nameplate.html` root per `HitPoints` entity, kept
   centered over the target's head by bevy_markup's `HtmlWorldAnchor` (hidden off screen, behind
   the camera or over an invisible target; despawned with it); name, health (`style="width: …%"`),
   distance fade (root `style="opacity: …"`, from `HtmlWorldAnchorView::distance`) and the
   `hidden` class (toggle off / faded out → `display: none`) are template values written every
   frame (rounded to 1%);
-  hidden by default (`NameplatesVisible`, console `nameplates`; reflected, so BRP
-  `world.insert_resources` toggles it too).
+  hidden by default (`NameplatesVisible`, the options screens' Nameplates toggle; reflected, so
+  BRP `world.insert_resources` toggles it too).
 - **`ui/npc_ui_quad.rs`** — one `npc_sign.html` root rendered into a shared texture shown on every
   NPC's billboard quad (`NpcUiQuad`/`NpcUiQuadMesh`, used by `gameplay/npc_spawner.rs`).
 - **`ui/quad_panel.rs`** — `quad_panel(.., content: impl Bundle)`: an interactive UI root on a
@@ -664,8 +658,9 @@ Full playbook: `docs/agents/skills/playtest.md`. Design: ADRs 0009–0012.
     agent-cursor overlay. Incompatible with VR (`--mcp` wins).
   - `--no-render`: `--mcp` without render plugins (no GPU needed; ~0.7 core per client). UI layout,
     picking and `game/ui` still work (`shim_camera_computed`); screenshots return an error.
-    `bevy_mod_outline`/`bevy_hanabi` are skipped, and `SyncWorldPlugin` is added explicitly (render
-    sync hooks need `PendingSyncEntity`; without it a despawn panics the replication receiver).
+    `bevy_mod_outline`/`bevy_hanabi`/the FPS-overlay plugin are skipped, and `SyncWorldPlugin`
+    is added explicitly (render sync hooks need `PendingSyncEntity`; without it a despawn panics
+    the replication receiver).
   - `--headless-render`: observer at 2 fps (logic catches up to 60 Hz); joins with
     `game/trigger observe` (no player); `game/screenshot {"camera": id}` renders a chosen camera.
   - `--no-common-assets`: skips the `CommonAssets` manifest entirely (placeholder collection);
@@ -697,13 +692,13 @@ Full playbook: `docs/agents/skills/playtest.md`. Design: ADRs 0009–0012.
   `Update` systems (`on_player_spawned`, `hide_dead`, `bind_replicated_ahoy_actions`,
   `interpolated_remotes`), because the initial replication sync doesn't reliably fire per-component
   `Add` observers. Don't convert either way without testing fresh connect, reconnect and late join.
-- **Console gating**: player-input observers are registered with `add_observers_run_if!(...,
-  console_closed)`; the *continuous* replicated input path is frozen separately by
-  `controls.rs`'s `gate_replicated_input_context`, which deactivates the local player's
-  `PlayerInputContext` via BEI's `ContextActivity` while the dev console or pause modal is
-  open (without it, BEI's binding readers keep streaming WASD/Space to the server while the
-  player types — bug_0007). Lifecycle/spawn observers stay ungated (a gated one-shot trigger is
-  lost forever).
+- **Modal gating**: gameplay player-input observers are registered with
+  `add_observers_run_if!(..., in_state(ModalMenuState::Closed))`; the *continuous* replicated
+  input path is frozen separately by `controls.rs`'s `gate_replicated_input_context`, which
+  deactivates the local player's `PlayerInputContext` via BEI's `ContextActivity` while the
+  pause modal is open (without it, BEI's binding readers keep streaming WASD/Space to the
+  server while the player menus around — bug_0007). Lifecycle/spawn observers stay ungated (a
+  gated one-shot trigger is lost forever).
 - **Look is client-owned input, never accumulated** (ADR 0017). The client sends its absolute
   camera direction as the `Look` action every tick; both sides apply it with
   `p19_shared::inputs::apply_look`. Don't send look deltas or derive look from a transform:

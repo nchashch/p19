@@ -4,6 +4,23 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0051` — chill_bevy_console Removed; Options Screens Absorb Its Toggles
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-08 13:42 – 13:52 +0400 |
+| **Commit** | `4291336` "Rip out bevy_fluent" + uncommitted chill_bevy_console removal |
+| **Agent** | omp session, GLM 5.3 Flash (Z.ai) |
+| **Report** | [`playtest_0051.md`](playtest_0051.md) |
+
+Verifies the dev-console removal: bevy_markup is now the only UI framework. The
+`FpsOverlayVisible`/`PhysicsGizmosVisible` resources, their appliers and the FPS-overlay/
+physics-debug plugin adds moved into `ui/ui.rs`; the `console_closed` gates are gone
+(gameplay observers gate on the pause modal alone, `gate_replicated_input_context` included).
+Verified in game against a fresh server: data frame without its console hint, the options
+screens' FPS toggle still drives the real overlay, pause-menu Escape layering intact, and the
+run's player despawned server-side afterwards.
+
 ### `playtest_0050` — Console-Only Options in Both Menus; Pause Menu's Options Submenu
 
 | Field | Value |

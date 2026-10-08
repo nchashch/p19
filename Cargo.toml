@@ -67,7 +67,6 @@ bevy_mod_outline = { git = "https://github.com/nchashch/bevy_mod_outline", branc
 bevy_vello = "0.14"
 bevy_seedling = "0.8"
 audionimbus = { version = "0.16", features = ["bevy", "auto-install"] }
-chill_bevy_console = "0.3.1"
 quick-xml = "0.42.0"
 # Kinematic character controller (Bevy + Avian + BEI). Wired into `client` ahead of the
 # character-controller rewrite (see `AGENTS.md`'s top-of-file gap note); nothing uses it yet.

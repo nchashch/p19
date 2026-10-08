@@ -17,7 +17,6 @@ use bevy_ahoy::input::{Jump as AhoyJump, Movement as AhoyMovement};
 use bevy_enhanced_input::EnhancedInputSystems;
 use bevy_enhanced_input::prelude::{Press, *};
 use bevy_markup::prelude::HtmlElement;
-use chill_bevy_console::{ConsoleState, console_closed};
 use p19_shared::client_events::{AttackAttempt, KillAttempt};
 use p19_shared::game_state::{GameState, ModalMenuState};
 use p19_shared::inputs::{Look, PlayerInputContext};
@@ -55,14 +54,14 @@ impl Plugin for PlayerControlsPlugin {
         app.add_systems(OnEnter(GameState::MainMenu), unlock_cursor);
         app.add_systems(OnEnter(GameState::InGame), lock_cursor);
 
-        add_observers_run_if!(app, console_closed, main_menu, toggle_modal_menu);
+        app.add_observer(main_menu);
+        app.add_observer(toggle_modal_menu);
 
-        // Gameplay actions also pause while the modal menu (`modal_menu.rs`) is open — same idea
-        // as the `console_closed` gate, just for a second UI surface that shouldn't let the player
-        // keep moving/fighting underneath it.
+        // Gameplay actions also pause while the modal menu (`modal_menu.rs`) is open, so the
+        // player can't keep moving/fighting underneath it.
         add_observers_run_if!(
             app,
-            console_closed.and_then(in_state(ModalMenuState::Closed)),
+            in_state(ModalMenuState::Closed),
             attack,
             kill,
             send_attack,
@@ -470,16 +469,15 @@ fn bind_replicated_ahoy_actions(
 }
 
 /// Freezes the **replicated** gameplay input (`PlayerInputContext` — the ahoy
-/// `Movement`/`Jump`/`RotateCamera` actions streamed to the server) while a UI surface owns
-/// the keyboard: the dev console open or the pause modal open. Without this, BEI's binding
-/// readers keep consuming the real WASD/Space/mouse state and the server's KCC keeps moving
-/// the character while the player is typing in the console.
+/// `Movement`/`Jump`/`RotateCamera` actions streamed to the server) while the pause modal is
+/// open. Without this, BEI's binding readers keep consuming the real WASD/Space/mouse state and
+/// the server's KCC keeps moving the character underneath the menu.
 ///
 /// Uses BEI's own `ContextActivity` mechanism: deactivating the context transitions all of
 /// its action states to zero/release (the streamed state releases any held keys server-side)
 /// while the bindings survive untouched for reactivation on close. Escape/Tab live in the
 /// separate local `PlayerControls` context, so modal/data-frame toggles keep working while
-/// this one is frozen — and the console's own toggle reads raw `KeyboardInput`, unaffected.
+/// this one is frozen.
 ///
 /// Polling `Update`, same reasoning as `bind_replicated_ahoy_actions`: the open state is a
 /// plain resource field with no component transition to observe, and a player spawned while
@@ -487,15 +485,13 @@ fn bind_replicated_ahoy_actions(
 /// is an immutable component, so a change is remove+insert — done only when the desired
 /// state differs from the current one, i.e. exactly twice per open/close cycle.
 fn gate_replicated_input_context(
-    console: Option<Res<ConsoleState>>,
     modal: Option<Res<State<ModalMenuState>>>,
     contexts: Query<(Entity, &ContextActivity<PlayerInputContext>)>,
     mut commands: Commands,
 ) {
     // The same condition the attack/kill observers are gated on in `build` — one gate
     // semantics for both kinds of gameplay input.
-    let input_allowed = console.is_none_or(|c| !c.open)
-        && modal.as_ref().is_none_or(|m| *m.get() == ModalMenuState::Closed);
+    let input_allowed = modal.as_ref().is_none_or(|m| *m.get() == ModalMenuState::Closed);
     for (entity, activity) in &contexts {
         if **activity != input_allowed {
             commands

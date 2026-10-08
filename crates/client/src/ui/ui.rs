@@ -4,7 +4,6 @@
 
 use crate::assets::collections::CommonAssets;
 use crate::controls::controls::MouseSensitivity;
-use crate::dev::console::{FpsOverlayVisible, PhysicsGizmosVisible};
 use crate::events::Connect;
 use crate::gameplay::player_character::ClientPrediction;
 use crate::ui::credits;
@@ -15,6 +14,8 @@ use crate::ui::nameplate::NameplatesVisible;
 use crate::ui::quad_panel::quad_panel;
 use crate::ui::selector::{self, Selector, SelectorOption, SelectorPicked};
 use crate::ui::slider::{self, SliderChange, SliderInput};
+use avian3d::prelude::{PhysicsDebugPlugin, PhysicsGizmos};
+use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
 use bevy::{asset::embedded_asset, prelude::*};
 use bevy_markup::prelude::*;
 use bevy_xr_utils::tracking_utils::XrTrackedLeftGrip;
@@ -51,6 +52,29 @@ impl Plugin for PrototypeUiPlugin {
     fn build(&self, app: &mut App) {
         embedded_asset!(app, "html/main_menu.html");
         embedded_asset!(app, "html/options.html");
+        // The options screen's visibility toggles' engine side. The FPS overlay's plugin needs
+        // render-side `Assets<ShaderBuffer>`, absent in `--no-render` mode — skipped there (its
+        // toggle still works: it flips `FpsOverlayVisible`, whose applier has no config to
+        // write). The system's monospace font (no font files ship with the game). avian's
+        // `PhysicsDebugPlugin` registers the `PhysicsGizmos` gizmo group that
+        // `apply_physics_gizmos` writes (`config_mut` panics on an unregistered group).
+        if !crate::config::is_no_render_presync() {
+            app.add_plugins(FpsOverlayPlugin {
+                config: FpsOverlayConfig {
+                    text_config: TextFont {
+                        font: FontSource::Monospace,
+                        ..FpsOverlayConfig::default().text_config
+                    },
+                    ..default()
+                },
+            });
+        }
+        app.add_plugins(PhysicsDebugPlugin::default())
+            .insert_resource(FpsOverlayVisible::default())
+            .insert_resource(PhysicsGizmosVisible::default())
+            .register_type::<FpsOverlayVisible>()
+            .register_type::<PhysicsGizmosVisible>()
+            .add_systems(Update, (apply_fps_overlay, apply_physics_gizmos));
         app.add_plugins((
             HudPlugin,
             selector::SelectorPlugin,
@@ -203,6 +227,47 @@ fn open_options(
     );
 }
 
+/// The options screen's FPS-overlay toggle state. Reflected, so BRP can toggle it too; the
+/// options screens flip it (the console that shared it is gone), and `apply_fps_overlay` copies
+/// it into Bevy's `FpsOverlayConfig` (absent under `--no-render`, where the overlay plugin is
+/// skipped). Not persisted.
+#[derive(Resource, Reflect, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[reflect(Resource)]
+pub struct FpsOverlayVisible(pub bool);
+
+/// The options screen's physics-debug-gizmos toggle state — same pattern as
+/// [`FpsOverlayVisible`], applied into avian's `PhysicsGizmos` group. Not persisted.
+#[derive(Resource, Reflect, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[reflect(Resource)]
+pub struct PhysicsGizmosVisible(pub bool);
+
+/// Copies [`FpsOverlayVisible`] into Bevy's `FpsOverlayConfig` — the overlay and its frame-time
+/// graph together. Written only on change.
+fn apply_fps_overlay(
+    visible: Res<FpsOverlayVisible>,
+    config: Option<ResMut<FpsOverlayConfig>>,
+) {
+    if !visible.is_changed() {
+        return;
+    }
+    let Some(mut config) = config else {
+        return;
+    };
+    config.enabled = visible.0;
+    config.frame_time_graph_config.enabled = visible.0;
+}
+
+/// Copies [`PhysicsGizmosVisible`] into avian's `PhysicsGizmos` group. Written only on change.
+fn apply_physics_gizmos(
+    visible: Res<PhysicsGizmosVisible>,
+    mut store: ResMut<GizmoConfigStore>,
+) {
+    if !visible.is_changed() {
+        return;
+    }
+    store.config_mut::<PhysicsGizmos>().0.enabled = visible.0;
+}
+
 /// Adds what the `ui.mouse_sensitivity` slider component renders (the options screen's slider,
 /// main menu and pause menu alike): `mouse_sensitivity`, the value as shown, and
 /// `mouse_sensitivity_percent`, its position on the slider — rounded to a tenth of a percent:
@@ -277,8 +342,8 @@ fn update_options_screen(
     }
 }
 
-/// `options.fps-overlay`: flips [`FpsOverlayVisible`] (the console's `fps` command flips the
-/// same resource; `apply_fps_overlay` writes Bevy's config).
+/// `options.fps-overlay`: flips [`FpsOverlayVisible`] (`apply_fps_overlay` writes Bevy's
+/// config).
 fn toggle_fps_overlay(_: In<ElementSignal>, mut visible: ResMut<FpsOverlayVisible>) {
     visible.0 = !visible.0;
 }

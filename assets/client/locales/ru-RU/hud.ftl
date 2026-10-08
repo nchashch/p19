@@ -1,4 +1,3 @@
-hud-console-hint = Нажмите ` для консоли
 hud-hp = HP: { $hp }/{ $max_hp }
 hud-damage = Урон: { $damage }
 hud-attack-range = Дальность атаки: { $range }м

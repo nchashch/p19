@@ -23,7 +23,6 @@ use controls::camera::{
     maintain_default_ui_camera, retarget_cameras_to_offscreen, shim_camera_computed,
 };
 use controls::input_device::InputDevicePlugin;
-use dev::console::PConsolePlugin;
 use gameplay::cube_spawner::CubeSpawnerPlugin;
 use gameplay::player_character::PlayerCharacterPlugin;
 use presentation::mesh_primitive::ClientMeshPrimitivePlugin;
@@ -44,8 +43,8 @@ mod presentation;
 mod ui;
 
 /// Registers each `$observer` with `$app`, gated behind `$condition` (e.g.
-/// `chill_bevy_console::console_closed`, to suppress gameplay observers while the
-/// dev console is open).
+/// `in_state(ModalMenuState::Closed)`, to suppress gameplay observers while the pause modal is
+/// open).
 macro_rules! add_observers_run_if {
     ($app:expr, $condition:expr, $($observer:expr),+ $(,)?) => {
         $( $app.add_observer($observer.run_if($condition)); )+
@@ -268,7 +267,6 @@ impl Plugin for Prototype19 {
         app.add_plugins((
             ui::tui_panel::TuiPanelPlugin,
             PAnimationPlugin,
-            PConsolePlugin,
             LoadingPlugin,
             SeedlingPlugins,
             ParticleEffectsPlugin,

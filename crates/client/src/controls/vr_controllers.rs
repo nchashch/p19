@@ -60,16 +60,11 @@ impl Plugin for VrControllersPlugin {
             Update,
             (
                 on_player_spawned,
-                vr_locomotion
-                    .run_if(openxr_session_running)
-                    .run_if(chill_bevy_console::console_closed),
+                vr_locomotion.run_if(openxr_session_running),
                 update_vr_pointers
                     .run_if(openxr_session_running)
-                    .run_if(chill_bevy_console::console_closed)
                     .run_if(in_state(ModalMenuState::Closed)),
-                recenter_playspace
-                    .run_if(openxr_session_running)
-                    .run_if(chill_bevy_console::console_closed),
+                recenter_playspace.run_if(openxr_session_running),
                 draw_vr_rig_gizmos.run_if(openxr_session_running),
             ),
         );

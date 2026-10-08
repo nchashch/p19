@@ -770,7 +770,7 @@ pub struct InjectInputParams {
 fn inject_input_tool() -> bevy_mcp_harness::HarnessTool {
     bevy_mcp_harness::HarnessTool::new(
         "inject_input",
-        "Inject player input through the real input pipeline (the same replicated path a gamepad uses) for `ticks` fixed ticks (~16.7ms each). Actions: `movement` (x = strafe right −1..1, y = forward −1..1), `jump` (down = hold), `rotate` (yaw_delta / pitch_delta in RADIANS this call, spread across the ticks; positive yaw_delta turns right, positive pitch_delta looks up). Combine calls (e.g. movement + rotate across consecutive calls) to drive the character; call game_state after to observe the effect. Blocked while the dev console or pause modal is open (the whole input context is deactivated there) — close it first.",
+        "Inject player input through the real input pipeline (the same replicated path a gamepad uses) for `ticks` fixed ticks (~16.7ms each). Actions: `movement` (x = strafe right −1..1, y = forward −1..1), `jump` (down = hold), `rotate` (yaw_delta / pitch_delta in RADIANS this call, spread across the ticks; positive yaw_delta turns right, positive pitch_delta looks up). Combine calls (e.g. movement + rotate across consecutive calls) to drive the character; call game_state after to observe the effect. Blocked while the pause modal is open (the whole input context is deactivated there) — close it first.",
         |client: bevy_mcp_harness::BrpClient, args: InjectInputParams| async move {
             let mut params = match args.action.as_str() {
                 "movement" => json!({"action": "movement", "x": args.x.unwrap_or(0.0), "y": args.y.unwrap_or(0.0)}),

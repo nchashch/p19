@@ -1,4 +1,3 @@
-hud-console-hint = Press ` for console
 hud-hp = HP: { $hp }/{ $max_hp }
 hud-damage = Damage: { $damage }
 hud-attack-range = Attack range: { $range }m

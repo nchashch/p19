@@ -28,14 +28,12 @@
 //! `theme.css` ("Roots"); overlays (tooltips, selector popups) are placed beside their element by
 //! bevy_markup's `HtmlAnchor`.
 
-use crate::add_observers_run_if;
 use crate::controls::actions::{UiConfirm, UiNavigate};
 use crate::ui::slider::{self, Slider, SliderInput};
 use bevy::asset::embedded_asset;
 use bevy::{math::CompassOctant, platform::collections::HashMap, prelude::*};
 use bevy_enhanced_input::prelude::{Press, *};
 use bevy_markup::prelude::*;
-use chill_bevy_console::console_closed;
 
 pub struct MarkupPlugin;
 
@@ -54,14 +52,12 @@ impl Plugin for MarkupPlugin {
             .add_systems(Startup, (load_default_stylesheet, register_ui_fonts))
             .add_systems(
                 Update,
-                (
-                    sync_active_locale,
-                    repeat_ui_navigate_while_held.run_if(console_closed),
-                ),
+                (sync_active_locale, repeat_ui_navigate_while_held),
             );
-        add_observers_run_if!(app, console_closed, on_ui_navigate, on_ui_confirm);
-        // Ungated: a release while the console is open must still clear the held direction, or
-        // the repeat system would keep navigating after the console closes.
+        app.add_observer(on_ui_navigate);
+        app.add_observer(on_ui_confirm);
+        // A release must always clear the held direction, or the repeat system would keep
+        // navigating after the key/stick is released.
         app.add_observer(on_ui_navigate_complete);
     }
 }

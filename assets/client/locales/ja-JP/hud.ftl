@@ -1,4 +1,3 @@
-hud-console-hint = コンソールを開くには ` を押してください
 hud-hp = HP: { $hp }/{ $max_hp }
 hud-damage = ダメージ: { $damage }
 hud-attack-range = 攻撃範囲: { $range }m
