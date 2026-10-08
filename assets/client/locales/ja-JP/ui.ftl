@@ -37,3 +37,24 @@ options-prediction = クライアント側予測：{ $enabled ->
        *[other] オフ
     }
 options-prediction-tooltip = オン：操作がすぐ反映され、サーバーが補正します。オフ：サーバーの結果だけが通信の遅延つきで表示されます。次のプレイから適用されます。
+modal-menu-options = オプション
+options-fps-overlay = FPS オーバーレイ：{ $enabled ->
+        [true] オン
+       *[other] オフ
+    }
+options-fps-overlay-tooltip = 1秒あたりのフレーム数を表示します。
+options-physics-debug = 物理デバッグ表示：{ $enabled ->
+        [true] オン
+       *[other] オフ
+    }
+options-physics-debug-tooltip = アバンの物理デバッグ図形（コライダーと接触）を表示します。
+options-nameplates = ネームプレート：{ $enabled ->
+        [true] オン
+       *[other] オフ
+    }
+options-nameplates-tooltip = キャラクターの上に浮かぶ名前と体力のプレートを表示します。
+options-hud = HUD：{ $enabled ->
+        [true] オン
+       *[other] オフ
+    }
+options-hud-tooltip = 照準と Tab のデータフレームを表示します。

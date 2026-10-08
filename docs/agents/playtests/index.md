@@ -4,6 +4,24 @@ One entry per run, as `docs/agents/playtests/playtest_NNNN.md` (see `docs/agents
 the format and layout these follow). Newest first. Update this file whenever a new playtest is
 filed — that's part of filing it, not a separate later chore.
 
+### `playtest_0050` — Console-Only Options in Both Menus; Pause Menu's Options Submenu
+
+| Field | Value |
+|---|---|
+| **Date** | 2026-10-08 13:10 – 13:22 +0400 |
+| **Commit** | `3870b8f` "Upgrade bevy_markup to 0.4.0; locale bundles to .ftl.ron" + uncommitted bevy_fluent removal and options exposure |
+| **Agent** | omp session, GLM 5.3 Flash (Z.ai) |
+| **Report** | [`playtest_0050.md`](playtest_0050.md) |
+
+Verifies the four console-only toggles (FPS overlay, physics debug gizmos, nameplates, HUD)
+exposed as options-screen rows in both menus: the main menu's Options screen and — new — the
+pause menu's Options submenu (the pause layout is now Resume / Options / Main Menu, the mouse
+sensitivity slider moved into the submenu). Toggles, console commands and BRP writes all flip
+the same reflected resources whose appliers drive the engine configs; the submenu's Back and
+Escape layering (submenu first, pause second) and the slider in its new home are verified
+headlessly. The test player was despawned server-side afterwards, leaving the idle server
+clean.
+
 ### `playtest_0049` — bevy_fluent Ripped Out: Minimal `LocaleSelection`, bevy_markup-Only Localization
 
 | Field | Value |

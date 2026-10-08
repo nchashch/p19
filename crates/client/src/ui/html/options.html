@@ -1,8 +1,10 @@
-{# The options screen (`ui/ui.rs`): a modal over the main menu (`ui/menu_screen.rs`) holding the
-   settings: Language (a selector popup opening beside its toggle), Mouse sensitivity (a
-   `ui/slider.rs` slider; `mouse_sensitivity`: the multiplier as shown, `mouse_sensitivity_percent`:
-   its position on the slider) and the client-side prediction toggle (`prediction`:
-   `ClientPrediction`). #}
+{# The options screen, opened over the main menu (`ui/ui.rs`) and as the pause menu's submenu
+   (`ui/modal_menu.rs`) — the same template, so both expose the same settings: Language (a
+   selector popup opening beside its toggle), Mouse sensitivity (a `ui/slider.rs` slider;
+   `mouse_sensitivity`: the multiplier as shown, `mouse_sensitivity_percent`: its position on
+   the slider), the client-side prediction toggle (`prediction`: `ClientPrediction`) and the
+   four visibility toggles (`fps_overlay`, `physics_debug`, `nameplates`, `hud`; the console's
+   matching commands flip the same resources). #}
 {% include "components.html" %}
 <html class="menu-screen-root">
 <div class="panel menu-screen-panel">
@@ -14,6 +16,22 @@
   <div class="button" id="prediction" data-on-click="options.prediction"
        data-tooltip="options-prediction-tooltip" data-tooltip-placement="above">
     <p data-l10n-id="options-prediction" data-l10n-args='{"enabled": "{{ prediction }}"}'>Client-side prediction: {% if prediction %}On{% else %}Off{% endif %}</p>
+  </div>
+  <div class="button" id="fps-overlay" data-on-click="options.fps-overlay"
+       data-tooltip="options-fps-overlay-tooltip" data-tooltip-placement="above">
+    <p data-l10n-id="options-fps-overlay" data-l10n-args='{"enabled": "{{ fps_overlay }}"}'>FPS overlay: {% if fps_overlay %}On{% else %}Off{% endif %}</p>
+  </div>
+  <div class="button" id="physics-debug" data-on-click="options.physics-debug"
+       data-tooltip="options-physics-debug-tooltip" data-tooltip-placement="above">
+    <p data-l10n-id="options-physics-debug" data-l10n-args='{"enabled": "{{ physics_debug }}"}'>Physics debug gizmos: {% if physics_debug %}On{% else %}Off{% endif %}</p>
+  </div>
+  <div class="button" id="nameplates" data-on-click="options.nameplates"
+       data-tooltip="options-nameplates-tooltip" data-tooltip-placement="above">
+    <p data-l10n-id="options-nameplates" data-l10n-args='{"enabled": "{{ nameplates }}"}'>Nameplates: {% if nameplates %}On{% else %}Off{% endif %}</p>
+  </div>
+  <div class="button" id="hud" data-on-click="options.hud"
+       data-tooltip="options-hud-tooltip" data-tooltip-placement="above">
+    <p data-l10n-id="options-hud" data-l10n-args='{"enabled": "{{ hud }}"}'>HUD: {% if hud %}On{% else %}Off{% endif %}</p>
   </div>
   {{ <ui.button id="options-back" class="primary" autofocus={true} signal="menu-screen.back"
                 key="menu-screen-back" label="Back" /> }}

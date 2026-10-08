@@ -37,3 +37,24 @@ options-prediction = Предсказание на клиенте: { $enabled ->
        *[other] Выкл.
     }
 options-prediction-tooltip = Вкл.: движение отзывается сразу, сервер его поправляет. Выкл.: виден только результат сервера, с задержкой соединения. Применяется со следующего «Играть».
+modal-menu-options = Настройки
+options-fps-overlay = Оверлей FPS: { $enabled ->
+        [true] Вкл.
+       *[other] Выкл.
+    }
+options-fps-overlay-tooltip = Показывать счётчик кадров в секунду.
+options-physics-debug = Отладка физики: { $enabled ->
+        [true] Вкл.
+       *[other] Выкл.
+    }
+options-physics-debug-tooltip = Рисовать отладочные фигуры физики: коллайдеры и контакты.
+options-nameplates = Таблички с именами: { $enabled ->
+        [true] Вкл.
+       *[other] Выкл.
+    }
+options-nameplates-tooltip = Плавающие таблички с именем и здоровьем над персонажами.
+options-hud = Интерфейс: { $enabled ->
+        [true] Вкл.
+       *[other] Выкл.
+    }
+options-hud-tooltip = Перекрестье и кадр данных по Tab.

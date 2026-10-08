@@ -4,12 +4,14 @@
 
 use crate::assets::collections::CommonAssets;
 use crate::controls::controls::MouseSensitivity;
+use crate::dev::console::{FpsOverlayVisible, PhysicsGizmosVisible};
 use crate::events::Connect;
 use crate::gameplay::player_character::ClientPrediction;
 use crate::ui::credits;
-use crate::ui::hud::HudPlugin;
+use crate::ui::hud::{HudPlugin, HudVisible};
 use crate::ui::markup::{self, menu_controls, LocaleSelection};
-use crate::ui::menu_screen::{self, OpenMenuScreens, open_menu_screen};
+use crate::ui::menu_screen::{self, MenuScreenScope, OpenMenuScreens, open_menu_screen};
+use crate::ui::nameplate::NameplatesVisible;
 use crate::ui::quad_panel::quad_panel;
 use crate::ui::selector::{self, Selector, SelectorOption, SelectorPicked};
 use crate::ui::slider::{self, SliderChange, SliderInput};
@@ -65,6 +67,10 @@ impl Plugin for PrototypeUiPlugin {
         )
         .on_html_click("main-menu.options", open_options)
         .on_html_click("options.prediction", toggle_prediction)
+        .on_html_click("options.fps-overlay", toggle_fps_overlay)
+        .on_html_click("options.physics-debug", toggle_physics_debug)
+        .on_html_click("options.nameplates", toggle_nameplates)
+        .on_html_click("options.hud", toggle_hud)
         .on_html_click(
             "main-menu.quit",
             |_: In<ElementSignal>, mut commands: Commands| {
@@ -106,54 +112,101 @@ pub fn spawn_main_menu(
         DespawnOnExit(GameState::MainMenu),
     ));
     let current = locale.0.clone();
-    let languages = LANGUAGES
-        .iter()
-        .map(|(id, name)| SelectorOption::literal(*id, *name))
-        .collect();
     commands.spawn((
-        Selector::new(LANGUAGE_SELECTOR, languages)
-            .with_selected(LANGUAGES.iter().position(|(id, _)| *id == current)),
+        language_selector(&current),
         DespawnOnExit(GameState::MainMenu),
     ));
 }
 
-/// The options screen's root (`options.html`).
-#[derive(Component)]
-struct OptionsScreen;
+/// The language picker's `Selector` — options in their own scripts (deliberately not localized;
+/// see `LANGUAGES`), the current language selected. Spawned by the main menu (with the menu) and
+/// by the pause menu (with the modal), so the options screen's Language toggle works on both;
+/// picks from either flow through `handle_main_menu_picks`.
+pub fn language_selector(current: &str) -> Selector {
+    let languages = LANGUAGES
+        .iter()
+        .map(|(id, name)| SelectorOption::literal(*id, *name))
+        .collect();
+    Selector::new(LANGUAGE_SELECTOR, languages)
+        .with_selected(LANGUAGES.iter().position(|(id, _)| *id == current))
+}
 
-/// `main-menu.options`: the options screen — the language picker, the mouse sensitivity slider
-/// and the client-side prediction toggle.
+/// The options screen's template context (main menu and pause menu alike; written every frame by
+/// `update_options_screen` — an identical render does nothing). `prediction`, `fps_overlay`,
+/// `physics_debug`, `nameplates` and `hud` are the toggle labels' enabled args; the slider values
+/// come from [`mouse_sensitivity_context`].
+pub fn options_context(
+    prediction: ClientPrediction,
+    mouse_sensitivity: MouseSensitivity,
+    fps_overlay: FpsOverlayVisible,
+    physics_debug: PhysicsGizmosVisible,
+    nameplates: NameplatesVisible,
+    hud: HudVisible,
+) -> TemplateContext {
+    mouse_sensitivity_context(TemplateContext::new(), mouse_sensitivity)
+        .with("prediction", &prediction.0)
+        .with("fps_overlay", &fps_overlay.0)
+        .with("physics_debug", &physics_debug.0)
+        .with("nameplates", &nameplates.0)
+        .with("hud", &hud.0)
+}
+
+/// Opens the options screen (`options.html`) — the main menu's and the pause menu's submenu
+/// alike — and marks its root so `update_options_screen` keeps it current. `return_focus` is the
+/// `id` of the opening button.
+pub fn open_options_screen(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    open: &OpenMenuScreens,
+    context: TemplateContext,
+    return_focus: &'static str,
+    scope: MenuScreenScope,
+) {
+    if let Some(root) = open_menu_screen(commands, asset_server, open, "options.html", context, return_focus, scope) {
+        commands.entity(root).insert(OptionsScreen);
+    }
+}
+
+/// The main menu's options screen root (`.menu-screen-root` over it); the pause menu's submenu
+/// root is marked the same, so `update_options_screen` keeps both current.
+#[derive(Component)]
+pub struct OptionsScreen;
+
+/// `main-menu.options`: the options screen — the language picker, the mouse sensitivity slider,
+/// the client-side prediction toggle and the four visibility toggles.
 fn open_options(
     _: In<ElementSignal>,
     open: OpenMenuScreens,
     prediction: Res<ClientPrediction>,
     mouse_sensitivity: Res<MouseSensitivity>,
+    fps_overlay: Res<FpsOverlayVisible>,
+    physics_debug: Res<PhysicsGizmosVisible>,
+    nameplates: Res<NameplatesVisible>,
+    hud: Res<HudVisible>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
-    if let Some(root) = open_menu_screen(
+    open_options_screen(
         &mut commands,
         &asset_server,
         &open,
-        "options.html",
-        options_context(*prediction, *mouse_sensitivity),
+        options_context(
+            *prediction,
+            *mouse_sensitivity,
+            *fps_overlay,
+            *physics_debug,
+            *nameplates,
+            *hud,
+        ),
         "options",
-    ) {
-        commands.entity(root).insert(OptionsScreen);
-    }
+        MenuScreenScope::MainMenu,
+    );
 }
 
-fn options_context(
-    prediction: ClientPrediction,
-    mouse_sensitivity: MouseSensitivity,
-) -> TemplateContext {
-    mouse_sensitivity_context(TemplateContext::new(), mouse_sensitivity)
-        .with("prediction", &prediction.0)
-}
-
-/// Adds what the `ui.mouse_sensitivity` slider component renders (options screen, pause menu):
-/// `mouse_sensitivity`, the value as shown, and `mouse_sensitivity_percent`, its position on the
-/// slider — rounded to a tenth of a percent: finer is invisible, and an identical render is free.
+/// Adds what the `ui.mouse_sensitivity` slider component renders (the options screen's slider,
+/// main menu and pause menu alike): `mouse_sensitivity`, the value as shown, and
+/// `mouse_sensitivity_percent`, its position on the slider — rounded to a tenth of a percent:
+/// finer is invisible, and an identical render is free.
 pub fn mouse_sensitivity_context(
     context: TemplateContext,
     mouse_sensitivity: MouseSensitivity,
@@ -201,19 +254,52 @@ fn toggle_prediction(_: In<ElementSignal>, mut prediction: ResMut<ClientPredicti
     info!(enabled = prediction.0, "client-side prediction");
 }
 
-/// Keeps the options screen showing the current settings (written every frame; an identical
-/// render does nothing).
+/// Keeps every open options screen showing the current settings (written every frame; an
+/// identical render does nothing).
 fn update_options_screen(
     prediction: Res<ClientPrediction>,
     mouse_sensitivity: Res<MouseSensitivity>,
+    fps_overlay: Res<FpsOverlayVisible>,
+    physics_debug: Res<PhysicsGizmosVisible>,
+    nameplates: Res<NameplatesVisible>,
+    hud: Res<HudVisible>,
     mut screens: Query<&mut TemplateContext, With<OptionsScreen>>,
 ) {
     for mut context in &mut screens {
-        *context = options_context(*prediction, *mouse_sensitivity);
+        *context = options_context(
+            *prediction,
+            *mouse_sensitivity,
+            *fps_overlay,
+            *physics_debug,
+            *nameplates,
+            *hud,
+        );
     }
 }
 
-/// Language picks (the options screen and the VR wrist panel alike).
+/// `options.fps-overlay`: flips [`FpsOverlayVisible`] (the console's `fps` command flips the
+/// same resource; `apply_fps_overlay` writes Bevy's config).
+fn toggle_fps_overlay(_: In<ElementSignal>, mut visible: ResMut<FpsOverlayVisible>) {
+    visible.0 = !visible.0;
+}
+
+/// `options.physics-debug`: flips [`PhysicsGizmosVisible`].
+fn toggle_physics_debug(_: In<ElementSignal>, mut visible: ResMut<PhysicsGizmosVisible>) {
+    visible.0 = !visible.0;
+}
+
+/// `options.nameplates`: flips `NameplatesVisible` (nameplate.rs consumes it directly).
+fn toggle_nameplates(_: In<ElementSignal>, mut visible: ResMut<NameplatesVisible>) {
+    visible.0 = !visible.0;
+}
+
+/// `options.hud`: flips `HudVisible` (hud.rs consumes it directly).
+fn toggle_hud(_: In<ElementSignal>, mut visible: ResMut<HudVisible>) {
+    visible.0 = !visible.0;
+}
+
+/// Language picks — the options screen (main menu or pause submenu) and the VR wrist panel
+/// alike.
 fn handle_main_menu_picks(
     mut picked: MessageReader<SelectorPicked>,
     mut locale: ResMut<LocaleSelection>,

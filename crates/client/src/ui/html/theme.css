@@ -78,8 +78,8 @@ h2 {
 
 /* === Roots ===
  * Root-level UIs stack by `z-index` (Bevy's `ZIndex` among roots; default 0): pause menu
- * 100/101, selector popup 900, tooltips 1000. The agent-cursor overlay (`GlobalZIndex::MAX`)
- * stays above all of them. */
+ * 100, controls tips 101, screens over a surface (menu_screen.rs) 110, selector popup 900,
+ * tooltips 1000. The agent-cursor overlay (`GlobalZIndex::MAX`) stays above all of them. */
 
 /* Main menu and lobby: a full-screen layout wrapper; only the panel catches the pointer. */
 .screen-root {
@@ -126,8 +126,10 @@ h2 {
   pointer-events: none;
 }
 
-/* Main-menu screens (Options, Credits; `ui/menu_screen.rs`): a dimmed full-screen backdrop that
-   catches the pointer (the main menu underneath stays unreachable while one is open). */
+/* Screens opened over a surface (Options/Credits over the main menu; Options over the pause
+   modal; `ui/menu_screen.rs`): a dimmed full-screen backdrop that catches the pointer (the
+   surface underneath stays unreachable while one is open). Above the pause menu's own root
+   (100) and the controls tips (101). */
 .menu-screen-root {
   position: absolute;
   width: 100%;
@@ -135,7 +137,7 @@ h2 {
   align-items: center;
   justify-content: center;
   background-color: rgba(0, 0, 0, 0.6);
-  z-index: 100;
+  z-index: 110;
 }
 
 /* Placed beside its toggle by `HtmlAnchor` (`ui/selector.rs`). */

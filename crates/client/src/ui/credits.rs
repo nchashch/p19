@@ -4,7 +4,7 @@
 //!
 //! Signals: `main-menu.credits`.
 
-use crate::ui::menu_screen::{OpenMenuScreens, open_menu_screen};
+use crate::ui::menu_screen::{MenuScreenScope, OpenMenuScreens, open_menu_screen};
 use bevy::asset::embedded_asset;
 use bevy::prelude::*;
 use bevy_markup::prelude::*;
@@ -68,5 +68,6 @@ fn open_credits(
         "credits.html",
         TemplateContext::new().with("credits", &credits),
         "credits",
+        MenuScreenScope::MainMenu,
     );
 }

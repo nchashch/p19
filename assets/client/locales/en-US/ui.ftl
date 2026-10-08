@@ -37,3 +37,24 @@ options-prediction = Client-side prediction: { $enabled ->
        *[other] Off
     }
 options-prediction-tooltip = On: your movement responds immediately and is corrected by the server. Off: you see only the server's result, delayed by your connection. Applies from the next Play.
+modal-menu-options = Options
+options-fps-overlay = FPS overlay: { $enabled ->
+        [true] On
+       *[other] Off
+    }
+options-fps-overlay-tooltip = Show the frames-per-second overlay.
+options-physics-debug = Physics debug gizmos: { $enabled ->
+        [true] On
+       *[other] Off
+    }
+options-physics-debug-tooltip = Draw avian's debug gizmos: colliders and contacts.
+options-nameplates = Nameplates: { $enabled ->
+        [true] On
+       *[other] Off
+    }
+options-nameplates-tooltip = Floating name and health plates over characters.
+options-hud = HUD: { $enabled ->
+        [true] On
+       *[other] Off
+    }
+options-hud-tooltip = The crosshair and the Tab data frame.

@@ -4,7 +4,10 @@ use crate::controls::fps_controller::FpsCamera;
 use crate::controls::targeting::{Hovered, SELECT_RANGE, Selected, TargetingPlugin};
 use crate::events::{Disconnect, SpawnCube, SpawnNpc};
 use crate::ui::hud::DataFrameVisible;
+use crate::ui::menu_screen::{MenuScreen, close_topmost_screen};
+use crate::ui::selector::SelectorPopup;
 use bevy::ecs::relationship::Relationship;
+use bevy::input_focus::InputFocus;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions};
 // Ahoy's KCC consumes its OWN `InputAction` types (see `AhoyInputPlugin`'s observers), which
@@ -13,6 +16,7 @@ use bevy::window::{CursorGrabMode, CursorOptions};
 use bevy_ahoy::input::{Jump as AhoyJump, Movement as AhoyMovement};
 use bevy_enhanced_input::EnhancedInputSystems;
 use bevy_enhanced_input::prelude::{Press, *};
+use bevy_markup::prelude::HtmlElement;
 use chill_bevy_console::{ConsoleState, console_closed};
 use p19_shared::client_events::{AttackAttempt, KillAttempt};
 use p19_shared::game_state::{GameState, ModalMenuState};
@@ -167,12 +171,29 @@ pub(crate) fn return_to_main_menu(mut commands: Commands) {
 /// the cursor directly here (rather than via `ModalMenuState`'s `OnEnter`/`OnExit`, which would
 /// race `GameState`'s own cursor lock/unlock on the frame the "Main Menu" button changes both
 /// states at once) — see `modal_menu.rs`'s Resume button for the matching close-side logic.
+/// While a screen is open over the modal (the options submenu), Escape closes its topmost layer
+/// instead of the modal — `menu_screen.rs`'s pause-scoped screens don't bind Escape, so this is
+/// the only handler the physical key reaches.
 fn toggle_modal_menu(
     _: On<Start<ToggleModalMenu>>,
     state: Res<State<ModalMenuState>>,
     mut next_state: ResMut<NextState<ModalMenuState>>,
     mut cursor_options: Query<&mut CursorOptions>,
+    screens: Query<(Entity, &MenuScreen)>,
+    popups: Query<(Entity, &SelectorPopup)>,
+    elements: Query<(Entity, &HtmlElement)>,
+    mut focus: ResMut<InputFocus>,
+    mut commands: Commands,
 ) {
+    // A screen over the modal (the pause menu's Options submenu) closes first: pause-scoped
+    // screens deliberately don't bind Escape — `ToggleModalMenu` already reads it, and BEI
+    // leaves one physical input to the first action that reads it per tick — so the pause
+    // toggle closes the screen (or its open selector popup) itself.
+    if !screens.is_empty()
+        && close_topmost_screen(&mut commands, &screens, &popups, &elements, &mut focus)
+    {
+        return;
+    }
     match state.get() {
         ModalMenuState::Closed => {
             next_state.set(ModalMenuState::Open);

@@ -1,11 +1,13 @@
 {% include "components.html" %}
 <html class="pause-root">
 <div class="pause-menu">
-  {{ <ui.button id="pause-main-menu" class="pause-menu-button" signal="pause.main-menu"
-                key="modal-menu-main-menu" label="Main Menu" /> }}
   {{ <ui.button id="pause-resume" class="pause-menu-button" autofocus={true} signal="pause.resume"
                 key="modal-menu-resume" label="Resume" /> }}
-  {# `ui::ui::mouse_sensitivity_context`, refreshed every frame by `modal_menu.rs`. #}
-  {{ <ui.mouse_sensitivity class="pause-menu-slider" value={mouse_sensitivity} percent={mouse_sensitivity_percent} /> }}
+  {# `pause.options` (`modal_menu.rs`): the options screen as a submenu — the same `options.html`
+     the main menu opens, holding the shared `ui.mouse_sensitivity` slider component. #}
+  {{ <ui.button id="pause-options" class="pause-menu-button" signal="pause.options"
+                key="modal-menu-options" label="Options" /> }}
+  {{ <ui.button id="pause-main-menu" class="pause-menu-button" signal="pause.main-menu"
+                key="modal-menu-main-menu" label="Main Menu" /> }}
 </div>
 </html>

@@ -355,7 +355,12 @@ systems.
 - **`dev/console.rs`** — `chill_bevy_console` commands: `fps`, `physics_debug`, `respawn`,
   `despawn_cubes`, `despawn_npcs`, `play_animation`, `load_level`, `controls`, `nameplates`, `hud`,
   `kcc_debug` (dumps the local player's input → movement chain). Its output is plain English —
-  the one surface deliberately not localized through bevy_markup.
+  the one surface deliberately not localized through bevy_markup. Its toggle commands flip the
+  same reflected resources the options screens' toggles do (`FpsOverlayVisible`/
+  `PhysicsGizmosVisible`/`NameplatesVisible`/`HudVisible`); `apply_fps_overlay`/
+  `apply_physics_gizmos` copy the first two into Bevy's `FpsOverlayConfig` (absent under
+  `--no-render`, where the overlay plugin is skipped — the toggle still works there) and avian's
+  `PhysicsGizmos` group.
 - **`dev/tool_api.rs`** — the agent tool API (see below).
 - **`assets/collections.rs`** — `CommonAssets`: five world-asset handles plus optional "furniture"
   (`#[asset(key = "…", optional)]` `Option<Handle<T>>` — sounds, skybox, icon atlases; no
@@ -406,19 +411,27 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
     anchored beside (or above) the element with bevy_markup's `HtmlAnchor` (follows it, stays in
     the viewport, renders on its UI camera, despawned with it).
 - **`ui/ui.rs`** — main menu (`main_menu.html`): Connect, Options, Credits, Quit. Options opens
-  the options screen (`options.html`): the Language selector (`en-US`/`ru-RU`/`ja-JP`, labels in
-  their own script), the Mouse sensitivity slider (continuous 0.1×–3.0×, keyboard/gamepad step
-  0.05, values kept at 0.01; `apply_slider_input` writes `MouseSensitivity`), the
-  Client-side prediction toggle (`options.prediction`, flips
-  `ClientPrediction`; the label follows it every frame via `update_options_screen`) and Back. The same main-menu template (`wrist = true`) is the VR wrist panel:
-  Connect, Language (the selector itself), Quit — no Options/Credits, since screen-space modals
-  don't show in a headset. Registers `HudPlugin`, `SelectorPlugin`, `MenuScreenPlugin` and
-  `CreditsPlugin`.
-- **`ui/menu_screen.rs`** — main-menu screens (Options, Credits): `open_menu_screen` spawns the
-  screen's root (`HtmlModal`, `.menu-screen-root` z-index 100) and a separate cancel context
-  (`MenuScreenControls`: `UiCancel` on Escape / gamepad East, bound only while a screen is open).
-  Back (`menu-screen.back`), Escape or East close it and focus the button that opened it; with a
-  selector popup open, cancel closes the popup first.
+  the options screen (`options.html`, shared with the pause menu's submenu): the Language
+  selector (`en-US`/`ru-RU`/`ja-JP`, labels in their own script), the Mouse sensitivity slider
+  (continuous 0.1×–3.0×, keyboard/gamepad step 0.05, values kept at 0.01; `apply_slider_input`
+  writes `MouseSensitivity`), and five toggles: Client-side prediction (`options.prediction`,
+  flips `ClientPrediction`) plus FPS overlay, physics debug gizmos, nameplates and HUD
+  (`options.fps-overlay`/`options.physics-debug`/`options.nameplates`/`options.hud`, flipping
+  `FpsOverlayVisible`/`PhysicsGizmosVisible`/`NameplatesVisible`/`HudVisible` — the same
+  reflected resources the console's matching commands flip; labels follow every frame via
+  `update_options_screen`) — then Back. The same main-menu template (`wrist = true`) is the VR
+  wrist panel: Connect, Language (the selector itself), Quit — no Options/Credits, since
+  screen-space modals don't show in a headset. Registers `HudPlugin`, `SelectorPlugin`,
+  `MenuScreenPlugin` and `CreditsPlugin`.
+- **`ui/menu_screen.rs`** — screens opened over a surface (Options/Credits over the main menu,
+  Options over the pause modal): `open_menu_screen` takes a `MenuScreenScope` (main-menu roots
+  despawn with `GameState::MainMenu`, pause-scoped with `ModalMenuState::Open`), spawns the
+  screen's root (`HtmlModal`, `.menu-screen-root` z-index 110 — above the pause menu) and a
+  separate cancel context (`MenuScreenControls`: `UiCancel`, bound only while a screen is open —
+  Escape **and** East on the main-menu scope, East only over the pause modal, where Escape
+  already belongs to `ToggleModalMenu` and `toggle_modal_menu` closes the topmost screen itself
+  via `close_topmost_screen`). Back (`menu-screen.back`), Escape or East close it and focus the
+  button that opened it; with a selector popup open, cancel closes the popup first.
 - **`ui/credits.rs`** — the credits screen (`credits.html`): the third-party assets from its
   `CREDITS` table, which mirrors `assets/CREDITS.md` — **add an asset to both**, plus its
   `credits-use-<id>` Fluent key in every locale.
@@ -440,12 +453,13 @@ module registers its own templates; `markup::template(&asset_server, "x.html")` 
 - **`ui/lobby.rs`** — `lobby.html`: Play (`InGameRequest`), Level selector (options from the
   replicated `Levels`, re-seeded on change; labels are Fluent keys; a pick sends
   `LoadLevelRequest`), Main Menu (`Disconnect` + `MainMenu`).
-- **`ui/modal_menu.rs`** — pause menu (`pause_menu.html`, `HtmlModal`, Main Menu above Resume,
-  Resume auto-focused, then the mouse sensitivity slider — the shared `ui.mouse_sensitivity`
-  component from `components.html`, the same one the options screen uses; its context comes from
-  `ui::ui::mouse_sensitivity_context`, rewritten every frame by `update_pause_menu`), the controls tips (`controls_tips.html`, keyboard/mouse vs Steam Deck rows
-  by `InputDeviceState`; glyphs are `is="input-icon" data-icon="<name>"`) and the VR in-game
-  wrist panel (`wrist_game.html`).
+- **`ui/modal_menu.rs`** — pause menu (`pause_menu.html`, `HtmlModal`, Resume auto-focused, then
+  Options and Main Menu; Options opens the same options screen the main menu has —
+  `ui::open_options_screen` with `MenuScreenScope::PauseMenu`, so the mouse sensitivity slider
+  and the five toggles live in the submenu now — and the modal spawns the Language `Selector`
+  that submenu's picker toggles), the controls tips (`controls_tips.html`, keyboard/mouse vs
+  Steam Deck rows by `InputDeviceState`; glyphs are `is="input-icon" data-icon="<name>"`) and
+  the VR in-game wrist panel (`wrist_game.html`, whose single Main Menu button is unchanged).
 - **`ui/hud.rs`** — crosshair (dot, or the `CrosshairGcdMaterial` ring while the GCD runs;
   `is="crosshair-dot"`/`"crosshair-gcd-ring"`; hotbar cells `is="gcd-overlay"`), data
   frame (Tab/Select via `DataFrameVisible`; its context is written every frame while shown),

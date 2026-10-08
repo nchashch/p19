@@ -34,7 +34,7 @@ impl Plugin for NameplatePlugin {
 /// gating `spawn_nameplates`/despawning existing ones, so hiding/showing is instant and doesn't
 /// lose/rebuild per-target state while toggled off.
 /// Reflected so the agent tool API (BRP `world.insert_resources`) can toggle it.
-#[derive(Resource, Reflect)]
+#[derive(Resource, Reflect, Clone, Copy, Debug, PartialEq)]
 #[reflect(Resource)]
 pub struct NameplatesVisible(pub bool);
 

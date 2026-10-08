@@ -54,10 +54,13 @@ impl Plugin for HudPlugin {
     }
 }
 
-/// Toggled by the console's `hud` command (`console.rs`): master-hides every [`HudElement`] root
-/// (crosshair, hotbar) and the data frame. Doesn't cover `nameplate.rs`'s `NameplatesVisible` —
-/// a separate toggle for a separate, non-HUD surface.
-#[derive(Resource)]
+/// Toggled by the console's `hud` command and the options screens' HUD toggle (`console.rs`
+/// owns neither — both flip this resource; `ui.rs`/`modal_menu.rs` read it for their labels).
+/// Master-hides every [`HudElement`] root (crosshair, hotbar) and the data frame. Doesn't cover
+/// `nameplate.rs`'s `NameplatesVisible` — a separate toggle for a separate, non-HUD surface.
+/// Reflected so the agent tool API (BRP `world.insert_resources`) can toggle it too.
+#[derive(Resource, Reflect, Clone, Copy, Debug, PartialEq)]
+#[reflect(Resource)]
 pub struct HudVisible(pub bool);
 
 /// Marks the HUD roots shown exactly while [`HudVisible`] is set. The data frame isn't one — it

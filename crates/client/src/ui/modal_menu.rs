@@ -1,9 +1,14 @@
 use crate::controls::controls::{MouseSensitivity, return_to_main_menu};
 use crate::controls::input_device::InputDeviceState;
+use crate::dev::console::{FpsOverlayVisible, PhysicsGizmosVisible};
+use crate::gameplay::player_character::ClientPrediction;
+use crate::ui::hud::HudVisible;
 use crate::ui::input_icons::{InputIcon, InputIconAtlases};
-use crate::ui::markup::{menu_controls, template};
+use crate::ui::markup::{LocaleSelection, menu_controls, template};
+use crate::ui::menu_screen::{MenuScreenScope, OpenMenuScreens};
+use crate::ui::nameplate::NameplatesVisible;
 use crate::ui::quad_panel::quad_panel;
-use crate::ui::ui::mouse_sensitivity_context;
+use crate::ui::ui::{language_selector, open_options_screen, options_context};
 use bevy::asset::embedded_asset;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions};
@@ -15,11 +20,14 @@ use std::f32::consts::FRAC_PI_2;
 
 /// The in-game pause menu — see `game_state::ModalMenuState`. Opened/closed by
 /// `controls::toggle_modal_menu` (Escape/`GamepadButton::Start`): a dimmed full-screen
-/// `pause_menu.html` root ("Main Menu" above "Resume", Resume auto-focused) plus a top-left
-/// `controls_tips.html` root listing every gameplay binding for the active input device. Also
-/// owns the VR in-game wrist panel (`wrist_game.html` on a `quad_panel`).
+/// `pause_menu.html` root ("Resume", "Options", "Main Menu"; Resume auto-focused) plus a
+/// top-left `controls_tips.html` root listing every gameplay binding for the active input
+/// device. "Options" opens the same options screen the main menu has
+/// (`ui::open_options_screen`, a pause-scoped menu screen) — the mouse sensitivity slider lives
+/// there now, not on the pause root. Also owns the VR in-game wrist panel (`wrist_game.html` on
+/// a `quad_panel`), which keeps its single "Main Menu" button.
 ///
-/// Signals: `pause.main-menu`, `pause.resume`, `wrist-game.main-menu`.
+/// Signals: `pause.main-menu`, `pause.options`, `pause.resume`, `wrist-game.main-menu`.
 pub struct ModalMenuPlugin;
 
 impl Plugin for ModalMenuPlugin {
@@ -44,11 +52,11 @@ impl Plugin for ModalMenuPlugin {
             });
         }
         app.on_html_click("pause.resume", resume);
+        app.on_html_click("pause.options", open_pause_options);
         app.add_systems(
             Update,
             (
                 refresh_controls_tips.run_if(state_changed::<InputDeviceState>),
-                update_pause_menu,
                 spawn_vr_in_game_wrist_panel
                     .run_if(in_state(GameState::InGame).and_then(in_state(VRState::VR))),
             ),
@@ -72,18 +80,24 @@ fn spawn_modal_menu_controls(mut commands: Commands) {
 #[derive(Component)]
 struct ControlsTips;
 
+/// The pause modal's three roots: the `pause_menu.html` root (Resume / Options / Main Menu), the
+/// options submenu's Language `Selector` (its state — the selected row — lives for one pause
+/// session; a fresh one next time), and the controls-tips root.
 fn spawn_modal_menu(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     input_device: Res<State<InputDeviceState>>,
     atlases: Option<Res<InputIconAtlases>>,
-    mouse_sensitivity: Res<MouseSensitivity>,
+    locale: Res<LocaleSelection>,
 ) {
     commands.spawn((
-        PauseMenu,
         template(&asset_server, "pause_menu.html"),
-        mouse_sensitivity_context(TemplateContext::new(), *mouse_sensitivity),
+        TemplateContext::new(),
         HtmlModal,
+        DespawnOnExit(ModalMenuState::Open),
+    ));
+    commands.spawn((
+        language_selector(&locale.0),
         DespawnOnExit(ModalMenuState::Open),
     ));
     commands.spawn((
@@ -94,19 +108,36 @@ fn spawn_modal_menu(
     ));
 }
 
-/// The pause menu's root (`pause_menu.html`).
-#[derive(Component)]
-struct PauseMenu;
-
-/// Keeps the pause menu's mouse sensitivity slider showing the current value (written every
-/// frame; an identical render does nothing).
-fn update_pause_menu(
+/// `pause.options`: the options screen as a submenu over the pause modal — the same
+/// `options.html` the main menu opens, so both expose the same settings. Its root is marked
+/// `OptionsScreen`, so `ui.rs`'s `update_options_screen` keeps it current every frame.
+fn open_pause_options(
+    _: In<ElementSignal>,
+    open: OpenMenuScreens,
+    prediction: Res<ClientPrediction>,
     mouse_sensitivity: Res<MouseSensitivity>,
-    mut menus: Query<&mut TemplateContext, With<PauseMenu>>,
+    fps_overlay: Res<FpsOverlayVisible>,
+    physics_debug: Res<PhysicsGizmosVisible>,
+    nameplates: Res<NameplatesVisible>,
+    hud: Res<HudVisible>,
+    asset_server: Res<AssetServer>,
+    mut commands: Commands,
 ) {
-    for mut context in &mut menus {
-        *context = mouse_sensitivity_context(TemplateContext::new(), *mouse_sensitivity);
-    }
+    open_options_screen(
+        &mut commands,
+        &asset_server,
+        &open,
+        options_context(
+            *prediction,
+            *mouse_sensitivity,
+            *fps_overlay,
+            *physics_debug,
+            *nameplates,
+            *hud,
+        ),
+        "pause-options",
+        MenuScreenScope::PauseMenu,
+    );
 }
 
 /// Every button of this module's surfaces. "Resume" closes the modal and hands control back to

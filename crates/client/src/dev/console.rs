@@ -26,14 +26,61 @@ use p19_shared::npc_spawner::Npc;
 
 /// The console's output is deliberately plain English — the one surface not localized through
 /// bevy_markup's `data-l10n-id`.
+///
+/// Its toggle commands (`fps`, `physics_debug`, `nameplates`, `hud`) flip the same reflected
+/// resources the options screens' toggles do ([`FpsOverlayVisible`], [`PhysicsGizmosVisible`],
+/// `NameplatesVisible`, `HudVisible`), so both surfaces are views of one state.
 pub struct PConsolePlugin;
+
+/// FPS overlay visibility. Reflected, so BRP can toggle it too. Written by the console's `fps`
+/// command and the options screens' FPS overlay toggle; `apply_fps_overlay` copies it into Bevy's
+/// `FpsOverlayConfig` (absent under `--no-render`, where the overlay plugin is skipped). Not
+/// persisted.
+#[derive(Resource, Reflect, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[reflect(Resource)]
+pub struct FpsOverlayVisible(pub bool);
+
+/// Physics debug gizmo visibility — same pattern as [`FpsOverlayVisible`], applied into avian's
+/// `PhysicsGizmos` group. `PhysicsDebugPlugin` (added above) registers that group; `config_mut`
+/// panics on an unregistered one. Not persisted.
+#[derive(Resource, Reflect, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[reflect(Resource)]
+pub struct PhysicsGizmosVisible(pub bool);
+
+/// Copies [`FpsOverlayVisible`] into Bevy's `FpsOverlayConfig` — the overlay and its frame-time
+/// graph together, matching what the console's `fps` command always toggled as one. Written only
+/// on change.
+fn apply_fps_overlay(
+    visible: Res<FpsOverlayVisible>,
+    config: Option<ResMut<FpsOverlayConfig>>,
+) {
+    if !visible.is_changed() {
+        return;
+    }
+    let Some(mut config) = config else {
+        return;
+    };
+    config.enabled = visible.0;
+    config.frame_time_graph_config.enabled = visible.0;
+}
+
+/// Copies [`PhysicsGizmosVisible`] into avian's `PhysicsGizmos` group. Written only on change.
+fn apply_physics_gizmos(
+    visible: Res<PhysicsGizmosVisible>,
+    mut store: ResMut<GizmoConfigStore>,
+) {
+    if !visible.is_changed() {
+        return;
+    }
+    store.config_mut::<PhysicsGizmos>().0.enabled = visible.0;
+}
 
 impl Plugin for PConsolePlugin {
     fn build(&self, app: &mut App) {
         // The FPS overlay is an on-screen visual whose plugin's `setup` system needs
-        // render-side `Assets<ShaderBuffer>` — absent in `--no-render` mode, where the plugin
-        // (and the startup toggle that writes its config) is skipped entirely. (The `fps`
-        // console command is likewise a no-op-with-error there.)
+        // render-side `Assets<ShaderBuffer>` — absent in `--no-render` mode, where the plugin is
+        // skipped entirely. (The `fps` command and the options toggle still work there: they
+        // flip `FpsOverlayVisible`, whose applier simply has no config to write.)
         if !crate::config::is_no_render_presync() {
             // The system's monospace font (no font files ship with the game).
             app.add_plugins(FpsOverlayPlugin {
@@ -45,7 +92,6 @@ impl Plugin for PConsolePlugin {
                     ..default()
                 },
             });
-            app.add_systems(Startup, disable_fps_overlay);
         }
         app.add_plugins((
             ChillConsole {
@@ -60,7 +106,11 @@ impl Plugin for PConsolePlugin {
             },
             PhysicsDebugPlugin::default(),
         ))
-        .add_systems(Startup, disable_physics_debug)
+        .insert_resource(FpsOverlayVisible::default())
+        .insert_resource(PhysicsGizmosVisible::default())
+        .register_type::<FpsOverlayVisible>()
+        .register_type::<PhysicsGizmosVisible>()
+        .add_systems(Update, (apply_fps_overlay, apply_physics_gizmos))
         .add_console_command(ConsoleCommand::new(
             "controls",
             "controls - get control scheme",
@@ -214,16 +264,13 @@ fn play_animation_cmd(
     format!("playing clip \"{clip_name}\"")
 }
 
-fn fps_cmd(In(_args): CommandArgs, mut fps_overlay_config: ResMut<FpsOverlayConfig>) -> String {
-    fps_overlay_config.enabled = !fps_overlay_config.enabled;
-    fps_overlay_config.frame_time_graph_config.enabled =
-        !fps_overlay_config.frame_time_graph_config.enabled;
+fn fps_cmd(In(_args): CommandArgs, mut visible: ResMut<FpsOverlayVisible>) -> String {
+    visible.0 = !visible.0;
     "fps overlay toggled".to_string()
 }
 
-fn physics_debug_cmd(In(_args): CommandArgs, mut gizmo_config: ResMut<GizmoConfigStore>) -> String {
-    gizmo_config.config_mut::<PhysicsGizmos>().0.enabled =
-        !gizmo_config.config_mut::<PhysicsGizmos>().0.enabled;
+fn physics_debug_cmd(In(_args): CommandArgs, mut visible: ResMut<PhysicsGizmosVisible>) -> String {
+    visible.0 = !visible.0;
     "physics debug gizmos toggled".to_string()
 }
 
@@ -407,13 +454,4 @@ fn debug_truncated<T: std::fmt::Debug>(value: T) -> String {
         let cut: String = flat.chars().take(160).collect();
         format!("{cut}…")
     }
-}
-
-fn disable_fps_overlay(mut fps_overlay_config: ResMut<FpsOverlayConfig>) {
-    fps_overlay_config.enabled = false;
-    fps_overlay_config.frame_time_graph_config.enabled = false;
-}
-
-fn disable_physics_debug(mut gizmo_config: ResMut<GizmoConfigStore>) {
-    gizmo_config.config_mut::<PhysicsGizmos>().0.enabled = false;
 }
