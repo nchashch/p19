@@ -67,7 +67,7 @@ bevy_common_assets.workspace = true
 # same shape the client's `dev/tool_api.rs` uses, minus everything client-specific (input
 # mocking, screenshots, UI dumps — the surfaces exist but are meaningless without a world
 # render/window; they error or report empty harmlessly).
-bevy_mcp_harness = "0.3.0"
+bevy_mcp_harness = "0.3.1"
 serde_json = "1"
 serde.workspace = true
 
