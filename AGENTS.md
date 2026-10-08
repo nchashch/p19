@@ -209,7 +209,7 @@ cargo run -p p19-client --release     # connects when the main menu's Connect bu
 - The root `Cargo.toml` centralizes versions in `[workspace.dependencies]`; members use
   `dep.workspace = true`. A member cannot override `default-features` on an inherited dependency,
   so `server`/`shared` declare `bevy` directly with `default-features = false` (headless).
-- **`bevy_markup`** 0.3.0 from crates.io (the owner's own crate — HTML/Tera + CSS + Fluent →
+- **`bevy_markup`** 0.4.0 from crates.io (the owner's own crate — HTML/Tera + CSS + Fluent →
   Bevy UI; every client UI surface, see "UI (bevy_markup)"; source:
   `github.com/nchashch/bevy_markup`). It requires bevy `^0.19.1` (`Cargo.lock` pins 0.19.1). Its
   README asks apps to patch `fluent-syntax` to its fork (`nchashch/fluent-rs`,
