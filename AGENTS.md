@@ -622,8 +622,7 @@ reflects every component). The GLTF/Skein/world-serialization pipeline needs no 
 
 Full playbook: `docs/agents/skills/playtest.md`. Design: ADRs 0009–0012.
 
-- Implemented by the **`bevy_mcp_harness`** crate (path dependency, `../../../../PROTOTYPE_23/
-  bevy_mcp_harness`) for everything generic — the BRP server, `game/client_info`,
+- Implemented by the **`bevy_mcp_harness`** crate (crates.io, 0.1.0) for everything generic — the BRP server, `game/client_info`,
   `game/gamepad`/`game/keyboard`/`game/mouse`, `game/ui`, `game/cameras`,
   `game/screenshot` + `game/screenshot/get`, the MCP server and its built-in tools, and the
   bundled agent guides (`read_guide`). p19's game-specific methods live in

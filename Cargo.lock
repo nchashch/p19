@@ -1811,6 +1811,8 @@ dependencies = [
 [[package]]
 name = "bevy_mcp_harness"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f40d092f7188b43fd26e928f8a144ea29a5fe1301cb5f0bcac757940a1f6291"
 dependencies = [
  "axum",
  "base64 0.22.1",
