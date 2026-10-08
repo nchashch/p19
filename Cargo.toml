@@ -110,7 +110,6 @@ lightyear_inputs_bei = "0.30.0"
 # HTML templates (Tera) + CSS + Fluent → native Bevy UI. Every client UI surface is an `HtmlUi`
 # (`crates/client/src/ui/`); see AGENTS.md "UI".
 bevy_markup = "0.4.0"
-bevy_mcp_harness = "0.3.0"
 
 # `gltf` (transitive, via `bevy`/`bevy_gltf`) is patched to a vendored fork with
 # https://github.com/gltf-rs/gltf/pull/467 applied, adding support for `KHR_texture_basisu`
